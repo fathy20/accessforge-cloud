@@ -14,16 +14,429 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          entity: string | null
+          entity_id: string | null
+          id: number
+          meta: Json
+          ts: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: number
+          meta?: Json
+          ts?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: number
+          meta?: Json
+          ts?: string
+        }
+        Relationships: []
+      }
+      job_logs: {
+        Row: {
+          id: number
+          job_id: string
+          level: string
+          message: string
+          ts: string
+        }
+        Insert: {
+          id?: number
+          job_id: string
+          level?: string
+          message: string
+          ts?: string
+        }
+        Update: {
+          id?: number
+          job_id?: string
+          level?: string
+          message?: string
+          ts?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          created_at: string
+          created_by: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input_refs: Json
+          module_key: string
+          output_refs: Json
+          progress: number
+          project_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["job_status"]
+          worker_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input_refs?: Json
+          module_key: string
+          output_refs?: Json
+          progress?: number
+          project_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          worker_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input_refs?: Json
+          module_key?: string
+          output_refs?: Json
+          progress?: number
+          project_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_access: {
+        Row: {
+          can_run: boolean
+          can_view: boolean
+          created_at: string
+          granted_by: string | null
+          id: string
+          module_id: string
+          user_id: string
+        }
+        Insert: {
+          can_run?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          module_id: string
+          user_id: string
+        }
+        Update: {
+          can_run?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          module_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_access_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      modules: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          enabled: boolean
+          icon: string | null
+          id: string
+          key: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          key: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          key?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          department: string | null
+          full_name: string | null
+          id: string
+          job_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          full_name?: string | null
+          id: string
+          job_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          full_name?: string | null
+          id?: string
+          job_title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          station: string | null
+          tail_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          station?: string | null
+          tail_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          station?: string | null
+          tail_number?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          chapter: string | null
+          code: string
+          created_at: string
+          effectivity: string | null
+          id: string
+          metadata: Json
+          page_no: number | null
+          project_id: string | null
+          search_tsv: unknown
+          source_upload_id: string | null
+          title: string | null
+        }
+        Insert: {
+          chapter?: string | null
+          code: string
+          created_at?: string
+          effectivity?: string | null
+          id?: string
+          metadata?: Json
+          page_no?: number | null
+          project_id?: string | null
+          search_tsv?: unknown
+          source_upload_id?: string | null
+          title?: string | null
+        }
+        Update: {
+          chapter?: string | null
+          code?: string
+          created_at?: string
+          effectivity?: string | null
+          id?: string
+          metadata?: Json
+          page_no?: number | null
+          project_id?: string | null
+          search_tsv?: unknown
+          source_upload_id?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_upload_id_fkey"
+            columns: ["source_upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uploads: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["upload_kind"]
+          metadata: Json
+          mime_type: string | null
+          original_name: string
+          page_count: number | null
+          project_id: string | null
+          search_tsv: unknown
+          sha256: string | null
+          size_bytes: number | null
+          storage_path: string
+          uploader_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["upload_kind"]
+          metadata?: Json
+          mime_type?: string | null
+          original_name: string
+          page_count?: number | null
+          project_id?: string | null
+          search_tsv?: unknown
+          sha256?: string | null
+          size_bytes?: number | null
+          storage_path: string
+          uploader_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["upload_kind"]
+          metadata?: Json
+          mime_type?: string | null
+          original_name?: string
+          page_count?: number | null
+          project_id?: string | null
+          search_tsv?: unknown
+          sha256?: string | null
+          size_bytes?: number | null
+          storage_path?: string
+          uploader_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uploads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_any_role: {
+        Args: {
+          _roles: Database["public"]["Enums"]["app_role"][]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_module_access: {
+        Args: { _module_key: string; _need_run?: boolean; _user_id: string }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "admin" | "engineer" | "viewer" | "guest"
+      job_status: "queued" | "running" | "done" | "failed" | "cancelled"
+      upload_kind: "pdf" | "excel" | "docx" | "csv" | "image" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +563,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "admin", "engineer", "viewer", "guest"],
+      job_status: ["queued", "running", "done", "failed", "cancelled"],
+      upload_kind: ["pdf", "excel", "docx", "csv", "image", "other"],
+    },
   },
 } as const

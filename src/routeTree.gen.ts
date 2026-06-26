@@ -9,38 +9,322 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedUploadsRouteImport } from './routes/_authenticated/uploads'
+import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/jobs'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
+import { Route as AuthenticatedModulesUtilizationRouteImport } from './routes/_authenticated/modules/utilization'
+import { Route as AuthenticatedModulesTaskStampingRouteImport } from './routes/_authenticated/modules/task-stamping'
+import { Route as AuthenticatedModulesTaskExtractorRouteImport } from './routes/_authenticated/modules/task-extractor'
+import { Route as AuthenticatedModulesMailMergeRouteImport } from './routes/_authenticated/modules/mail-merge'
+import { Route as AuthenticatedModulesEffectivityRouteImport } from './routes/_authenticated/modules/effectivity'
+import { Route as AuthenticatedModulesCoverMergeRouteImport } from './routes/_authenticated/modules/cover-merge'
+import { Route as AuthenticatedModulesCmpTcmRouteImport } from './routes/_authenticated/modules/cmp-tcm'
+import { Route as AuthenticatedModulesCheckControlRouteImport } from './routes/_authenticated/modules/check-control'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin/audit'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedUploadsRoute = AuthenticatedUploadsRouteImport.update({
+  id: '/uploads',
+  path: '/uploads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedJobsRoute = AuthenticatedJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedModulesUtilizationRoute =
+  AuthenticatedModulesUtilizationRouteImport.update({
+    id: '/modules/utilization',
+    path: '/modules/utilization',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesTaskStampingRoute =
+  AuthenticatedModulesTaskStampingRouteImport.update({
+    id: '/modules/task-stamping',
+    path: '/modules/task-stamping',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesTaskExtractorRoute =
+  AuthenticatedModulesTaskExtractorRouteImport.update({
+    id: '/modules/task-extractor',
+    path: '/modules/task-extractor',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesMailMergeRoute =
+  AuthenticatedModulesMailMergeRouteImport.update({
+    id: '/modules/mail-merge',
+    path: '/modules/mail-merge',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesEffectivityRoute =
+  AuthenticatedModulesEffectivityRouteImport.update({
+    id: '/modules/effectivity',
+    path: '/modules/effectivity',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesCoverMergeRoute =
+  AuthenticatedModulesCoverMergeRouteImport.update({
+    id: '/modules/cover-merge',
+    path: '/modules/cover-merge',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesCmpTcmRoute =
+  AuthenticatedModulesCmpTcmRouteImport.update({
+    id: '/modules/cmp-tcm',
+    path: '/modules/cmp-tcm',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedModulesCheckControlRoute =
+  AuthenticatedModulesCheckControlRouteImport.update({
+    id: '/modules/check-control',
+    path: '/modules/check-control',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/jobs': typeof AuthenticatedJobsRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/projects': typeof AuthenticatedProjectsRoute
+  '/search': typeof AuthenticatedSearchRoute
+  '/uploads': typeof AuthenticatedUploadsRoute
+  '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
+  '/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
+  '/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
+  '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
+  '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
+  '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/jobs': typeof AuthenticatedJobsRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/projects': typeof AuthenticatedProjectsRoute
+  '/search': typeof AuthenticatedSearchRoute
+  '/uploads': typeof AuthenticatedUploadsRoute
+  '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
+  '/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
+  '/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
+  '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
+  '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
+  '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/jobs': typeof AuthenticatedJobsRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/_authenticated/search': typeof AuthenticatedSearchRoute
+  '/_authenticated/uploads': typeof AuthenticatedUploadsRoute
+  '/_authenticated/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
+  '/_authenticated/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
+  '/_authenticated/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/_authenticated/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
+  '/_authenticated/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/_authenticated/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
+  '/_authenticated/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
+  '/_authenticated/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/admin'
+    | '/dashboard'
+    | '/jobs'
+    | '/profile'
+    | '/projects'
+    | '/search'
+    | '/uploads'
+    | '/admin/audit'
+    | '/admin/settings'
+    | '/admin/users'
+    | '/modules/check-control'
+    | '/modules/cmp-tcm'
+    | '/modules/cover-merge'
+    | '/modules/effectivity'
+    | '/modules/mail-merge'
+    | '/modules/task-extractor'
+    | '/modules/task-stamping'
+    | '/modules/utilization'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/admin'
+    | '/dashboard'
+    | '/jobs'
+    | '/profile'
+    | '/projects'
+    | '/search'
+    | '/uploads'
+    | '/admin/audit'
+    | '/admin/settings'
+    | '/admin/users'
+    | '/modules/check-control'
+    | '/modules/cmp-tcm'
+    | '/modules/cover-merge'
+    | '/modules/effectivity'
+    | '/modules/mail-merge'
+    | '/modules/task-extractor'
+    | '/modules/task-stamping'
+    | '/modules/utilization'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/reset-password'
+    | '/_authenticated/admin'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/jobs'
+    | '/_authenticated/profile'
+    | '/_authenticated/projects'
+    | '/_authenticated/search'
+    | '/_authenticated/uploads'
+    | '/_authenticated/admin/audit'
+    | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/users'
+    | '/_authenticated/modules/check-control'
+    | '/_authenticated/modules/cmp-tcm'
+    | '/_authenticated/modules/cover-merge'
+    | '/_authenticated/modules/effectivity'
+    | '/_authenticated/modules/mail-merge'
+    | '/_authenticated/modules/task-extractor'
+    | '/_authenticated/modules/task-stamping'
+    | '/_authenticated/modules/utilization'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +332,199 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/uploads': {
+      id: '/_authenticated/uploads'
+      path: '/uploads'
+      fullPath: '/uploads'
+      preLoaderRoute: typeof AuthenticatedUploadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/search': {
+      id: '/_authenticated/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof AuthenticatedSearchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/jobs': {
+      id: '/_authenticated/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof AuthenticatedJobsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/utilization': {
+      id: '/_authenticated/modules/utilization'
+      path: '/modules/utilization'
+      fullPath: '/modules/utilization'
+      preLoaderRoute: typeof AuthenticatedModulesUtilizationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/task-stamping': {
+      id: '/_authenticated/modules/task-stamping'
+      path: '/modules/task-stamping'
+      fullPath: '/modules/task-stamping'
+      preLoaderRoute: typeof AuthenticatedModulesTaskStampingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/task-extractor': {
+      id: '/_authenticated/modules/task-extractor'
+      path: '/modules/task-extractor'
+      fullPath: '/modules/task-extractor'
+      preLoaderRoute: typeof AuthenticatedModulesTaskExtractorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/mail-merge': {
+      id: '/_authenticated/modules/mail-merge'
+      path: '/modules/mail-merge'
+      fullPath: '/modules/mail-merge'
+      preLoaderRoute: typeof AuthenticatedModulesMailMergeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/effectivity': {
+      id: '/_authenticated/modules/effectivity'
+      path: '/modules/effectivity'
+      fullPath: '/modules/effectivity'
+      preLoaderRoute: typeof AuthenticatedModulesEffectivityRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/cover-merge': {
+      id: '/_authenticated/modules/cover-merge'
+      path: '/modules/cover-merge'
+      fullPath: '/modules/cover-merge'
+      preLoaderRoute: typeof AuthenticatedModulesCoverMergeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/cmp-tcm': {
+      id: '/_authenticated/modules/cmp-tcm'
+      path: '/modules/cmp-tcm'
+      fullPath: '/modules/cmp-tcm'
+      preLoaderRoute: typeof AuthenticatedModulesCmpTcmRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/check-control': {
+      id: '/_authenticated/modules/check-control'
+      path: '/modules/check-control'
+      fullPath: '/modules/check-control'
+      preLoaderRoute: typeof AuthenticatedModulesCheckControlRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/audit': {
+      id: '/_authenticated/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
   }
 }
 
+interface AuthenticatedAdminRouteRouteChildren {
+  AuthenticatedAdminAuditRoute: typeof AuthenticatedAdminAuditRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+}
+
+const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
+  {
+    AuthenticatedAdminAuditRoute: AuthenticatedAdminAuditRoute,
+    AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+    AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  }
+
+const AuthenticatedAdminRouteRouteWithChildren =
+  AuthenticatedAdminRouteRoute._addFileChildren(
+    AuthenticatedAdminRouteRouteChildren,
+  )
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedJobsRoute: typeof AuthenticatedJobsRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+  AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
+  AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRoute
+  AuthenticatedModulesCheckControlRoute: typeof AuthenticatedModulesCheckControlRoute
+  AuthenticatedModulesCmpTcmRoute: typeof AuthenticatedModulesCmpTcmRoute
+  AuthenticatedModulesCoverMergeRoute: typeof AuthenticatedModulesCoverMergeRoute
+  AuthenticatedModulesEffectivityRoute: typeof AuthenticatedModulesEffectivityRoute
+  AuthenticatedModulesMailMergeRoute: typeof AuthenticatedModulesMailMergeRoute
+  AuthenticatedModulesTaskExtractorRoute: typeof AuthenticatedModulesTaskExtractorRoute
+  AuthenticatedModulesTaskStampingRoute: typeof AuthenticatedModulesTaskStampingRoute
+  AuthenticatedModulesUtilizationRoute: typeof AuthenticatedModulesUtilizationRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedJobsRoute: AuthenticatedJobsRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+  AuthenticatedSearchRoute: AuthenticatedSearchRoute,
+  AuthenticatedUploadsRoute: AuthenticatedUploadsRoute,
+  AuthenticatedModulesCheckControlRoute: AuthenticatedModulesCheckControlRoute,
+  AuthenticatedModulesCmpTcmRoute: AuthenticatedModulesCmpTcmRoute,
+  AuthenticatedModulesCoverMergeRoute: AuthenticatedModulesCoverMergeRoute,
+  AuthenticatedModulesEffectivityRoute: AuthenticatedModulesEffectivityRoute,
+  AuthenticatedModulesMailMergeRoute: AuthenticatedModulesMailMergeRoute,
+  AuthenticatedModulesTaskExtractorRoute:
+    AuthenticatedModulesTaskExtractorRoute,
+  AuthenticatedModulesTaskStampingRoute: AuthenticatedModulesTaskStampingRoute,
+  AuthenticatedModulesUtilizationRoute: AuthenticatedModulesUtilizationRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

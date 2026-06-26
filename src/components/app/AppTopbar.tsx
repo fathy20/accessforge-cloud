@@ -1,9 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, User as UserIcon, Search as SearchIcon } from "lucide-react";
+import { LogOut, User as UserIcon, Search as SearchIcon, Languages } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +23,8 @@ export function AppTopbar() {
   const perms = usePermissions();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t, lang, setLang } = useI18n();
+
 
   const initials = (user?.user_metadata?.full_name as string | undefined)
     ?.split(" ")
@@ -49,11 +52,21 @@ export function AppTopbar() {
         }}
         className="hidden md:flex flex-1 max-w-md relative"
       >
-        <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input name="q" placeholder="Search files, tasks, jobs…" className="pl-9 h-9" />
+        <SearchIcon className="size-4 absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input name="q" placeholder={t("top.search_placeholder")} className="ps-9 h-9" />
       </form>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ms-auto flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+          className="gap-2"
+          title={t("top.language")}
+        >
+          <Languages className="size-4" />
+          <span className="text-xs font-medium">{lang === "ar" ? "EN" : "ع"}</span>
+        </Button>
         <Badge variant="secondary" className="capitalize">
           {topRole.replace("_", " ")}
         </Badge>
@@ -70,17 +83,17 @@ export function AppTopbar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col">
               <span className="font-medium">
-                {(user?.user_metadata?.full_name as string | undefined) ?? "Signed in"}
+                {(user?.user_metadata?.full_name as string | undefined) ?? t("top.signed_in")}
               </span>
               <span className="text-xs text-muted-foreground truncate">{user?.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
-              <UserIcon className="size-4" /> Profile
+              <UserIcon className="size-4" /> {t("nav.profile")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
-              <LogOut className="size-4" /> Sign out
+              <LogOut className="size-4" /> {t("top.signout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

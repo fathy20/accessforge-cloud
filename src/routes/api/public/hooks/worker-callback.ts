@@ -63,7 +63,7 @@ export const Route = createFileRoute("/api/public/hooks/worker-callback")({
           }
         }
         if (body.error !== undefined) patch.error = body.error;
-        if (body.outputRefs) patch.output_refs = body.outputRefs;
+        if (body.outputRefs) patch.output_refs = body.outputRefs as Json;
 
         if (Object.keys(patch).length) {
           const { error } = await supabaseAdmin.from("jobs").update(patch).eq("id", body.jobId);

@@ -3,7 +3,7 @@
  * HMAC: hex(hmacSha256(secret, ts + "." + rawBody))
  * Body: { jobId, progress?, logLevel?, logMessage?, status?, error?, outputRefs? }
  */
-import { createFileRoute } from "@tanstack/react-router";
+import type { Json } from "@/integrations/supabase/types";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 

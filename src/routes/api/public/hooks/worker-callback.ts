@@ -53,7 +53,7 @@ export const Route = createFileRoute("/api/public/hooks/worker-callback")({
           status?: "running" | "done" | "failed";
           finished_at?: string;
           error?: string | null;
-          output_refs?: Record<string, unknown>;
+          output_refs?: Json;
         } = {};
         if (typeof body.progress === "number") patch.progress = body.progress;
         if (body.status) {

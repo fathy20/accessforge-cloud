@@ -47,7 +47,13 @@ export const Route = createFileRoute("/api/public/hooks/worker-callback")({
           });
         }
 
-        const patch: Record<string, unknown> = {};
+        const patch: {
+          progress?: number;
+          status?: "running" | "done" | "failed";
+          finished_at?: string;
+          error?: string | null;
+          output_refs?: Record<string, unknown>;
+        } = {};
         if (typeof body.progress === "number") patch.progress = body.progress;
         if (body.status) {
           patch.status = body.status;

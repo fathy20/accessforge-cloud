@@ -1,3 +1,4 @@
+import { createFileRoute } from '@tanstack/react-router'
 /**
  * Worker callback — update job progress, append logs, finalize result.
  * HMAC: hex(hmacSha256(secret, ts + "." + rawBody))

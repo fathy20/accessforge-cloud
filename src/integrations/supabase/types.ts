@@ -411,6 +411,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      global_search: {
+        Args: { _limit?: number; _q: string }
+        Returns: {
+          created_at: string
+          id: string
+          project_id: string
+          rank: number
+          source: string
+          subtitle: string
+          title: string
+        }[]
+      }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]

@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ModulePlaceholder } from "@/components/app/ModulePlaceholder";
+import { Stamp } from "lucide-react";
+import { ModuleRunner } from "@/components/app/ModuleRunner";
 
 export const Route = createFileRoute("/_authenticated/modules/task-stamping")({
   head: () => ({ meta: [{ title: "Task Stamping · REDSEA" }] }),
   component: () => (
-    <ModulePlaceholder
+    <ModuleRunner
       moduleKey="task_stamping"
       title="Task Stamping"
-      description="Stamp tail number, station, and date onto PDF documents."
+      titleAr="ختم المهام"
+      description="Stamp Tail / Station / Date onto selected PDFs."
+      descriptionAr="ختم رقم الطائرة والمحطة والتاريخ على ملفات PDF المختارة."
+      icon={Stamp}
+      acceptedKinds={["pdf"]}
     />
   ),
 });

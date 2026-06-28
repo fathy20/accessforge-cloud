@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ModulePlaceholder } from "@/components/app/ModulePlaceholder";
+import { ListChecks } from "lucide-react";
+import { ModuleRunner } from "@/components/app/ModuleRunner";
 
 export const Route = createFileRoute("/_authenticated/modules/check-control")({
   head: () => ({ meta: [{ title: "Check Control · REDSEA" }] }),
   component: () => (
-    <ModulePlaceholder
+    <ModuleRunner
       moduleKey="check_control"
       title="Check Control"
-      description="Manage maintenance checks from CSV with full traceability."
+      titleAr="التحكم في الفحوصات"
+      description="Import CSV check definitions and manage check execution data."
+      descriptionAr="استيراد تعريفات الفحوصات من CSV وإدارة بيانات تنفيذها."
+      icon={ListChecks}
+      acceptedKinds={["csv", "excel"]}
     />
   ),
 });

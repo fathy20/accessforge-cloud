@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ModulePlaceholder } from "@/components/app/ModulePlaceholder";
+import { Table2 } from "lucide-react";
+import { ModuleRunner } from "@/components/app/ModuleRunner";
 
 export const Route = createFileRoute("/_authenticated/modules/effectivity")({
   head: () => ({ meta: [{ title: "Effectivity · REDSEA" }] }),
   component: () => (
-    <ModulePlaceholder
+    <ModuleRunner
       moduleKey="effectivity"
       title="Effectivity"
+      titleAr="الفاعلية (Effectivity)"
       description="Load Excel data and link maintenance chapters per effectivity."
+      descriptionAr="تحميل بيانات Excel وربط فصول الصيانة لكل effectivity."
+      icon={Table2}
+      acceptedKinds={["excel", "csv"]}
     />
   ),
 });

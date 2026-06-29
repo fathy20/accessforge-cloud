@@ -41,7 +41,7 @@ function JobsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id, module_key, status, progress, error, created_at, started_at, finished_at, created_by, project_id, worker_id")
+        .select("id, module_key, status, progress, error, output_refs, created_at, started_at, finished_at, created_by, project_id, worker_id")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;

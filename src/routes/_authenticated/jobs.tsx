@@ -49,16 +49,31 @@ function JobsPage() {
     },
   });
 
-  // Realtime: refresh on any job change
+  // Realtime: refresh + toast notifications on status change
+  const lastStatus = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    for (const j of jobs) lastStatus.current.set(j.id, j.status);
+  }, [jobs]);
+
   useEffect(() => {
     const ch = supabase
       .channel("jobs-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, (payload) => {
         qc.invalidateQueries({ queryKey: ["jobs"] });
+        const row = payload.new as { id?: string; status?: string; module_key?: string; error?: string | null } | null;
+        if (!row?.id || !row.status) return;
+        const prev = lastStatus.current.get(row.id);
+        if (prev === row.status) return;
+        lastStatus.current.set(row.id, row.status);
+        if (row.status === "done") {
+          toast.success(`${row.module_key} ✓`, { description: ar ? "اكتملت المهمة" : "Job completed" });
+        } else if (row.status === "failed") {
+          toast.error(`${row.module_key} ✗`, { description: row.error?.slice(0, 140) ?? (ar ? "فشلت المهمة" : "Job failed") });
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [qc]);
+  }, [qc, ar]);
 
   const filtered = useMemo(
     () => jobs.filter((j) => filter === "all" || j.status === filter),

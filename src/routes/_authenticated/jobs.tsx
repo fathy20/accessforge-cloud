@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, RotateCcw, Ban, ListTodo, Activity } from "lucide-react";
+import { Loader2, RotateCcw, Ban, ListTodo, Activity, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/auth/use-permissions";
@@ -41,7 +41,7 @@ function JobsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id, module_key, status, progress, error, created_at, started_at, finished_at, created_by, project_id, worker_id")
+        .select("id, module_key, status, progress, error, output_refs, created_at, started_at, finished_at, created_by, project_id, worker_id")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -49,16 +49,31 @@ function JobsPage() {
     },
   });
 
-  // Realtime: refresh on any job change
+  // Realtime: refresh + toast notifications on status change
+  const lastStatus = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    for (const j of jobs) lastStatus.current.set(j.id, j.status);
+  }, [jobs]);
+
   useEffect(() => {
     const ch = supabase
       .channel("jobs-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, (payload) => {
         qc.invalidateQueries({ queryKey: ["jobs"] });
+        const row = payload.new as { id?: string; status?: string; module_key?: string; error?: string | null } | null;
+        if (!row?.id || !row.status) return;
+        const prev = lastStatus.current.get(row.id);
+        if (prev === row.status) return;
+        lastStatus.current.set(row.id, row.status);
+        if (row.status === "done") {
+          toast.success(`${row.module_key} ✓`, { description: ar ? "اكتملت المهمة" : "Job completed" });
+        } else if (row.status === "failed") {
+          toast.error(`${row.module_key} ✗`, { description: row.error?.slice(0, 140) ?? (ar ? "فشلت المهمة" : "Job failed") });
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [qc]);
+  }, [qc, ar]);
 
   const filtered = useMemo(
     () => jobs.filter((j) => filter === "all" || j.status === filter),
@@ -83,6 +98,12 @@ function JobsPage() {
   const cancel = async (id: string) => {
     const { error } = await supabase.from("jobs").update({ status: "cancelled", finished_at: new Date().toISOString() }).eq("id", id);
     if (error) toast.error(error.message); else toast.success(ar ? "تم الإلغاء" : "Cancelled");
+  };
+
+  const downloadOutput = async (path: string) => {
+    const { data, error } = await supabase.storage.from("outputs").createSignedUrl(path, 60);
+    if (error || !data) { toast.error(error?.message ?? "Failed"); return; }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -137,6 +158,7 @@ function JobsPage() {
             <div className="divide-y divide-border">
               {filtered.map((j) => {
                 const st = j.status as JobStatus;
+                const outputs = ((j.output_refs as { files?: string[] } | null)?.files) ?? [];
                 return (
                   <div key={j.id} className="px-4 py-3 hover:bg-muted/30">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -158,6 +180,17 @@ function JobsPage() {
                     </div>
                     {st === "running" && (
                       <Progress value={j.progress ?? 0} className="h-1.5 mt-2" />
+                    )}
+                    {outputs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {outputs.map((p) => (
+                          <Button key={p} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                            onClick={() => downloadOutput(p)}>
+                            <Download className="size-3" />
+                            <span className="font-mono truncate max-w-[220px]">{p.split("/").pop()}</span>
+                          </Button>
+                        ))}
+                      </div>
                     )}
                     {j.error && (
                       <p className="text-xs text-destructive mt-1.5 font-mono whitespace-pre-wrap">{j.error}</p>

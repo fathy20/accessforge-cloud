@@ -158,6 +158,7 @@ function JobsPage() {
             <div className="divide-y divide-border">
               {filtered.map((j) => {
                 const st = j.status as JobStatus;
+                const outputs = ((j.output_refs as { files?: string[] } | null)?.files) ?? [];
                 return (
                   <div key={j.id} className="px-4 py-3 hover:bg-muted/30">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -179,6 +180,17 @@ function JobsPage() {
                     </div>
                     {st === "running" && (
                       <Progress value={j.progress ?? 0} className="h-1.5 mt-2" />
+                    )}
+                    {outputs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {outputs.map((p) => (
+                          <Button key={p} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                            onClick={() => downloadOutput(p)}>
+                            <Download className="size-3" />
+                            <span className="font-mono truncate max-w-[220px]">{p.split("/").pop()}</span>
+                          </Button>
+                        ))}
+                      </div>
                     )}
                     {j.error && (
                       <p className="text-xs text-destructive mt-1.5 font-mono whitespace-pre-wrap">{j.error}</p>

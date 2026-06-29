@@ -100,6 +100,12 @@ function JobsPage() {
     if (error) toast.error(error.message); else toast.success(ar ? "تم الإلغاء" : "Cancelled");
   };
 
+  const downloadOutput = async (path: string) => {
+    const { data, error } = await supabase.storage.from("outputs").createSignedUrl(path, 60);
+    if (error || !data) { toast.error(error?.message ?? "Failed"); return; }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">

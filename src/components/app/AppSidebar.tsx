@@ -14,6 +14,7 @@ import {
   ListChecks,
   CheckCircle,
   GaugeCircle,
+  FileBarChart,
   Layers,
   BookCopy,
   Mailbox,
@@ -36,6 +37,7 @@ const mainNav: NavItem[] = [
   { to: "/uploads", label: "Uploads", icon: Upload },
   { to: "/search", label: "Search", icon: Search },
   { to: "/jobs", label: "Jobs", icon: ListTodo },
+  { to: "/reports", label: "Reports", icon: FileBarChart },
 ];
 
 const moduleNav: NavItem[] = [

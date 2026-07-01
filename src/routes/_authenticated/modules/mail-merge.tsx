@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_authenticated/modules/mail-merge")({
     <ModuleRunner
       moduleKey="mail_merge"
       title="Mail Merge (Covering)"
-      titleAr="دمج المراسلات (Covering)"
+      titleAr="Mail Merge (Covering)"
       description="Generate RC cards by merging a Word template with Excel data."
       descriptionAr="توليد بطاقات RC بدمج قالب Word مع بيانات Excel."
       icon={Mail}

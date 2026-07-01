@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_authenticated/modules/cmp-tcm")({
     <ModuleRunner
       moduleKey="cmp_tcm"
       title="CMP / TCM Tasks"
-      titleAr="مهام CMP / TCM"
+      titleAr="CMP / TCM Tasks"
       description="Index a TCM folder of PDFs and generate indexed task cards."
       descriptionAr="فهرسة مجلد TCM من ملفات PDF وتوليد بطاقات مهام مفهرسة."
       icon={FolderTree}

@@ -7,8 +7,8 @@ export const Route = createFileRoute("/_authenticated/modules/effectivity")({
   component: () => (
     <ModuleRunner
       moduleKey="effectivity"
-      title="Effectivity"
-      titleAr="الفاعلية (Effectivity)"
+      title="EFFECTIVITY / TCM"
+      titleAr="EFFECTIVITY / TCM"
       description="Load Excel data and link maintenance chapters per effectivity."
       descriptionAr="تحميل بيانات Excel وربط فصول الصيانة لكل effectivity."
       icon={Table2}

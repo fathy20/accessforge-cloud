@@ -42,14 +42,14 @@ const mainNav: NavItem[] = [
 
 const moduleNav: NavItem[] = [
   { to: "/modules", label: "All Modules", icon: LayoutDashboard },
-  { to: "/modules/task-extractor", label: "Task Extractor", icon: FileSearch, moduleKey: "task_extractor" },
-  { to: "/modules/task-stamping",  label: "Task Stamping",  icon: Stamp,      moduleKey: "task_stamping" },
-  { to: "/modules/effectivity",    label: "Effectivity",    icon: ListChecks, moduleKey: "effectivity" },
-  { to: "/modules/check-control",  label: "Check Control",  icon: CheckCircle, moduleKey: "check_control" },
-  { to: "/modules/utilization",    label: "Utilization",    icon: GaugeCircle, moduleKey: "utilization" },
-  { to: "/modules/cmp-tcm",        label: "CMP / TCM",      icon: Layers,     moduleKey: "cmp_tcm" },
-  { to: "/modules/cover-merge",    label: "Cover Merge",    icon: BookCopy,   moduleKey: "cover_merge" },
-  { to: "/modules/mail-merge",     label: "Mail Merge",     icon: Mailbox,    moduleKey: "mail_merge" },
+  { to: "/modules/task-extractor", label: "Task Extractor",         icon: FileSearch,  moduleKey: "task_extractor" },
+  { to: "/modules/task-stamping",  label: "Task Stamping",          icon: Stamp,       moduleKey: "task_stamping" },
+  { to: "/modules/effectivity",    label: "EFFECTIVITY / TCM",      icon: ListChecks,  moduleKey: "effectivity" },
+  { to: "/modules/check-control",  label: "Check Control",          icon: CheckCircle, moduleKey: "check_control" },
+  { to: "/modules/utilization",    label: "Utilization",            icon: GaugeCircle, moduleKey: "utilization" },
+  { to: "/modules/cmp-tcm",        label: "CMP / TCM Tasks",        icon: Layers,      moduleKey: "cmp_tcm" },
+  { to: "/modules/cover-merge",    label: "Cover Merge",            icon: BookCopy,    moduleKey: "cover_merge" },
+  { to: "/modules/mail-merge",     label: "Mail Merge (Covering)",  icon: Mailbox,     moduleKey: "mail_merge" },
 ];
 
 const adminNav: NavItem[] = [

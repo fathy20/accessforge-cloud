@@ -21,6 +21,7 @@ import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/jobs'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
+import { Route as AuthenticatedModulesIndexRouteImport } from './routes/_authenticated/modules/index'
 import { Route as AuthenticatedModulesUtilizationRouteImport } from './routes/_authenticated/modules/utilization'
 import { Route as AuthenticatedModulesTaskStampingRouteImport } from './routes/_authenticated/modules/task-stamping'
 import { Route as AuthenticatedModulesTaskExtractorRouteImport } from './routes/_authenticated/modules/task-extractor'
@@ -94,6 +95,12 @@ const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedModulesIndexRoute =
+  AuthenticatedModulesIndexRouteImport.update({
+    id: '/modules/',
+    path: '/modules/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedModulesUtilizationRoute =
   AuthenticatedModulesUtilizationRouteImport.update({
     id: '/modules/utilization',
@@ -194,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
+  '/modules/': typeof AuthenticatedModulesIndexRoute
   '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
   '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
@@ -220,6 +228,7 @@ export interface FileRoutesByTo {
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
+  '/modules': typeof AuthenticatedModulesIndexRoute
   '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
   '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
@@ -248,6 +257,7 @@ export interface FileRoutesById {
   '/_authenticated/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/_authenticated/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/_authenticated/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
+  '/_authenticated/modules/': typeof AuthenticatedModulesIndexRoute
   '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
   '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/modules/task-extractor'
     | '/modules/task-stamping'
     | '/modules/utilization'
+    | '/modules/'
     | '/api/public/hooks/worker-callback'
     | '/api/public/hooks/worker-poll'
   fileRoutesByTo: FileRoutesByTo
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/modules/task-extractor'
     | '/modules/task-stamping'
     | '/modules/utilization'
+    | '/modules'
     | '/api/public/hooks/worker-callback'
     | '/api/public/hooks/worker-poll'
   id:
@@ -329,6 +341,7 @@ export interface FileRouteTypes {
     | '/_authenticated/modules/task-extractor'
     | '/_authenticated/modules/task-stamping'
     | '/_authenticated/modules/utilization'
+    | '/_authenticated/modules/'
     | '/api/public/hooks/worker-callback'
     | '/api/public/hooks/worker-poll'
   fileRoutesById: FileRoutesById
@@ -426,6 +439,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AuthenticatedAdminRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/modules/': {
+      id: '/_authenticated/modules/'
+      path: '/modules'
+      fullPath: '/modules/'
+      preLoaderRoute: typeof AuthenticatedModulesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/modules/utilization': {
@@ -557,6 +577,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedModulesTaskExtractorRoute: typeof AuthenticatedModulesTaskExtractorRoute
   AuthenticatedModulesTaskStampingRoute: typeof AuthenticatedModulesTaskStampingRoute
   AuthenticatedModulesUtilizationRoute: typeof AuthenticatedModulesUtilizationRoute
+  AuthenticatedModulesIndexRoute: typeof AuthenticatedModulesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -577,6 +598,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedModulesTaskExtractorRoute,
   AuthenticatedModulesTaskStampingRoute: AuthenticatedModulesTaskStampingRoute,
   AuthenticatedModulesUtilizationRoute: AuthenticatedModulesUtilizationRoute,
+  AuthenticatedModulesIndexRoute: AuthenticatedModulesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

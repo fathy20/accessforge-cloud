@@ -41,6 +41,7 @@ const mainNav: NavItem[] = [
 ];
 
 const moduleNav: NavItem[] = [
+  { to: "/modules", label: "All Modules", icon: LayoutDashboard },
   { to: "/modules/task-extractor", label: "Task Extractor", icon: FileSearch, moduleKey: "task_extractor" },
   { to: "/modules/task-stamping",  label: "Task Stamping",  icon: Stamp,      moduleKey: "task_stamping" },
   { to: "/modules/effectivity",    label: "Effectivity",    icon: ListChecks, moduleKey: "effectivity" },

@@ -192,11 +192,14 @@ export function ModuleRunner(props: ModuleRunnerProps) {
         </CardContent>
       </Card>
 
+      <ModuleJobs moduleKey={moduleKey} />
+
       <Card><CardContent className="p-4 text-xs text-muted-foreground">
         {ar
           ? "المعالجة الفعلية تتم في Python worker مستقل. تتبع تقدّم المهمة من صفحة Jobs."
           : "Actual processing runs in the Python worker. Track progress on the Jobs page."}
       </CardContent></Card>
+
     </div>
   );
 }

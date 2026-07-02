@@ -15,6 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { ModuleJobs } from "@/components/app/ModuleJobs";
+
 
 type Kind = "pdf" | "excel" | "docx" | "csv" | "image" | "other";
 

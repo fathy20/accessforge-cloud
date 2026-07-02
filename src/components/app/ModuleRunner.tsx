@@ -15,6 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { ModuleJobs } from "@/components/app/ModuleJobs";
+
 
 type Kind = "pdf" | "excel" | "docx" | "csv" | "image" | "other";
 
@@ -190,11 +192,14 @@ export function ModuleRunner(props: ModuleRunnerProps) {
         </CardContent>
       </Card>
 
+      <ModuleJobs moduleKey={moduleKey} />
+
       <Card><CardContent className="p-4 text-xs text-muted-foreground">
         {ar
           ? "المعالجة الفعلية تتم في Python worker مستقل. تتبع تقدّم المهمة من صفحة Jobs."
           : "Actual processing runs in the Python worker. Track progress on the Jobs page."}
       </CardContent></Card>
+
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { Plane, Loader2 } from "lucide-react";
+import { Plane, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
+const searchSchema = z.object({
+  mode: z.enum(["signin", "signup"]).optional(),
+});
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Sign in · REDSEA Toolkit" },
@@ -23,17 +28,39 @@ export const Route = createFileRoute("/auth")({
 const emailSchema = z.string().trim().email("Invalid email").max(255);
 const passwordSchema = z.string().min(8, "Min 8 characters").max(72);
 
+async function checkStatusAndRoute(userId: string, navigate: ReturnType<typeof useNavigate>) {
+  const { data } = await supabase
+    .from("profiles")
+    .select("status")
+    .eq("id", userId)
+    .maybeSingle();
+  if (data?.status === "pending") {
+    await supabase.auth.signOut();
+    toast.info("Your account is awaiting administrator approval.", { duration: 6000 });
+    return false;
+  }
+  if (data?.status === "suspended") {
+    await supabase.auth.signOut();
+    toast.error("Your account has been suspended. Please contact an administrator.");
+    return false;
+  }
+  navigate({ to: "/dashboard", replace: true });
+  return true;
+}
+
 function AuthPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(search.mode ?? "signin");
+  const [signedUp, setSignedUp] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) await checkStatusAndRoute(data.session.user.id, navigate);
     });
   }, [navigate]);
 
@@ -52,20 +79,25 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}/auth`,
             data: { full_name: fullName },
           },
         });
         if (error) throw error;
-        toast.success("Account created. Check your email if confirmation is required.");
+        // If email confirmation is required, session is null.
+        if (data.session) {
+          // First user (auto super_admin + active) or edge case: check status.
+          await checkStatusAndRoute(data.session.user.id, navigate);
+        }
+        setSignedUp(true);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/dashboard", replace: true });
+        if (data.session) await checkStatusAndRoute(data.session.user.id, navigate);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication failed");
@@ -77,7 +109,7 @@ function AuthPage() {
   const google = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + "/auth",
     });
     if (result.error) {
       toast.error(result.error.message || "Google sign-in failed");
@@ -85,12 +117,44 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/dashboard", replace: true });
+    const { data } = await supabase.auth.getSession();
+    if (data.session) await checkStatusAndRoute(data.session.user.id, navigate);
+    setLoading(false);
   };
+
+  if (signedUp) {
+    return (
+      <div className="dark min-h-screen w-full surface-gradient flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card panel-shadow p-8 text-center">
+          <div className="size-14 rounded-full bg-success/10 grid place-items-center mx-auto mb-4">
+            <CheckCircle2 className="size-7 text-success" />
+          </div>
+          <h1 className="text-xl font-semibold">Account created</h1>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Thank you for signing up to REDSEA. Your account is now awaiting administrator approval.
+            You'll be able to sign in once activated.
+          </p>
+          <Link
+            to="/"
+            className="mt-6 inline-flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <ArrowLeft className="size-4" /> Back to home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dark min-h-screen w-full surface-gradient flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+        >
+          <ArrowLeft className="size-4" /> Back to home
+        </Link>
+
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="size-12 rounded-xl brand-gradient grid place-items-center glow-ring">
             <Plane className="size-6 text-primary-foreground" />
@@ -144,6 +208,9 @@ function AuthPage() {
                   value={password}
                   onChange={setPassword}
                 />
+                <p className="text-xs text-muted-foreground">
+                  New accounts require administrator approval before first sign-in.
+                </p>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="size-4 animate-spin" />}
                   Create account
@@ -164,12 +231,6 @@ function AuthPage() {
           <Button type="button" variant="outline" className="w-full" onClick={google} disabled={loading}>
             <GoogleIcon /> Continue with Google
           </Button>
-
-          <p className="text-xs text-muted-foreground text-center mt-6">
-            <Link to="/auth" className="hover:text-foreground">
-              Need help signing in?
-            </Link>
-          </p>
         </div>
       </div>
     </div>

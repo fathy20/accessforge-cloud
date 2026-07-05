@@ -137,6 +137,7 @@ export type Database = {
           can_run: boolean
           can_view: boolean
           created_at: string
+          expires_at: string | null
           granted_by: string | null
           id: string
           module_id: string
@@ -146,6 +147,7 @@ export type Database = {
           can_run?: boolean
           can_view?: boolean
           created_at?: string
+          expires_at?: string | null
           granted_by?: string | null
           id?: string
           module_id: string
@@ -155,6 +157,7 @@ export type Database = {
           can_run?: boolean
           can_view?: boolean
           created_at?: string
+          expires_at?: string | null
           granted_by?: string | null
           id?: string
           module_id?: string
@@ -206,32 +209,83 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          link: string | null
+          metadata: Json
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           department: string | null
+          employee_id: string | null
           full_name: string | null
           id: string
           job_title: string | null
+          last_seen_at: string | null
+          phone: string | null
+          preferences: Json
+          status: Database["public"]["Enums"]["user_status"]
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           department?: string | null
+          employee_id?: string | null
           full_name?: string | null
           id: string
           job_title?: string | null
+          last_seen_at?: string | null
+          phone?: string | null
+          preferences?: Json
+          status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           department?: string | null
+          employee_id?: string | null
           full_name?: string | null
           id?: string
           job_title?: string | null
+          last_seen_at?: string | null
+          phone?: string | null
+          preferences?: Json
+          status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
         Relationships: []
@@ -382,6 +436,48 @@ export type Database = {
           },
         ]
       }
+      user_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          module_presets: Json
+          role: Database["public"]["Enums"]["app_role"]
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          module_presets?: Json
+          role?: Database["public"]["Enums"]["app_role"]
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          module_presets?: Json
+          role?: Database["public"]["Enums"]["app_role"]
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -442,6 +538,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_user_active: { Args: { _user_id: string }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
@@ -449,6 +546,7 @@ export type Database = {
       app_role: "super_admin" | "admin" | "engineer" | "viewer" | "guest"
       job_status: "queued" | "running" | "done" | "failed" | "cancelled"
       upload_kind: "pdf" | "excel" | "docx" | "csv" | "image" | "other"
+      user_status: "pending" | "active" | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -579,6 +677,7 @@ export const Constants = {
       app_role: ["super_admin", "admin", "engineer", "viewer", "guest"],
       job_status: ["queued", "running", "done", "failed", "cancelled"],
       upload_kind: ["pdf", "excel", "docx", "csv", "image", "other"],
+      user_status: ["pending", "active", "suspended"],
     },
   },
 } as const

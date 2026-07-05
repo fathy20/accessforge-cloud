@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { NotificationBell } from "@/components/app/NotificationBell";
 
 export function AppTopbar() {
   const { user } = useAuth();
@@ -67,6 +68,7 @@ export function AppTopbar() {
           <Languages className="size-4" />
           <span className="text-xs font-medium">{lang === "ar" ? "EN" : "ع"}</span>
         </Button>
+        <NotificationBell />
         <Badge variant="secondary" className="capitalize">
           {topRole.replace("_", " ")}
         </Badge>

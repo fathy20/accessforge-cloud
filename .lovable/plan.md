@@ -1,234 +1,127 @@
 
-# REDSEA Aviation Toolkit — Web Platform Architecture Plan
+# خطة تطوير REDSEA لنظام احترافي متكامل
 
-تحويل أداة REDSEA (Python/Tkinter) لمنصة ويب احترافية متعددة المستخدمين بصلاحيات، رفع ملفات، بحث قوي، ومعالجة PDF/Excel في الخلفية. المعمارية مبنية لتقدر تستحمل نمو وموديولات جديدة من غير ما نعيد البناء.
+## نظرة عامة
 
----
+النظام الحالي عنده أساس شغّال (Auth + 8 modules + Jobs + Uploads + Python worker). الخطة دي بتحوّله لـ **موقع احترافي كامل** بواجهة عامة، قاعدة بيانات موسّعة، وإدارة مركزية للمستخدمين والصلاحيات.
 
-## 1) High-Level Architecture
+## 1) واجهة عامة (Landing Page)
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│                  Frontend (TanStack Start)                 │
-│  Dashboard · Auth · RBAC UI · Uploads · Search · Modules   │
-└───────────────┬────────────────────────────┬───────────────┘
-                │ Server Functions (RPC)     │ Realtime (jobs)
-                ▼                            ▼
-┌────────────────────────────┐   ┌────────────────────────────┐
-│   Lovable Cloud (Supabase) │   │  Python Worker Service     │
-│  · Auth (email + Google)   │   │  (FastAPI + RQ/Celery)     │
-│  · Postgres + RLS          │◄──┤  · PDF extract / OCR       │
-│  · Storage (PDF/Excel/DOCX)│   │  · Stamping / TCM index    │
-│  · pg_cron · pg_trgm/FTS   │   │  · Mail merge / Covering   │
-│  · Edge: signed URLs       │   │  Hosted: Railway/Fly/Render│
-└────────────────────────────┘   └────────────────────────────┘
-```
+- صفحة `/` عامة احترافية: Hero + Features + Modules showcase + Testimonials + CTA.
+- Header: شعار REDSEA + Sign In.
+- Footer: روابط الشركة، Privacy، Terms.
+- SEO كامل (title, description, OG tags).
 
-المعالجة الثقيلة (PyMuPDF, Tesseract, python-docx, openpyxl) **مستحيل** تشتغل على Cloudflare Worker. لازم **Python worker منفصل** يستقبل jobs ويرجع نتائج. الـ Web app تتحكم وتعرض فقط.
+## 2) قاعدة بيانات موسّعة وقوية
 
----
+### جداول جديدة
+- **`user_invitations`** — دعوات بالإيميل (token, expires_at, role, invited_by, accepted_at, module presets).
+- **`notifications`** — إشعارات داخل النظام (job done/failed, invitation, role change).
+- **`user_activity`** — آخر تسجيل دخول، عدد الـ jobs، آخر نشاط.
+- **`module_usage_stats`** — إحصائيات استخدام كل موديول.
+- **`email_log`** — سجل كل الإيميلات المرسلة (نوع، مستقبل، حالة).
 
-## 2) Core Modules (من الكود الأصلي)
+### تحسينات على الجداول الحالية
+- `profiles`: إضافة `phone`, `department`, `job_title`, `employee_id`, `status` (active/suspended/pending), `last_seen_at`, `preferences` jsonb.
+- `module_access`: إضافة `expires_at` للصلاحيات المؤقتة.
+- Triggers لتحديث `user_activity` تلقائيًا وتسجيل الأحداث في `audit_log`.
+- Indexes إضافية للأداء.
 
-| الموديول | الوظيفة | Worker job |
-|---|---|---|
-| Task Extractor | استخراج Tasks من PDFs (RegEx + OCR) | `extract_tasks` |
-| Task Stamping | ختم Tail/Station/Date على PDFs | `stamp_pdfs` |
-| Effectivity | تحميل Excel + ربط chapters | `effectivity_export` |
-| Check Control | CSV checks management | DB only |
-| Utilization | tracking + hashing (MD5/SHA/Blake2) | DB only |
-| CMP/TCM Tasks | indexing TCM folder + بناء task cards | `build_tcm_index`, `generate_cards` |
-| Cover Merge | merge cover PDFs | `cover_merge` |
-| Mail Merge (Covering) | Word + Excel → RC Cards | `mail_merge` |
-| **Module N** (future) | plug-in جديد | حسب الحاجة |
+### الأمان
+- RLS على كل جدول.
+- Security definer functions لكل role/permission checks.
+- GRANTs صحيحة (authenticated + service_role).
 
----
+## 3) نظام Authentication احترافي
 
-## 3) Roles & Permissions (RBAC)
+- **Email + Password** مع HIBP check (منع الباسوردات المسرّبة).
+- **Email verification** إجباري.
+- **Password reset** كامل عبر إيميل.
+- **First user auto = super_admin**، بعده كل حساب جديد status = `pending` لحد ما الأدمن يفعّله.
+- **Email templates** مخصصة بشعار REDSEA:
+  - Welcome / Verify email
+  - Password reset
+  - Invitation to REDSEA
+  - Job completed / failed notification
+- Sign-out كامل يمسح الـ cache و listener واحد بس في الـ root.
 
-Enum `app_role`: `super_admin`, `admin`, `engineer`, `viewer`, `guest`.
+## 4) لوحة تحكم المدير (Admin Console)
 
-| Capability | super_admin | admin | engineer | viewer | guest |
-|---|:-:|:-:|:-:|:-:|:-:|
-| إدارة users + roles | ✅ | ✅ | – | – | – |
-| رفع ملفات | ✅ | ✅ | ✅ | – | – |
-| تشغيل modules (jobs) | ✅ | ✅ | ✅ | – | – |
-| تنزيل النتائج | ✅ | ✅ | ✅ | ✅ | – |
-| عرض dashboard | ✅ | ✅ | ✅ | ✅ | ✅ (محدود) |
-| Audit log | ✅ | ✅ | – | – | – |
-| Module-level access (per module assignment) | كل الموديولات | كل الموديولات | حسب التعيين | حسب التعيين | – |
+### `/admin/users` — تطوير كامل
+- Table بكل المستخدمين + بحث/فلترة/ترتيب.
+- لكل مستخدم:
+  - تفعيل / تعليق / حذف الحساب.
+  - تغيير الدور (guest / engineer / admin / super_admin).
+  - إدارة صلاحيات كل موديول (view / run).
+  - إعادة تعيين كلمة المرور (يبعت إيميل).
+  - عرض النشاط الأخير + الـ jobs.
+- زر **"Invite User"** — دعوة بالإيميل مع دور وصلاحيات مسبقة.
+- Bulk actions.
 
-الصلاحيات تتحقق على 3 مستويات: **UI hide**, **server function check**, **Postgres RLS policy** (defense in depth).
+### `/admin/invitations` — جديد
+- عرض كل الدعوات (pending/accepted/expired) + إعادة إرسال / إلغاء.
 
----
+### `/admin/settings` — تطوير
+- تفعيل/تعطيل تسجيل الحسابات الجديدة.
+- تفعيل/تعطيل موديولز على مستوى النظام.
+- إعدادات الإشعارات الافتراضية.
 
-## 4) Database Schema (Postgres)
+### `/admin/audit` — تطوير
+- Timeline بكل الأحداث الحساسة + فلترة + Export CSV.
 
-```text
-profiles(id PK→auth.users, full_name, avatar, department, created_at)
-app_role enum
-user_roles(user_id, role, UNIQUE)
-modules(id, key, name, description, enabled)
-module_access(user_id, module_id, can_run, can_view)
-projects(id, name, owner_id, tail_number, station, created_at)
-uploads(id, project_id, uploader_id, storage_path, kind[pdf|excel|docx|csv],
-        original_name, size, sha256, search_tsv tsvector, created_at)
-jobs(id, project_id, module_key, status[queued|running|done|failed],
-     input_refs jsonb, output_refs jsonb, progress int,
-     error text, created_by, started_at, finished_at)
-job_logs(id, job_id, level, message, ts)
-tasks(id, project_id, code, title, chapter, effectivity, source_upload_id,
-      page_no, search_tsv tsvector)        -- نتائج Task Extractor
-tcm_index(id, project_id, task_code, pdf_path, page_no, related jsonb)
-checks(id, project_id, code, description, …)
-utilization(id, project_id, …)
-audit_log(id, actor, action, entity, entity_id, meta jsonb, ts)
-```
+## 5) صفحة الملف الشخصي (`/profile`)
 
-Security definer: `has_role(uuid, app_role)`, `has_module_access(uuid, text)`.
-Indexes: `GIN(search_tsv)`, `GIN(tasks.code gin_trgm_ops)`, btree على FKs.
+- تعديل البيانات (اسم، تليفون، قسم، وظيفة، صورة).
+- تغيير كلمة المرور.
+- عرض صلاحيات الموديولز.
+- سجل الـ jobs الشخصية.
+- إعدادات الإشعارات.
 
----
+## 6) نظام الإشعارات
 
-## 5) Powerful Search
+- **In-app**: Bell في الـ topbar + Badge للعدد + قائمة منسدلة.
+- **Email**: عند اكتمال/فشل job، دعوة، تغيير دور.
+- كل مستخدم يختار يستقبل إيه.
 
-- عمود `search_tsv` على `uploads`, `tasks`, `tcm_index` بيتولد عبر trigger (title+code+chapter+ocr_text).
-- استعلام موحد عبر server function: full-text + fuzzy (`pg_trgm`) + filters (module, project, tail, date, uploader).
-- UI: command palette (⌘K) + صفحة Search متقدمة بـ facets.
+## 7) Dashboard مطوّر
 
----
+- كروت أرقام حية (My Jobs, Active Users, Storage, Modules).
+- شارتات آخر 7 أيام (Jobs by day / status / module).
+- Quick actions حسب الدور.
+- Recent activity feed.
 
-## 6) Processing Pipeline (Jobs)
+## 8) القسم الفني (Technical)
 
-```text
-User uploads file → Storage → row in uploads
-        │
-        ▼
-User triggers module → server fn validates RBAC → INSERT jobs(queued)
-        │
-        ▼
-Python Worker pulls job (HTTPS webhook OR poll) →
-   downloads inputs via signed URL → runs PyMuPDF/OCR/etc. →
-   uploads outputs to Storage → PATCH job(done, output_refs)
-        │
-        ▼
-Realtime channel pushes status → UI updates progress bar live
-```
+- **Backend**: كل الـ server logic في TanStack `createServerFn` (مش Edge Functions).
+- **Frontend**: كل الصفحات تحت `_authenticated/` ماعدا `/`, `/auth`, `/reset-password`, `/invite/:token`.
+- **TanStack Query** + Supabase Realtime للـ jobs والإشعارات.
+- **Email**: Lovable managed templates (auth) + transactional email للإشعارات.
+- **Security**: RLS + HIBP + Rate limiting + Audit trail.
+- **Toast** موحّد (sonner).
 
-Worker = FastAPI + RQ (Redis) أو Celery. Deployable على Railway/Fly.io/Render. يخزن نتائج رجوع في Supabase Storage ويحدث `jobs` table بـ service-role key.
+## 9) مراحل التنفيذ
+
+- **Phase A**: Landing page + تحسين Auth + Password reset.
+- **Phase B**: قاعدة البيانات (جداول + triggers + RLS + GRANTs).
+- **Phase C**: لوحة تحكم المستخدمين الكاملة + Invitations.
+- **Phase D**: Email system (templates + notifications).
+- **Phase E**: Dashboard بالإحصائيات + Profile page.
+- **Phase F**: UI/UX نهائي + اختبار شامل.
 
 ---
 
-## 7) Frontend Structure (TanStack Start)
+## قبل ما نبدأ — محتاج قرارك في 3 نقاط
 
-```text
-src/routes/
-  index.tsx                        ← landing/login redirect
-  auth.tsx                         ← email + Google sign-in
-  _authenticated/
-    route.tsx                      ← managed gate
-    dashboard.tsx                  ← KPIs, recent jobs, quick actions
-    projects/index.tsx
-    projects/$projectId.tsx
-    uploads/index.tsx              ← drag-drop, list, search
-    search.tsx                     ← global search
-    modules/task-extractor.tsx
-    modules/task-stamping.tsx
-    modules/effectivity.tsx
-    modules/check-control.tsx
-    modules/utilization.tsx
-    modules/cmp-tcm.tsx
-    modules/cover-merge.tsx
-    modules/mail-merge.tsx
-    jobs/index.tsx                 ← queue monitor (live)
-    jobs/$jobId.tsx                ← logs, output download
-    _admin/
-      route.tsx                    ← gate: admin/super_admin
-      users.tsx                    ← invite, assign roles & modules
-      audit.tsx
-      settings.tsx
-  api/public/worker-callback.ts    ← HMAC-verified worker → app
-src/lib/
-  *.functions.ts                   ← server fns (auth-guarded)
-  modules/                         ← per-module UI components
-  search/                          ← search hooks & components
-src/components/ui/                 ← shadcn
-```
+**1) الصفحة الرئيسية العامة (`/`):**
+- **(أ)** Landing عام لأي حد يشوفه + زر Sign In.
+- **(ب)** صفحة دخول مباشرة (النظام مغلق تمامًا).
 
-UI: dashboard sidebar + topbar + content. Dark/light. Arabic RTL support اختياري.
+**2) طريقة إنشاء الحسابات:**
+- **(أ)** المستخدم يعمل حساب بنفسه ويكون Pending لحد ما الأدمن يفعّله.
+- **(ب)** الأدمن هو الوحيد اللي يبعت دعوات بالإيميل (Invite-only).
 
----
+**3) Google Sign-in:**
+- **(أ)** أضيفه مع Email/Password.
+- **(ب)** Email/Password فقط.
 
-## 8) Auth
-
-- Email/password + **Google OAuth** (عبر Lovable broker — مطلوب من standards).
-- صفحة `/auth` عامة. كل الموديولات تحت `_authenticated/`.
-- Invites: admin يبعت invite → user يعمل sign-up → auto-assign role + modules.
-- Password reset عبر `/reset-password`.
-- HIBP leaked-password check مفعّل.
-
----
-
-## 9) Security
-
-- RLS على كل الجداول؛ policies تستخدم `has_role` و `has_module_access`.
-- Service-role key للـ worker فقط (server-side، مش متاح للـ browser).
-- Signed URLs لتنزيل ملفات Storage (expiry قصير).
-- Audit log لكل action حساس (role change, file delete, job run).
-- Worker callbacks محمية بـ HMAC signature.
-- Input validation بـ Zod على كل server fn.
-- Rate limiting على endpoints الحساسة.
-
----
-
-## 10) Phased Roadmap
-
-**Phase 1 — Foundation (Web only, no worker):**
-1. Enable Lovable Cloud, design system, sidebar shell, theme.
-2. Auth + `/auth` + `_authenticated` layout + Google sign-in.
-3. Schema: profiles, user_roles, modules, module_access, audit_log.
-4. Admin panel: users list, role assign, module access matrix.
-
-**Phase 2 — Uploads & Search:**
-5. Storage buckets (`uploads`, `outputs`) + RLS.
-6. Upload UI (drag-drop, progress, dedupe بـ sha256).
-7. `uploads` table + tsvector trigger + global search page + ⌘K palette.
-
-**Phase 3 — Jobs framework:**
-8. `jobs` + `job_logs` tables + realtime subscription.
-9. Job orchestration server fns (enqueue, cancel, retry).
-10. Jobs monitor UI (live progress, logs viewer).
-
-**Phase 4 — Python Worker:**
-11. FastAPI service repo (separate). Endpoints: `/jobs/poll`, `/jobs/:id/complete`.
-12. Port `extract_tasks`, `stamp_pdfs` first (أكثر استخداماً).
-13. Deploy على Railway/Fly + Redis. Document deployment.
-
-**Phase 5 — Modules (one by one):**
-14. Task Extractor → 15. Task Stamping → 16. Effectivity → 17. Check Control →
-18. Utilization → 19. CMP/TCM + TCM indexer → 20. Cover Merge → 21. Mail Merge.
-
-**Phase 6 — Polish:**
-22. Dashboard KPIs (jobs/day, success rate, storage usage).
-23. Notifications (in-app + email on job completion).
-24. Export reports (PDF/Excel).
-25. Plugin slot for "Module N" future.
-
----
-
-## 11) Technical Notes
-
-- **لا يمكن** تشغيل PyMuPDF/Tesseract/python-docx داخل Cloudflare Worker — Python worker خارجي ضروري.
-- Lovable app = control plane + UI + auth + data. Worker = compute plane.
-- التواصل: worker يستهلك jobs من Postgres عبر service-role key (poll كل 2-5 ثواني) أو webhook من Edge function عند job جديد.
-- Storage هرفع عليه ملفات المستخدم؛ النتائج بتترفع لنفس bucket تحت `outputs/`.
-- المعمارية stateless للـ worker → نقدر نشغل أكتر من instance للسكيل.
-
----
-
-## 12) أسئلة قبل البدء
-
-1. **Worker hosting**: عندك تفضيل (Railway / Fly.io / Render / VPS)؟ أو أبدأ بـ Railway (الأسهل)؟
-2. **Languages**: واجهة عربي/إنجليزي/الاتنين؟
-3. **Multi-tenant؟** الناس كلهم في organization واحدة (REDSEA) ولا فيه شركات منفصلة؟
-4. **أبدأ Phase 1 دلوقتي** (foundation + auth + RBAC + admin panel) ولا تحب تعدّل شيء في الـ scope الأول؟
+قوللي اختياراتك (مثلًا: `1-أ, 2-ب, 3-ب`) وأبدأ فورًا بـ **Phase A**.

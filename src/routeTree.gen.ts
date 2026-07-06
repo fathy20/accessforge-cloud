@@ -32,6 +32,7 @@ import { Route as AuthenticatedModulesCmpTcmRouteImport } from './routes/_authen
 import { Route as AuthenticatedModulesCheckControlRouteImport } from './routes/_authenticated/modules/check-control'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminInvitationsRouteImport } from './routes/_authenticated/admin/invitations'
 import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin/audit'
 import { Route as ApiPublicHooksWorkerPollRouteImport } from './routes/api/public/hooks/worker-poll'
 import { Route as ApiPublicHooksWorkerCallbackRouteImport } from './routes/api/public/hooks/worker-callback'
@@ -160,6 +161,12 @@ const AuthenticatedAdminSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminInvitationsRoute =
+  AuthenticatedAdminInvitationsRouteImport.update({
+    id: '/invitations',
+    path: '/invitations',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -191,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof AuthenticatedSearchRoute
   '/uploads': typeof AuthenticatedUploadsRoute
   '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/invitations': typeof AuthenticatedAdminInvitationsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
@@ -218,6 +226,7 @@ export interface FileRoutesByTo {
   '/search': typeof AuthenticatedSearchRoute
   '/uploads': typeof AuthenticatedUploadsRoute
   '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/invitations': typeof AuthenticatedAdminInvitationsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
@@ -247,6 +256,7 @@ export interface FileRoutesById {
   '/_authenticated/search': typeof AuthenticatedSearchRoute
   '/_authenticated/uploads': typeof AuthenticatedUploadsRoute
   '/_authenticated/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/_authenticated/admin/invitations': typeof AuthenticatedAdminInvitationsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/uploads'
     | '/admin/audit'
+    | '/admin/invitations'
     | '/admin/settings'
     | '/admin/users'
     | '/modules/check-control'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/uploads'
     | '/admin/audit'
+    | '/admin/invitations'
     | '/admin/settings'
     | '/admin/users'
     | '/modules/check-control'
@@ -331,6 +343,7 @@ export interface FileRouteTypes {
     | '/_authenticated/search'
     | '/_authenticated/uploads'
     | '/_authenticated/admin/audit'
+    | '/_authenticated/admin/invitations'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/users'
     | '/_authenticated/modules/check-control'
@@ -518,6 +531,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/invitations': {
+      id: '/_authenticated/admin/invitations'
+      path: '/invitations'
+      fullPath: '/admin/invitations'
+      preLoaderRoute: typeof AuthenticatedAdminInvitationsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/admin/audit': {
       id: '/_authenticated/admin/audit'
       path: '/audit'
@@ -544,6 +564,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminAuditRoute: typeof AuthenticatedAdminAuditRoute
+  AuthenticatedAdminInvitationsRoute: typeof AuthenticatedAdminInvitationsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
 }
@@ -551,6 +572,7 @@ interface AuthenticatedAdminRouteRouteChildren {
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
     AuthenticatedAdminAuditRoute: AuthenticatedAdminAuditRoute,
+    AuthenticatedAdminInvitationsRoute: AuthenticatedAdminInvitationsRoute,
     AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
     AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
   }

@@ -41,7 +41,7 @@ function ProfilePage() {
     enabled: !!user,
   });
 
-  const [form, setForm] = useState({ full_name: "", department: "", job_title: "", avatar_url: "" });
+  const [form, setForm] = useState({ full_name: "", department: "", job_title: "", phone: "", employee_id: "", avatar_url: "" });
   const [saving, setSaving] = useState(false);
   const [pwd, setPwd] = useState({ a: "", b: "" });
   const [pwdSaving, setPwdSaving] = useState(false);
@@ -52,6 +52,8 @@ function ProfilePage() {
         full_name: profile.full_name ?? "",
         department: profile.department ?? "",
         job_title: profile.job_title ?? "",
+        phone: profile.phone ?? "",
+        employee_id: profile.employee_id ?? "",
         avatar_url: profile.avatar_url ?? "",
       });
     }
@@ -66,6 +68,8 @@ function ProfilePage() {
         full_name: form.full_name || null,
         department: form.department || null,
         job_title: form.job_title || null,
+        phone: form.phone || null,
+        employee_id: form.employee_id || null,
         avatar_url: form.avatar_url || null,
       })
       .eq("id", user.id);
@@ -132,6 +136,14 @@ function ProfilePage() {
                 <div className="space-y-1.5">
                   <Label>{ar ? "القسم" : "Department"}</Label>
                   <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{ar ? "رقم الهاتف" : "Phone"}</Label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+20…" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{ar ? "الرقم الوظيفي" : "Employee ID"}</Label>
+                  <Input value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{ar ? "رابط الصورة" : "Avatar URL"}</Label>

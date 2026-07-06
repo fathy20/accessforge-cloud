@@ -53,9 +53,10 @@ const moduleNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { to: "/admin/users",    label: "Users & Roles", icon: Users2,      adminOnly: true },
-  { to: "/admin/audit",    label: "Audit Log",     icon: ShieldCheck, adminOnly: true },
-  { to: "/admin/settings", label: "Settings",      icon: Settings,    adminOnly: true },
+  { to: "/admin/users",       label: "Users & Roles", icon: Users2,      adminOnly: true },
+  { to: "/admin/invitations", label: "Invitations",   icon: Mailbox,     adminOnly: true },
+  { to: "/admin/audit",       label: "Audit Log",     icon: ShieldCheck, adminOnly: true },
+  { to: "/admin/settings",    label: "Settings",      icon: Settings,    adminOnly: true },
 ];
 
 export function AppSidebar() {

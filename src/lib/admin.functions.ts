@@ -191,6 +191,37 @@ export const inviteUser = createServerFn({ method: "POST" })
   });
 
 // ============================================================
+// List invitations
+// ============================================================
+export const listInvitations = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("user_invitations")
+      .select("id, email, role, token, invited_by, accepted_at, expires_at, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+// ============================================================
+// Revoke (delete) invitation
+// ============================================================
+export const revokeInvitation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("user_invitations").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ============================================================
 // Notifications helpers
 // ============================================================
 export const listMyNotifications = createServerFn({ method: "GET" })

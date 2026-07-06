@@ -138,6 +138,14 @@ function ProfilePage() {
                   <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
+                  <Label>{ar ? "رقم الهاتف" : "Phone"}</Label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+20…" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{ar ? "الرقم الوظيفي" : "Employee ID"}</Label>
+                  <Input value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
                   <Label>{ar ? "رابط الصورة" : "Avatar URL"}</Label>
                   <Input value={form.avatar_url} onChange={(e) => setForm({ ...form, avatar_url: e.target.value })} placeholder="https://…" />
                 </div>

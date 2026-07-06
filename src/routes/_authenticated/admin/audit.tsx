@@ -46,9 +46,27 @@ function AuditLog() {
           </h1>
           <p className="text-sm text-muted-foreground">Recent sensitive actions across the system.</p>
         </div>
-        <div className="relative w-72">
-          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Filter by action, entity, user…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        <div className="flex items-center gap-2">
+          <div className="relative w-72">
+            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Filter by action, entity, user…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const rows = [["ts", "action", "entity", "entity_id", "actor"], ...filtered.map((e) => [
+                e.ts, e.action, e.entity ?? "", e.entity_id ?? "", e.actor_name ?? "",
+              ])];
+              const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+              const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+              const a = document.createElement("a");
+              a.href = url; a.download = `audit-${Date.now()}.csv`; a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Download className="size-4" /> Export CSV
+          </Button>
         </div>
       </div>
 

@@ -5,8 +5,17 @@ import { z } from "zod";
 const roleEnum = z.enum(["super_admin", "admin", "engineer", "viewer", "guest"]);
 const statusEnum = z.enum(["pending", "active", "suspended"]);
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase.rpc("is_admin", { _user_id: userId });
+async function assertAdmin(_supabase: any, userId: string) {
+  // Query user_roles directly with service role — helper functions live in the
+  // private schema and are no longer exposed via the Data API.
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "super_admin"])
+    .limit(1)
+    .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden: admin access required");
 }

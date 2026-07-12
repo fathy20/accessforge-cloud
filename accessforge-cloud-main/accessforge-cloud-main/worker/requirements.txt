@@ -1,0 +1,10 @@
+requests>=2.32
+PyMuPDF>=1.24
+pytesseract>=0.3.10
+Pillow>=10.0
+pandas>=2.2
+openpyxl>=3.1
+python-docx>=1.1
+docxtpl>=0.16
+docx-mailmerge>=0.5
+supabase>=2.6

@@ -1,0 +1,9 @@
+id;key;name;description;icon;category;enabled;sort_order;created_at
+d20a86ec-8cc7-4835-b3ca-a5205465e6f2;task_extractor;Task Extractor;Extract maintenance tasks from PDF documents (RegEx + OCR).;FileSearch;Processing;true;10;2026-06-26 17:47:36.368038+00
+2152c793-23a7-498b-a7ed-5094f4b232f9;task_stamping;Task Stamping;Stamp tail number, station, and date onto PDF documents.;Stamp;Processing;true;20;2026-06-26 17:47:36.368038+00
+77384f01-7215-46b8-961d-0182a86498e9;check_control;Check Control;Manage maintenance checks from CSV.;CheckCircle;Data;true;40;2026-06-26 17:47:36.368038+00
+a01bd7fd-b68b-4da8-9070-f0af00c14e7c;utilization;Utilization;Track aircraft utilization with hashing & history.;GaugeCircle;Data;true;50;2026-06-26 17:47:36.368038+00
+bb0a16cc-136e-45dc-96da-2bb0cec818a1;cover_merge;Cover Merge;Merge cover PDFs onto task cards.;BookCopy;Processing;true;70;2026-06-26 17:47:36.368038+00
+2c7588c7-0655-40a7-b2ab-9bac69758da7;effectivity;EFFECTIVITY / TCM;Load Excel data and link maintenance chapters.;ListChecks;Data;true;30;2026-06-26 17:47:36.368038+00
+c6d804c6-0699-4c1e-94b6-c26f8345926f;mail_merge;Mail Merge (Covering);Generate RC cards from Word templates + Excel data.;Mailbox;Processing;true;80;2026-06-26 17:47:36.368038+00
+c9ea258d-228b-4a41-89fd-dfea49545950;cmp_tcm;CMP / TCM Tasks;Index TCM folder and generate indexed task cards.;Layers;Processing;true;60;2026-06-26 17:47:36.368038+00

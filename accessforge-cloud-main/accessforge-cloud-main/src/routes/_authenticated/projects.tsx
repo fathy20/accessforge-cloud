@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2, FolderKanban, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { useI18n } from "@/lib/i18n";
@@ -33,42 +33,46 @@ function ProjectsPage() {
 
   const canCreate = perms.hasAnyRole(["engineer", "admin", "super_admin"]);
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [] as any[], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("id, name, tail_number, station, description, owner_id, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      return await ApiClient.fetch("/projects");
     },
   });
 
   const create = async () => {
     if (!user || !form.name.trim()) return;
     setSaving(true);
-    const { error } = await supabase.from("projects").insert({
-      name: form.name.trim(),
-      tail_number: form.tail_number.trim() || null,
-      station: form.station.trim() || null,
-      description: form.description.trim() || null,
-      owner_id: user.id,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success(ar ? "تم إنشاء المشروع" : "Project created");
-    setForm({ name: "", tail_number: "", station: "", description: "" });
-    setOpen(false);
-    qc.invalidateQueries({ queryKey: ["projects"] });
+    try {
+      await ApiClient.fetch("/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          tail_number: form.tail_number.trim() || null,
+          station: form.station.trim() || null,
+          description: form.description.trim() || null,
+        }),
+      });
+      toast.success(ar ? "تم إنشاء المشروع" : "Project created");
+      setForm({ name: "", tail_number: "", station: "", description: "" });
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const remove = async (id: string) => {
     if (!confirm(ar ? "حذف المشروع؟" : "Delete project?")) return;
-    const { error } = await supabase.from("projects").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    toast.success(ar ? "تم الحذف" : "Deleted");
-    qc.invalidateQueries({ queryKey: ["projects"] });
+    try {
+      await ApiClient.fetch(`/projects/${id}`, { method: "DELETE" });
+      toast.success(ar ? "تم الحذف" : "Deleted");
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete project");
+    }
   };
 
   return (
@@ -118,7 +122,7 @@ function ProjectsPage() {
         </CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p) => {
+          {projects.map((p: any) => {
             const mine = p.owner_id === user?.id;
             return (
               <Card key={p.id} className="hover:border-primary/50 transition-colors">

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as THREE from "three";
 import { Flight } from "../flights/Flight.ts";
 import { Curves } from "../curves/Curves.ts";

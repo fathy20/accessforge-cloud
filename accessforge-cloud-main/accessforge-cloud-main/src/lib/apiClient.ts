@@ -1,6 +1,7 @@
-const API_URL = "http://localhost:8000/api";
-
 export class ApiClient {
+  static get API_URL() {
+    return import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  }
   static getToken() {
     return localStorage.getItem("access_token");
   }
@@ -13,7 +14,7 @@ export class ApiClient {
     localStorage.removeItem("access_token");
   }
 
-  static async fetch(endpoint: string, options: RequestInit = {}) {
+  static async fetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
     const headers = new Headers(options.headers || {});
     
@@ -25,7 +26,7 @@ export class ApiClient {
       headers.set("Content-Type", "application/json");
     }
 
-    const res = await fetch(`${API_URL}${endpoint}`, {
+    const res = await fetch(`${this.API_URL}${endpoint}`, {
       ...options,
       headers
     });

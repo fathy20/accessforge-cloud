@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, ShieldCheck, Download } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,23 +16,17 @@ export const Route = createFileRoute("/_authenticated/admin/audit")({
 function AuditLog() {
   const [q, setQ] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data = [] as any[], isLoading } = useQuery({
     queryKey: ["audit-log"],
     queryFn: async () => {
-      const [{ data: events, error }, { data: profiles }] = await Promise.all([
-        supabase.from("audit_log").select("*").order("ts", { ascending: false }).limit(500),
-        supabase.from("profiles").select("id, full_name"),
-      ]);
-      if (error) throw error;
-      const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name ?? ""]));
-      return (events ?? []).map((e) => ({ ...e, actor_name: e.actor_id ? nameById.get(e.actor_id) ?? "" : "" }));
+      return await ApiClient.fetch("/admin/audit-log");
     },
   });
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return data ?? [];
-    return (data ?? []).filter((e) =>
+    if (!term) return data;
+    return data.filter((e: any) =>
       [e.action, e.entity, e.entity_id, e.actor_name].some((v) => (v ?? "").toString().toLowerCase().includes(term))
     );
   }, [data, q]);
@@ -55,10 +49,10 @@ function AuditLog() {
             variant="outline"
             size="sm"
             onClick={() => {
-              const rows = [["ts", "action", "entity", "entity_id", "actor"], ...filtered.map((e) => [
+              const rows = [["ts", "action", "entity", "entity_id", "actor"], ...filtered.map((e: any) => [
                 e.ts, e.action, e.entity ?? "", e.entity_id ?? "", e.actor_name ?? "",
               ])];
-              const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+              const csv = rows.map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
               const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
               const a = document.createElement("a");
               a.href = url; a.download = `audit-${Date.now()}.csv`; a.click();
@@ -81,7 +75,7 @@ function AuditLog() {
             <p className="p-6 text-sm text-muted-foreground text-center">No audit events.</p>
           ) : (
             <div className="text-sm divide-y divide-border">
-              {filtered.map((e) => (
+              {filtered.map((e: any) => (
                 <div key={e.id} className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
                   <Badge variant="outline" className="font-mono text-[11px]">{e.action}</Badge>
                   {e.entity && <span className="text-muted-foreground text-xs font-mono">{e.entity}</span>}

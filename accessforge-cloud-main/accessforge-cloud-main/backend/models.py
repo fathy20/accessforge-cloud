@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Enum, JSON
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text
 from sqlalchemy.orm import relationship
 import enum
 import uuid
@@ -34,14 +34,18 @@ class UploadKind(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    email = Column(String(255), unique=True, index=True)
+    hashed_password = Column(String(255))
     
     # Profile fields
-    full_name = Column(String)
-    avatar_url = Column(String)
-    department = Column(String)
-    job_title = Column(String)
+    full_name = Column(String(255))
+    avatar_url = Column(String(512), nullable=True)
+    department = Column(String(255), nullable=True)
+    job_title = Column(String(255), nullable=True)
+    phone = Column(String(64), nullable=True)
+    employee_id = Column(String(64), nullable=True)
+    status = Column(String(32), default="active")
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -49,6 +53,8 @@ class User(Base):
     roles = relationship("UserRole", back_populates="user")
     uploads = relationship("Upload", back_populates="user")
     jobs = relationship("Job", back_populates="user")
+    projects = relationship("Project", back_populates="owner")
+    notifications = relationship("Notification", back_populates="user")
 
 class UserRole(Base):
     __tablename__ = "user_roles"
@@ -61,11 +67,11 @@ class UserRole(Base):
 class Module(Base):
     __tablename__ = "modules"
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    key = Column(String, unique=True, index=True)
-    name = Column(String)
-    description = Column(String)
-    icon = Column(String)
-    category = Column(String)
+    key = Column(String(128), unique=True, index=True)
+    name = Column(String(255))
+    description = Column(String(1024), nullable=True)
+    icon = Column(String(128), nullable=True)
+    category = Column(String(128), nullable=True)
     enabled = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
 
@@ -73,10 +79,10 @@ class Upload(Base):
     __tablename__ = "uploads"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
-    original_name = Column(String)
-    storage_path = Column(String) # Relative path on local disk
+    original_name = Column(String(512))
+    storage_path = Column(String(1024))
     kind = Column(Enum(UploadKind))
-    mime = Column(String)
+    mime = Column(String(128))
     size_bytes = Column(Integer)
     metadata_json = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -87,15 +93,14 @@ class Job(Base):
     __tablename__ = "jobs"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
-    module_key = Column(String, ForeignKey("modules.key"))
+    module_key = Column(String(128), ForeignKey("modules.key"))
     status = Column(Enum(JobStatus), default=JobStatus.queued)
     
-    # Store references to uploads
     input_refs = Column(JSON, default=dict)
     output_refs = Column(JSON, default=dict)
     
     logs = Column(JSON, default=list)
-    error_message = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
     progress = Column(Integer, default=0)
     
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -103,3 +108,60 @@ class Job(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="jobs")
+
+class Project(Base):
+    __tablename__ = "projects"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    owner_id = Column(String(36), ForeignKey("users.id"))
+    name = Column(String(255))
+    code = Column(String(64), nullable=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(32), default="active")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User", back_populates="projects")
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    actor_name = Column(String(255), nullable=True)
+    action = Column(String(128))
+    entity = Column(String(128), nullable=True)
+    entity_id = Column(String(128), nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    ts = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"))
+    kind = Column(String(64))
+    title = Column(String(255))
+    body = Column(Text, nullable=True)
+    link = Column(String(512), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="notifications")
+
+class UserInvitation(Base):
+    __tablename__ = "user_invitations"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    email = Column(String(255), index=True)
+    role = Column(String(64))
+    token = Column(String(128), unique=True)
+    invited_by = Column(String(36), ForeignKey("users.id"))
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class ModuleAccess(Base):
+    __tablename__ = "module_access"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"))
+    module_id = Column(String(36), ForeignKey("modules.id"))
+    enabled = Column(Boolean, default=True)
+    granted_by = Column(String(36), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

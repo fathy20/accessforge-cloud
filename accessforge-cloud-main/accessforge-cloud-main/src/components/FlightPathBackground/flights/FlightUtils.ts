@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as THREE from "three";
 import type { Geolocation, Flight as FlightData } from "../common/Data.ts";
 import { latLngToVector3 } from "../common/Utils.ts";

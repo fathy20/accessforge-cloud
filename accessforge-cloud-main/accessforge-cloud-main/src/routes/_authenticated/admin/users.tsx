@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import {
   listUsers,
   setUserRole,
@@ -72,12 +71,12 @@ const statusTone: Record<string, string> = {
 
 function UsersAdmin() {
   const qc = useQueryClient();
-  const list = useServerFn(listUsers);
-  const setRoleFn = useServerFn(setUserRole);
-  const setStatusFn = useServerFn(setUserStatus);
-  const deleteFn = useServerFn(deleteUser);
-  const resetFn = useServerFn(sendPasswordReset);
-  const inviteFn = useServerFn(inviteUser);
+  const list = listUsers;
+  const setRoleFn = setUserRole;
+  const setStatusFn = setUserStatus;
+  const deleteFn = deleteUser;
+  const resetFn = sendPasswordReset;
+  const inviteFn = inviteUser;
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -85,23 +84,22 @@ function UsersAdmin() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("engineer");
 
-  const { data: users, isLoading } = useQuery({
+  const { data: users = [] as any[], isLoading } = useQuery({
     queryKey: ["admin-users-v2"],
     queryFn: () => list(),
   });
 
-  const { data: modules } = useQuery({
+  const { data: modules = [] as any[] } = useQuery({
     queryKey: ["modules-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("modules").select("id, key, name").order("sort_order");
-      return data ?? [];
+      return (await ApiClient.fetch("/admin/modules")) ?? [];
     },
   });
 
   const { data: access } = useQuery({
     queryKey: ["module-access-all"],
     queryFn: async () => {
-      const { data } = await supabase.from("module_access").select("user_id, module_id, can_view, can_run");
+      const data: any[] = await ApiClient.fetch("/admin/module-access");
       const map: Record<string, Record<string, { v: boolean; r: boolean }>> = {};
       for (const a of data ?? []) {
         (map[a.user_id] ||= {})[a.module_id] = { v: a.can_view, r: a.can_run };
@@ -170,16 +168,16 @@ function UsersAdmin() {
     }) => {
       const can_view = v.field === "can_view" ? v.value : v.current?.v ?? true;
       const can_run = v.field === "can_run" ? v.value : v.current?.r ?? false;
-      const { error } = await supabase
-        .from("module_access")
-        .upsert({ user_id: v.userId, module_id: v.moduleId, can_view, can_run }, { onConflict: "user_id,module_id" });
-      if (error) throw error;
+      await ApiClient.fetch("/admin/module-access", {
+        method: "PUT",
+        body: JSON.stringify({ user_id: v.userId, module_id: v.moduleId, can_view, can_run }),
+      });
     },
     onSuccess: () => invalidate(),
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  const filtered = (users ?? []).filter((u) => {
+  const filtered = (users ?? []).filter((u: any) => {
     if (statusFilter !== "all" && u.status !== statusFilter) return false;
     if (!query) return true;
     const q = query.toLowerCase();
@@ -191,7 +189,7 @@ function UsersAdmin() {
     );
   });
 
-  const pendingCount = (users ?? []).filter((u) => u.status === "pending").length;
+  const pendingCount = (users ?? []).filter((u: any) => u.status === "pending").length;
 
   return (
     <div className="space-y-6">
@@ -277,7 +275,7 @@ function UsersAdmin() {
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((u) => (
+          {filtered.map((u: any) => (
             <Card key={u.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -293,7 +291,7 @@ function UsersAdmin() {
                       {u.roles.length === 0 ? (
                         <Badge variant="outline">no role</Badge>
                       ) : (
-                        u.roles.map((r) => (
+                        u.roles.map((r: any) => (
                           <Badge key={r} variant="secondary" className="capitalize">
                             {r.replace("_", " ")}
                           </Badge>
@@ -368,7 +366,7 @@ function UsersAdmin() {
               <CardContent>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Module access</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {(modules ?? []).map((m) => {
+                  {(modules ?? []).map((m: any) => {
                     const cur = access?.[u.id]?.[m.id];
                     return (
                       <div key={m.id} className="rounded-lg border border-border p-3 flex flex-col gap-2">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiClient } from "@/lib/apiClient";
 
 export interface User {
@@ -15,24 +15,29 @@ export interface AuthState {
 }
 
 export function useAuth(): AuthState {
-  const [state, setState] = useState<AuthState>({ session: null, user: null, loading: true });
+  const queryClient = useQueryClient();
+  
+  const token = typeof window !== "undefined" ? ApiClient.getToken() : null;
 
-  useEffect(() => {
-    const token = ApiClient.getToken();
-    if (!token) {
-      setState({ session: null, user: null, loading: false });
-      return;
-    }
+  const { data: user, isLoading, isError } = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: async () => {
+      return await ApiClient.fetch("/auth/me");
+    },
+    enabled: !!token,
+    retry: false,
+    staleTime: 1000 * 60 * 5, // 5 minutes cache
+  });
 
-    ApiClient.fetch("/auth/me")
-      .then((user) => {
-        setState({ session: { access_token: token }, user, loading: false });
-      })
-      .catch(() => {
-        ApiClient.clearToken();
-        setState({ session: null, user: null, loading: false });
-      });
-  }, []);
+  // Handle auto logout on error
+  if (isError) {
+    ApiClient.clearToken();
+    queryClient.setQueryData(["auth-me"], null);
+  }
 
-  return state;
+  return {
+    session: token ? { access_token: token } : null,
+    user: user || null,
+    loading: isLoading,
+  };
 }

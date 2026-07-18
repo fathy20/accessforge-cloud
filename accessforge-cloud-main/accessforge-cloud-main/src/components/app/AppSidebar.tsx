@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/auth/use-permissions";
+import { useTranslation } from "react-i18next";
 
 interface NavItem {
   to: string;
@@ -42,26 +43,47 @@ const mainNav: NavItem[] = [
 
 const moduleNav: NavItem[] = [
   { to: "/modules", label: "All Modules", icon: LayoutDashboard },
-  { to: "/modules/task-extractor", label: "Task Extractor",         icon: FileSearch,  moduleKey: "task_extractor" },
-  { to: "/modules/task-stamping",  label: "Task Stamping",          icon: Stamp,       moduleKey: "task_stamping" },
-  { to: "/modules/effectivity",    label: "EFFECTIVITY / TCM",      icon: ListChecks,  moduleKey: "effectivity" },
-  { to: "/modules/check-control",  label: "Check Control",          icon: CheckCircle, moduleKey: "check_control" },
-  { to: "/modules/utilization",    label: "Utilization",            icon: GaugeCircle, moduleKey: "utilization" },
-  { to: "/modules/cmp-tcm",        label: "CMP / TCM Tasks",        icon: Layers,      moduleKey: "cmp_tcm" },
-  { to: "/modules/cover-merge",    label: "Cover Merge",            icon: BookCopy,    moduleKey: "cover_merge" },
-  { to: "/modules/mail-merge",     label: "Mail Merge (Covering)",  icon: Mailbox,     moduleKey: "mail_merge" },
+  {
+    to: "/modules/task-extractor",
+    label: "Task Extractor",
+    icon: FileSearch,
+    moduleKey: "task_extractor",
+  },
+  { to: "/modules/task-stamping", label: "Task Stamping", icon: Stamp, moduleKey: "task_stamping" },
+  {
+    to: "/modules/effectivity",
+    label: "EFFECTIVITY / TCM",
+    icon: ListChecks,
+    moduleKey: "effectivity",
+  },
+  {
+    to: "/modules/check-control",
+    label: "Check Control",
+    icon: CheckCircle,
+    moduleKey: "check_control",
+  },
+  { to: "/modules/utilization", label: "Utilization", icon: GaugeCircle, moduleKey: "utilization" },
+  { to: "/modules/cmp-tcm", label: "CMP / TCM Tasks", icon: Layers, moduleKey: "cmp_tcm" },
+  { to: "/modules/cover-merge", label: "Cover Merge", icon: BookCopy, moduleKey: "cover_merge" },
+  {
+    to: "/modules/mail-merge",
+    label: "Mail Merge (Covering)",
+    icon: Mailbox,
+    moduleKey: "mail_merge",
+  },
 ];
 
 const adminNav: NavItem[] = [
-  { to: "/admin/users",       label: "Users & Roles", icon: Users2,      adminOnly: true },
-  { to: "/admin/invitations", label: "Invitations",   icon: Mailbox,     adminOnly: true },
-  { to: "/admin/audit",       label: "Audit Log",     icon: ShieldCheck, adminOnly: true },
-  { to: "/admin/settings",    label: "Settings",      icon: Settings,    adminOnly: true },
+  { to: "/admin/users", label: "Users & Roles", icon: Users2, adminOnly: true },
+  { to: "/admin/invitations", label: "Invitations", icon: Mailbox, adminOnly: true },
+  { to: "/admin/audit", label: "Audit Log", icon: ShieldCheck, adminOnly: true },
+  { to: "/admin/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
 export function AppSidebar() {
   const perms = usePermissions();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { t } = useTranslation();
 
   const renderGroup = (title: string, items: NavItem[]) => {
     const filtered = items.filter((i) => {
@@ -73,7 +95,7 @@ export function AppSidebar() {
     return (
       <div className="px-3 py-2">
         <p className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
-          {title}
+          {t(title)}
         </p>
         <nav className="flex flex-col gap-0.5">
           {filtered.map((item) => {
@@ -91,7 +113,7 @@ export function AppSidebar() {
                 )}
               >
                 <Icon className="size-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.label)}</span>
               </Link>
             );
           })}

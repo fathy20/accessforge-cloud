@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Bell, Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth/use-auth";
 import { listMyNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
@@ -18,32 +16,21 @@ import { formatDistanceToNow } from "date-fns";
 export function NotificationBell() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const list = useServerFn(listMyNotifications);
-  const markRead = useServerFn(markNotificationRead);
-  const markAll = useServerFn(markAllNotificationsRead);
+  const list = listMyNotifications;
+  const markRead = markNotificationRead;
+  const markAll = markAllNotificationsRead;
   const [open, setOpen] = useState(false);
 
-  const { data: notifications = [] } = useQuery({
+  const { data: notifications = [] as any[] } = useQuery({
     queryKey: ["my-notifications"],
     queryFn: () => list(),
     enabled: !!user,
     refetchInterval: 60_000,
   });
 
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel(`notifs-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        () => qc.invalidateQueries({ queryKey: ["my-notifications"] }),
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user, qc]);
 
-  const unread = notifications.filter((n) => !n.read_at).length;
+
+  const unread = notifications.filter((n: any) => !n.read_at).length;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -76,7 +63,7 @@ export function NotificationBell() {
           <div className="p-6 text-sm text-muted-foreground text-center">No notifications yet.</div>
         ) : (
           <div className="divide-y divide-border">
-            {notifications.map((n) => {
+            {notifications.map((n: any) => {
               const body = (
                 <>
                   <div className="flex items-start justify-between gap-2">

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search as SearchIcon, FileText, ListTodo, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,9 +48,12 @@ function SearchPage() {
     queryKey: ["search", debounced],
     queryFn: async () => {
       if (!debounced) return [] as Hit[];
-      const { data, error } = await supabase.rpc("global_search", { _q: debounced, _limit: 80 });
-      if (error) throw error;
-      return (data ?? []) as Hit[];
+      try {
+        const hits = await ApiClient.fetch(`/search?q=${encodeURIComponent(debounced)}&limit=80`);
+        return (hits ?? []) as Hit[];
+      } catch {
+        return [] as Hit[];
+      }
     },
   });
 

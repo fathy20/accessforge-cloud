@@ -3,7 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,15 +58,7 @@ function ReportsPage() {
   const run = async (r: (typeof REPORTS)[number]) => {
     setBusy(r.key);
     try {
-      const dateCol = r.key === "audit" ? "ts" : "created_at";
-      const { data, error } = await supabase
-        .from(r.table as "jobs")
-        .select(r.columns)
-        .gte(dateCol, new Date(from).toISOString())
-        .lte(dateCol, new Date(`${to}T23:59:59`).toISOString())
-        .order(dateCol, { ascending: false })
-        .limit(10000);
-      if (error) throw error;
+      const data = await ApiClient.fetch(`/reports/${r.key}?from=${from}&to=${to}`);
       const rows = (data ?? []) as unknown as Record<string, unknown>[];
       if (!rows.length) { toast.info(ar ? "لا توجد بيانات" : "No data"); return; }
       download(`${r.key}-${from}-to-${to}.csv`, toCsv(rows));

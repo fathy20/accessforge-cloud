@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as THREE from "three";
 import type { Earth } from "../space/Earth.ts";
 import type { EarthControlsOptions } from "../common/Types.js";

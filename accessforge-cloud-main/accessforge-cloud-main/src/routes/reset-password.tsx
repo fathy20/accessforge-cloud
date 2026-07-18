@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { toast } from "sonner";
 import { Plane, Loader2 } from "lucide-react";
 
@@ -21,11 +21,18 @@ function ResetPasswordPage() {
     e.preventDefault();
     if (password.length < 8) return toast.error("Min 8 characters");
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Password updated");
-    navigate({ to: "/dashboard", replace: true });
+    try {
+      await ApiClient.fetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ new_password: password }),
+      });
+      toast.success("Password updated");
+      navigate({ to: "/dashboard", replace: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

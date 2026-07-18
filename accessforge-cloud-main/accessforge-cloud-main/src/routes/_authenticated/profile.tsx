@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Save, KeyRound, User as UserIcon } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { useI18n } from "@/lib/i18n";
@@ -30,13 +30,7 @@ function ProfilePage() {
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      return await ApiClient.fetch("/auth/me");
     },
     enabled: !!user,
   });
@@ -62,22 +56,17 @@ function ProfilePage() {
   const save = async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: form.full_name || null,
-        department: form.department || null,
-        job_title: form.job_title || null,
-        phone: form.phone || null,
-        employee_id: form.employee_id || null,
-        avatar_url: form.avatar_url || null,
-      })
-      .eq("id", user.id);
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await ApiClient.fetch("/auth/profile", {
+        method: "PUT",
+        body: JSON.stringify(form),
+      });
       toast.success(ar ? "تم الحفظ" : "Saved");
       qc.invalidateQueries({ queryKey: ["profile", user.id] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -85,10 +74,18 @@ function ProfilePage() {
     if (pwd.a.length < 8) { toast.error(ar ? "8 أحرف على الأقل" : "Min 8 characters"); return; }
     if (pwd.a !== pwd.b) { toast.error(ar ? "كلمتا المرور غير متطابقتين" : "Passwords do not match"); return; }
     setPwdSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: pwd.a });
-    setPwdSaving(false);
-    if (error) toast.error(error.message);
-    else { toast.success(ar ? "تم تحديث كلمة المرور" : "Password updated"); setPwd({ a: "", b: "" }); }
+    try {
+      await ApiClient.fetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ new_password: pwd.a }),
+      });
+      toast.success(ar ? "تم تحديث كلمة المرور" : "Password updated");
+      setPwd({ a: "", b: "" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setPwdSaving(false);
+    }
   };
 
   const initials = (form.full_name || user?.email || "?").slice(0, 2).toUpperCase();

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
@@ -10,17 +10,18 @@ export const Route = createFileRoute("/_authenticated/admin/settings")({
 });
 
 function SettingsPage() {
-  const { data: modules } = useQuery({
+  const { data: modules = [] as any[] } = useQuery({
     queryKey: ["admin-modules"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("modules").select("*").order("sort_order");
-      if (error) throw error;
-      return data;
+      return await ApiClient.fetch("/admin/modules");
     },
   });
 
   const toggle = async (id: string, enabled: boolean) => {
-    await supabase.from("modules").update({ enabled }).eq("id", id);
+    await ApiClient.fetch(`/admin/modules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    });
   };
 
   return (
@@ -32,7 +33,7 @@ function SettingsPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Modules</CardTitle></CardHeader>
         <CardContent className="divide-y divide-border">
-          {modules?.map((m) => (
+          {modules?.map((m: any) => (
             <div key={m.id} className="flex items-center justify-between py-3">
               <div>
                 <p className="font-medium">{m.name}</p>

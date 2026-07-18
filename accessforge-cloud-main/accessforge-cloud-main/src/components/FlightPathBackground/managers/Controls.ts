@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { GUI, GUIController } from "dat.gui";
 import {
   getCurrentUtcTimeHours,

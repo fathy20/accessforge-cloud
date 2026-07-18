@@ -4,30 +4,78 @@ from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from typing import Optional
+import tempfile
+import sys
 from pydantic import BaseModel
 import traceback
 import json
 
 from .database import engine, Base, get_db
-from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind, Module
+from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind, Module, Notification
 from .auth import router as auth_router, get_current_user
+from .admin_routes import router as admin_router
+from .project_routes import router as project_router
+
+from sqlalchemy import inspect, text
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Auto-migrate missing columns for existing SQLite/SQL Server databases
+try:
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table_name, table in Base.metadata.tables.items():
+            if inspector.has_table(table_name):
+                existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+                for col in table.columns:
+                    if col.name not in existing_cols:
+                        col_type = col.type.compile(engine.dialect)
+                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}"))
+except Exception as e:
+    print(f"Migration note: {e}")
+
 app = FastAPI(title="Redsea Local Backend")
 
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(project_router)
+
+@app.get("/api/notifications")
+def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    notifs = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
+    return notifs
+
+@app.post("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from datetime import datetime, timezone
+    notif = db.query(Notification).filter(Notification.id == notification_id, Notification.user_id == current_user.id).first()
+    if notif:
+        notif.read_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"status": "success"}
+
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_read(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from datetime import datetime, timezone
+    db.query(Notification).filter(Notification.user_id == current_user.id, Notification.read_at == None).update(
+        {Notification.read_at: datetime.now(timezone.utc)}
+    )
+    db.commit()
+    return {"status": "success"}
 
 UPLOAD_DIR = Path("local_storage/uploads")
 OUTPUT_DIR = Path("local_storage/outputs")
@@ -37,6 +85,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------
 # Uploads API
 # ---------------------------------------------
+MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+
 @app.post("/api/uploads")
 async def upload_files(
     files: List[UploadFile] = File(...), 
@@ -45,6 +95,9 @@ async def upload_files(
 ):
     results = []
     for file in files:
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"File {file.filename} exceeds 100MB limit")
         file_ext = Path(file.filename).suffix.lower()
         if file_ext == '.pdf':
             kind = UploadKind.pdf
@@ -64,7 +117,7 @@ async def upload_files(
         file_path = UPLOAD_DIR / safe_name
         
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(contents)
             
         size = file_path.stat().st_size
         
@@ -124,94 +177,101 @@ class CreateJobRequest(BaseModel):
     module_key: str
     input_refs: dict
 
-import tempfile
-import traceback
-import sys
+from backend.database import SessionLocal
 
 def run_job_background(job_id: str):
-    db = next(get_db())
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        return
-        
-    job.status = JobStatus.running
-    db.commit()
-    
-    def log_progress(progress: int, msg: str):
-        # We need a new session to avoid concurrent issues if it runs long
-        _db = next(get_db())
-        _j = _db.query(Job).filter(Job.id == job_id).first()
-        if _j:
-            _j.progress = progress
-            _j.logs = list(_j.logs) + [{"level": progress, "msg": msg}]
-            _db.commit()
+    with SessionLocal() as db:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return
             
-    try:
-        sys.path.append(str(Path(__file__).parent.parent))
-        from worker.handlers import REGISTRY
+        job.status = JobStatus.running
+        db.commit()
         
-        module_key = job.module_key
-        handler = REGISTRY.get(module_key)
-        if not handler:
-            raise ValueError(f"Module {module_key} not found in registry")
+        def log_progress(progress: int, msg: str):
+            with SessionLocal() as _db:
+                _j = _db.query(Job).filter(Job.id == job_id).first()
+                if _j:
+                    _j.progress = progress
+                    _j.logs = list(_j.logs) + [{"level": progress, "msg": msg}]
+                    _db.commit()
             
-        # Get input files
-        file_ids = job.input_refs.get("files", [])
-        input_files = []
-        for fid in file_ids:
-            upload = db.query(Upload).filter(Upload.id == fid).first()
-            if upload:
-                input_files.append(upload.storage_path)
-                
-        if not input_files and job.input_refs.get("data_source") != "db":
-            raise ValueError("No valid input files found for job")
+        workdir = None
+        try:
+            sys.path.append(str(Path(__file__).parent.parent))
+            from worker.handlers import REGISTRY
             
-        # Setup workdir
-        workdir = Path(tempfile.gettempdir()) / "redsea_backend" / str(job.id)
-        (workdir / "in").mkdir(parents=True, exist_ok=True)
-        (workdir / "out").mkdir(parents=True, exist_ok=True)
-        
-        # Convert SQLAlchemy object to dict for the handler
-        job_dict = {
-            "id": str(job.id),
-            "input_refs": job.input_refs
-        }
-        
-        log_progress(10, f"Starting module {module_key} with {len(input_files)} files")
-        
-        # Execute handler
-        out_paths = handler(job_dict, input_files, workdir, log_progress)
-        
-        # Process outputs
-        output_refs = {"files": []}
-        for path_str in out_paths:
-            path = Path(path_str)
-            if path.exists():
-                # Move to local storage
-                final_path = OUTPUT_DIR / f"{job.user_id}_{job.id}_{path.name}"
-                shutil.copy(path, final_path)
+            module_key = job.module_key
+            handler = REGISTRY.get(module_key)
+            if not handler:
+                raise ValueError(f"Module {module_key} not found in registry")
                 
-                # We could create an Upload record, but we just need a download URL.
-                # Let's save it directly in output_refs for now
-                output_refs["files"].append({
-                    "name": path.name,
-                    "url": f"http://localhost:8000/api/downloads/{final_path.name}"
-                })
+            # Get input files
+            file_ids = job.input_refs.get("files", [])
+            input_files = []
+            for fid in file_ids:
+                upload = db.query(Upload).filter(Upload.id == fid).first()
+                if upload:
+                    input_files.append(upload.storage_path)
+                    
+            if not input_files and job.input_refs.get("data_source") != "db":
+                raise ValueError("No valid input files found for job")
                 
-        _db = next(get_db())
-        _j = _db.query(Job).filter(Job.id == job_id).first()
-        _j.status = JobStatus.done
-        _j.progress = 100
-        _j.output_refs = output_refs
-        _db.commit()
-        
-    except Exception as e:
-        _db = next(get_db())
-        _j = _db.query(Job).filter(Job.id == job_id).first()
-        _j.status = JobStatus.failed
-        _j.error_message = str(e)
-        _j.logs = list(_j.logs) + [{"level": 99, "msg": traceback.format_exc()}]
-        _db.commit()
+            # Setup workdir
+            workdir = Path(tempfile.gettempdir()) / "redsea_backend" / str(job.id)
+            (workdir / "in").mkdir(parents=True, exist_ok=True)
+            (workdir / "out").mkdir(parents=True, exist_ok=True)
+            
+            # Convert SQLAlchemy object to dict for the handler
+            job_dict = {
+                "id": str(job.id),
+                "input_refs": job.input_refs
+            }
+            
+            log_progress(10, f"Starting module {module_key} with {len(input_files)} files")
+            
+            # Execute handler
+            out_paths = handler(job_dict, input_files, workdir, log_progress)
+            
+            # Process outputs
+            output_refs = {"files": []}
+            for path_str in out_paths:
+                path = Path(path_str)
+                if path.exists():
+                    # Move to local storage
+                    final_path = OUTPUT_DIR / f"{job.user_id}_{job.id}_{path.name}"
+                    shutil.copy(path, final_path)
+                    
+                    # We could create an Upload record, but we just need a download URL.
+                    # Let's save it directly in output_refs for now
+                    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+                    output_refs["files"].append({
+                        "name": path.name,
+                        "url": f"{base_url}/api/downloads/{final_path.name}"
+                    })
+            
+            with SessionLocal() as _db:
+                _j = _db.query(Job).filter(Job.id == job_id).first()
+                _j.status = JobStatus.done
+                _j.progress = 100
+                _j.output_refs = output_refs
+                _db.commit()
+                
+        except Exception as e:
+            with SessionLocal() as _db:
+                _j = _db.query(Job).filter(Job.id == job_id).first()
+                if _j:
+                    _j.status = JobStatus.failed
+                    _j.error_message = str(e)
+                    _j.logs = list(_j.logs) + [{"level": 99, "msg": traceback.format_exc()}]
+                    _db.commit()
+        finally:
+            # Clean up the temporary workspace
+            try:
+                if workdir and workdir.exists():
+                    shutil.rmtree(workdir)
+            except Exception as e:
+                print(f"Failed to cleanup temp dir {workdir}: {e}")
 
 @app.post("/api/jobs")
 def create_job(
@@ -235,16 +295,18 @@ def create_job(
     return {"id": job.id, "status": job.status}
 
 # Add download endpoint
-from fastapi.responses import FileResponse
 
 @app.get("/api/downloads/{filename}")
-def download_file(filename: str):
+def download_file(filename: str, current_user: User = Depends(get_current_user)):
     file_path = OUTPUT_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
+    
+    # Optional: Verify ownership if needed, assuming filename format user_id_job_id_name
+    if not filename.startswith(f"{current_user.id}_"):
+        raise HTTPException(status_code=403, detail="Not authorized to download this file")
+        
     return FileResponse(path=file_path, filename=filename.split("_", 2)[-1])
-
-from typing import Optional
 
 @app.get("/api/jobs")
 def get_jobs(
@@ -303,3 +365,20 @@ def startup_db_seed():
         db.add(role)
         db.commit()
         print("Created default user: admin@redsea.com / password")
+        
+    # Seed default modules
+    default_modules = [
+        {"key": "task_extractor", "name": "Task Extractor", "category": "PDF Processing", "enabled": True},
+        {"key": "task_stamping", "name": "Task Stamping", "category": "PDF Processing", "enabled": True},
+        {"key": "effectivity", "name": "Effectivity / TCM", "category": "Aviation", "enabled": True},
+        {"key": "check_control", "name": "Check Control", "category": "Quality", "enabled": True},
+        {"key": "utilization", "name": "Utilization", "category": "Analytics", "enabled": True},
+        {"key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
+        {"key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
+        {"key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
+    ]
+    
+    for mod in default_modules:
+        if not db.query(Module).filter(Module.key == mod["key"]).first():
+            db.add(Module(**mod))
+    db.commit()

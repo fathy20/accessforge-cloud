@@ -34,8 +34,6 @@ import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminInvitationsRouteImport } from './routes/_authenticated/admin/invitations'
 import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin/audit'
-import { Route as ApiPublicHooksWorkerPollRouteImport } from './routes/api/public/hooks/worker-poll'
-import { Route as ApiPublicHooksWorkerCallbackRouteImport } from './routes/api/public/hooks/worker-callback'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -172,18 +170,6 @@ const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
 } as any)
-const ApiPublicHooksWorkerPollRoute =
-  ApiPublicHooksWorkerPollRouteImport.update({
-    id: '/api/public/hooks/worker-poll',
-    path: '/api/public/hooks/worker-poll',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksWorkerCallbackRoute =
-  ApiPublicHooksWorkerCallbackRouteImport.update({
-    id: '/api/public/hooks/worker-callback',
-    path: '/api/public/hooks/worker-callback',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -210,8 +196,6 @@ export interface FileRoutesByFullPath {
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
   '/modules/': typeof AuthenticatedModulesIndexRoute
-  '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
-  '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -238,8 +222,6 @@ export interface FileRoutesByTo {
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
   '/modules': typeof AuthenticatedModulesIndexRoute
-  '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
-  '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -268,8 +250,6 @@ export interface FileRoutesById {
   '/_authenticated/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/_authenticated/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
   '/_authenticated/modules/': typeof AuthenticatedModulesIndexRoute
-  '/api/public/hooks/worker-callback': typeof ApiPublicHooksWorkerCallbackRoute
-  '/api/public/hooks/worker-poll': typeof ApiPublicHooksWorkerPollRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -298,8 +278,6 @@ export interface FileRouteTypes {
     | '/modules/task-stamping'
     | '/modules/utilization'
     | '/modules/'
-    | '/api/public/hooks/worker-callback'
-    | '/api/public/hooks/worker-poll'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -326,8 +304,6 @@ export interface FileRouteTypes {
     | '/modules/task-stamping'
     | '/modules/utilization'
     | '/modules'
-    | '/api/public/hooks/worker-callback'
-    | '/api/public/hooks/worker-poll'
   id:
     | '__root__'
     | '/'
@@ -355,8 +331,6 @@ export interface FileRouteTypes {
     | '/_authenticated/modules/task-stamping'
     | '/_authenticated/modules/utilization'
     | '/_authenticated/modules/'
-    | '/api/public/hooks/worker-callback'
-    | '/api/public/hooks/worker-poll'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -364,8 +338,6 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  ApiPublicHooksWorkerCallbackRoute: typeof ApiPublicHooksWorkerCallbackRoute
-  ApiPublicHooksWorkerPollRoute: typeof ApiPublicHooksWorkerPollRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -545,20 +517,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
-    '/api/public/hooks/worker-poll': {
-      id: '/api/public/hooks/worker-poll'
-      path: '/api/public/hooks/worker-poll'
-      fullPath: '/api/public/hooks/worker-poll'
-      preLoaderRoute: typeof ApiPublicHooksWorkerPollRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/worker-callback': {
-      id: '/api/public/hooks/worker-callback'
-      path: '/api/public/hooks/worker-callback'
-      fullPath: '/api/public/hooks/worker-callback'
-      preLoaderRoute: typeof ApiPublicHooksWorkerCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -631,8 +589,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  ApiPublicHooksWorkerCallbackRoute: ApiPublicHooksWorkerCallbackRoute,
-  ApiPublicHooksWorkerPollRoute: ApiPublicHooksWorkerPollRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

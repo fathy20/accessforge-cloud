@@ -1,6 +1,4 @@
-import type { Database } from "@/integrations/supabase/types";
-
-export type UploadKind = Database["public"]["Enums"]["upload_kind"];
+export type UploadKind = "pdf" | "excel" | "docx" | "csv" | "image" | "other";
 
 export async function sha256Hex(file: File): Promise<string> {
   const buf = await file.arrayBuffer();

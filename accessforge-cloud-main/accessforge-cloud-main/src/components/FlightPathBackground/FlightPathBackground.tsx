@@ -1,25 +1,27 @@
 import React, { useEffect, useRef } from 'react';
-import { App } from './App';
 
 export const FlightPathBackground: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const appRef = useRef<App | null>(null);
 
   useEffect(() => {
-    if (containerRef.current && !appRef.current) {
-      // Hide any UI from dat.gui if it leaks
+    if (typeof window === 'undefined') return;
+    let disposed = false;
+    let appInstance: any = null;
+
+    import('./App').then(({ App }) => {
+      if (disposed || !containerRef.current) return;
       const style = document.createElement('style');
       style.id = 'hide-dat-gui';
       style.innerHTML = '.dg.ac { display: none !important; } #ui-container { display: none !important; }';
       document.head.appendChild(style);
 
-      appRef.current = new App(containerRef.current);
-    }
+      appInstance = new App(containerRef.current);
+    }).catch(() => {});
 
     return () => {
-      if (appRef.current) {
-        appRef.current.dispose();
-        appRef.current = null;
+      disposed = true;
+      if (appInstance) {
+        appInstance.dispose();
       }
       const style = document.getElementById('hide-dat-gui');
       if (style) {

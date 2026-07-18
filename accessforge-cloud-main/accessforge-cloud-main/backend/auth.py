@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import jwt
+import time
+from collections import defaultdict
 
 from .database import get_db
 from .models import User, UserRole, AppRole
@@ -22,7 +24,9 @@ class RegisterRequest(BaseModel):
     full_name: Optional[str] = "User"
 
 # Authentication config
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-super-secret-key-for-local-dev-only")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("JWT_SECRET_KEY environment variable is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
@@ -66,23 +70,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+MAX_ATTEMPTS = 5
+WINDOW_SECONDS = 300  # 5 minutes
+
+def _check_rate_limit(email: str):
+    now = time.time()
+    attempts = _login_attempts[email]
+    _login_attempts[email] = [t for t in attempts if now - t < WINDOW_SECONDS]
+    if len(_login_attempts[email]) >= MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 5 minutes.")
+    _login_attempts[email].append(now)
+
 @router.post("/login")
 def login_for_access_token(data: LoginRequest, db: Session = Depends(get_db)):
+    _check_rate_limit(data.email)
     user = db.query(User).filter(User.email == data.email).first()
-    if not user:
-        # Auto-create user on login for frictionless local testing
-        hashed_pw = get_password_hash(data.password)
-        user = User(email=data.email, hashed_password=hashed_pw, full_name=data.email.split("@")[0])
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        role = UserRole(user_id=user.id, role=AppRole.admin)
-        db.add(role)
-        db.commit()
-    elif not verify_password(data.password, user.hashed_password):
-        # Update password for frictionless local dev if password changed
-        user.hashed_password = get_password_hash(data.password)
-        db.commit()
+    if not user or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -93,15 +102,17 @@ def login_for_access_token(data: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/register")
 def register_user(data: RegisterRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
-    if not user:
-        hashed_password = get_password_hash(data.password)
-        user = User(email=data.email, hashed_password=hashed_password, full_name=data.full_name or "User")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        new_role = UserRole(user_id=user.id, role=AppRole.admin)
-        db.add(new_role)
-        db.commit()
+    if user:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    hashed_password = get_password_hash(data.password)
+    user = User(email=data.email, hashed_password=hashed_password, full_name=data.full_name or "User")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    new_role = UserRole(user_id=user.id, role=AppRole.guest)
+    db.add(new_role)
+    db.commit()
         
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(

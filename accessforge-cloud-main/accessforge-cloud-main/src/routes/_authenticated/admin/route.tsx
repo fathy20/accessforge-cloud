@@ -1,16 +1,17 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
+import { ApiClient } from "@/lib/apiClient";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes.user) throw redirect({ to: "/auth" });
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userRes.user.id);
-    const isAdmin = (roles ?? []).some((r) => r.role === "admin" || r.role === "super_admin");
-    if (!isAdmin) throw redirect({ to: "/dashboard" });
+    try {
+      const user = await ApiClient.fetch<{ roles?: string[] }>("/auth/me");
+      if (!user) throw redirect({ to: "/auth" });
+      const roles: string[] = user.roles || [];
+      const isAdmin = roles.some((r) => r === "admin" || r === "super_admin");
+      if (!isAdmin) throw redirect({ to: "/dashboard" });
+    } catch {
+      throw redirect({ to: "/dashboard" });
+    }
   },
   component: () => <Outlet />,
 });

@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Mail, Trash2, Loader2, Send } from "lucide-react";
 import {
@@ -24,11 +23,11 @@ export const Route = createFileRoute("/_authenticated/admin/invitations")({
 
 function InvitationsPage() {
   const qc = useQueryClient();
-  const list = useServerFn(listInvitations);
-  const revoke = useServerFn(revokeInvitation);
-  const invite = useServerFn(inviteUser);
+  const list = listInvitations;
+  const revoke = revokeInvitation;
+  const invite = inviteUser;
 
-  const { data, isLoading } = useQuery({
+  const { data = [] as any[], isLoading } = useQuery({
     queryKey: ["invitations"],
     queryFn: () => list(),
   });
@@ -111,7 +110,7 @@ function InvitationsPage() {
             <p className="p-6 text-sm text-muted-foreground text-center">No invitations yet.</p>
           ) : (
             <div className="divide-y divide-border text-sm">
-              {data.map((inv) => {
+              {data.map((inv: any) => {
                 const s = statusOf(inv);
                 return (
                   <div key={inv.id} className="px-4 py-3 flex items-center gap-3 flex-wrap">

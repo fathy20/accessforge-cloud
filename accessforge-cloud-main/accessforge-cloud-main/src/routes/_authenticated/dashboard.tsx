@@ -183,7 +183,7 @@ function DashboardPage() {
               <p className="p-6 text-sm text-muted-foreground text-center">{ar ? "لا توجد مهام بعد." : "No jobs yet."}</p>
             ) : (
               <div className="divide-y divide-border">
-                {stats.recentJobs.map((j) => (
+                {stats.recentJobs.map((j: any) => (
                   <div key={j.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
                     <Badge variant="outline" className="capitalize" style={{ color: STATUS_COLORS[j.status] }}>
                       {j.status}
@@ -211,7 +211,7 @@ function DashboardPage() {
               <p className="p-6 text-sm text-muted-foreground text-center">{ar ? "لا توجد ملفات." : "No uploads."}</p>
             ) : (
               <div className="divide-y divide-border">
-                {stats.recentUploads.map((u) => (
+                {stats.recentUploads.map((u: any) => (
                   <div key={u.id} className="px-4 py-2.5 flex items-center gap-2 text-sm">
                     <FileText className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="truncate flex-1">{u.original_name}</span>

@@ -41,12 +41,14 @@ export interface ModuleRunnerProps {
   extraControls?: React.ReactNode;
   /** True if this module supports fetching from DB */
   supportsDatabase?: boolean;
+  /** True when the module is intentionally unavailable. */
+  comingSoon?: boolean;
 }
 
 export function ModuleRunner(props: ModuleRunnerProps) {
   const {
     moduleKey, title, titleAr, description, descriptionAr,
-    icon: Icon, acceptedKinds, minFiles = 1, maxFiles, extraInput, extraControls, supportsDatabase
+    icon: Icon, acceptedKinds, minFiles = 1, maxFiles, extraInput, extraControls, supportsDatabase, comingSoon
   } = props;
 
   const { user } = useAuth();
@@ -136,6 +138,18 @@ export function ModuleRunner(props: ModuleRunnerProps) {
         <p className="text-sm text-muted-foreground max-w-md">
           {ar ? "اطلب من المسؤول منحك صلاحية على " : "Ask an admin to grant access to "}
           <span className="font-mono">{moduleKey}</span>.
+        </p>
+      </CardContent></Card>
+    );
+  }
+
+  if (comingSoon) {
+    return (
+      <Card><CardContent className="p-10 grid place-items-center text-center gap-2">
+        <Icon className="size-10 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Coming Soon</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          {ar ? "هذا الموديول تحت التطوير وغير متاح للتشغيل حاليًا." : "This module is under development and is not available to run yet."}
         </p>
       </CardContent></Card>
     );

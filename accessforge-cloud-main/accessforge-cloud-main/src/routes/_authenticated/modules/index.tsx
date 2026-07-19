@@ -23,6 +23,7 @@ interface ModuleCard {
   description: string;
   descriptionAr: string;
   accepts: string;
+  comingSoon?: boolean;
 }
 
 const MODULES: ModuleCard[] = [
@@ -42,6 +43,7 @@ const MODULES: ModuleCard[] = [
   },
   {
     to: "/modules/effectivity", moduleKey: "effectivity", icon: Table2,
+    comingSoon: true,
     title: "EFFECTIVITY / TCM", titleAr: "EFFECTIVITY / TCM",
     description: "Load Excel data and link maintenance chapters per effectivity.",
     descriptionAr: "تحميل بيانات Excel وربط فصول الصيانة لكل effectivity.",
@@ -56,6 +58,7 @@ const MODULES: ModuleCard[] = [
   },
   {
     to: "/modules/utilization", moduleKey: "utilization", icon: Gauge,
+    comingSoon: true,
     title: "Utilization", titleAr: "Utilization — الاستخدام",
     description: "Track aircraft utilization with hashing & history.",
     descriptionAr: "تتبع استخدام الطائرة مع تجزئة السجلات.",
@@ -106,13 +109,14 @@ function ModulesIndex() {
         {MODULES.map((m) => {
           const canView = perms.canViewModule(m.moduleKey);
           const canRun = perms.canRunModule(m.moduleKey);
+          const available = canView && !m.comingSoon;
           const Icon = m.icon;
 
           const CardInner = (
             <Card
               className={cn(
                 "h-full transition-all group",
-                canView
+                available
                   ? "hover:border-primary/50 hover:shadow-md cursor-pointer"
                   : "opacity-60 cursor-not-allowed",
               )}
@@ -122,7 +126,10 @@ function ModulesIndex() {
                   <div className="size-10 rounded-lg bg-primary/10 grid place-items-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                     <Icon className="size-5" />
                   </div>
-                  <Badge variant="outline" className="text-[10px]">{m.accepts}</Badge>
+                  <div className="flex gap-1">
+                    <Badge variant="outline" className="text-[10px]">{m.accepts}</Badge>
+                    {m.comingSoon && <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>}
+                  </div>
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-base leading-tight">
@@ -137,11 +144,11 @@ function ModulesIndex() {
                     <Badge variant={canView ? "secondary" : "outline"} className="text-[10px]">
                       {canView ? "View ✓" : "View ✗"}
                     </Badge>
-                    <Badge variant={canRun ? "default" : "outline"} className="text-[10px]">
-                      {canRun ? "Run ✓" : "Run ✗"}
+                    <Badge variant={canRun && !m.comingSoon ? "default" : "outline"} className="text-[10px]">
+                      {m.comingSoon ? "Run —" : canRun ? "Run ✓" : "Run ✗"}
                     </Badge>
                   </div>
-                  {canView ? (
+                  {available ? (
                     <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all rtl:rotate-180" />
                   ) : (
                     <Lock className="size-4 text-muted-foreground" />
@@ -151,7 +158,7 @@ function ModulesIndex() {
             </Card>
           );
 
-          return canView ? (
+          return available ? (
             <Link key={m.to} to={m.to} className="block">{CardInner}</Link>
           ) : (
             <div key={m.to}>{CardInner}</div>

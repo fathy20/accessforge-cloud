@@ -30,6 +30,7 @@ interface NavItem {
   icon: LucideIcon;
   moduleKey?: string;
   adminOnly?: boolean;
+  comingSoon?: boolean;
 }
 
 const mainNav: NavItem[] = [
@@ -55,6 +56,7 @@ const moduleNav: NavItem[] = [
     label: "EFFECTIVITY / TCM",
     icon: ListChecks,
     moduleKey: "effectivity",
+    comingSoon: true,
   },
   {
     to: "/modules/check-control",
@@ -62,7 +64,13 @@ const moduleNav: NavItem[] = [
     icon: CheckCircle,
     moduleKey: "check_control",
   },
-  { to: "/modules/utilization", label: "Utilization", icon: GaugeCircle, moduleKey: "utilization" },
+  {
+    to: "/modules/utilization",
+    label: "Utilization",
+    icon: GaugeCircle,
+    moduleKey: "utilization",
+    comingSoon: true,
+  },
   { to: "/modules/cmp-tcm", label: "CMP / TCM Tasks", icon: Layers, moduleKey: "cmp_tcm" },
   { to: "/modules/cover-merge", label: "Cover Merge", icon: BookCopy, moduleKey: "cover_merge" },
   {
@@ -101,6 +109,18 @@ export function AppSidebar() {
           {filtered.map((item) => {
             const active = pathname === item.to || pathname.startsWith(item.to + "/");
             const Icon = item.icon;
+            if (item.comingSoon) {
+              return (
+                <div
+                  key={item.to}
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-sidebar-foreground/50 cursor-not-allowed"
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="truncate">{t(item.label)}</span>
+                  <span className="ms-auto text-[9px] uppercase tracking-wide">Coming Soon</span>
+                </div>
+              );
+            }
             return (
               <Link
                 key={item.to}

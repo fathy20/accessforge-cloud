@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/auth/use-permissions";
-import { useTranslation } from "react-i18next";
 
 interface NavItem {
   to: string;
@@ -91,7 +90,6 @@ const adminNav: NavItem[] = [
 export function AppSidebar() {
   const perms = usePermissions();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { t } = useTranslation();
 
   const renderGroup = (title: string, items: NavItem[]) => {
     const filtered = items.filter((i) => {
@@ -103,7 +101,7 @@ export function AppSidebar() {
     return (
       <div className="px-3 py-2">
         <p className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
-          {t(title)}
+          {title}
         </p>
         <nav className="flex flex-col gap-0.5">
           {filtered.map((item) => {
@@ -116,7 +114,7 @@ export function AppSidebar() {
                   className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-sidebar-foreground/50 cursor-not-allowed"
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{t(item.label)}</span>
+                  <span className="truncate">{item.label}</span>
                   <span className="ms-auto text-[9px] uppercase tracking-wide">Coming Soon</span>
                 </div>
               );
@@ -133,7 +131,7 @@ export function AppSidebar() {
                 )}
               >
                 <Icon className="size-4 shrink-0" />
-                <span className="truncate">{t(item.label)}</span>
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}

@@ -280,6 +280,10 @@ def create_job(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    from worker.handlers import REGISTRY
+    if req.module_key not in REGISTRY:
+        raise HTTPException(status_code=422, detail=f"Unknown module: {req.module_key}")
+
     job = Job(
         user_id=current_user.id,
         module_key=req.module_key,

@@ -451,7 +451,7 @@ def mail_merge(job, input_files, workdir: Path, log: Log) -> list[str]:
                                         r.text = r.text.replace(tag, v)
         mpd = (ctx.get("MPD") or ctx.get("RC_NUM") or f"row{idx+1}").strip() or f"row{idx+1}"
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", mpd)
-        out = workdir / "out" / f"RC_{safe}.docx"
+        out = workdir / "out" / f"RC_Card_{safe}.docx"
         doc.save(out); out_files.append(str(out))
         log(int(10 + 85 * (idx + 1) / len(df)), f"generated {out.name}")
     return out_files

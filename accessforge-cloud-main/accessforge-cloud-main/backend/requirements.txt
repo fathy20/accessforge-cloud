@@ -1,0 +1,16 @@
+# FastAPI backend runtime dependencies.
+# Processing dependencies remain owned by ../worker/requirements.txt.
+alembic==1.13.1
+bcrypt==4.1.2
+fastapi==0.109.2
+passlib[bcrypt]==1.7.4
+pydantic==2.13.4
+PyJWT==2.13.0
+pyodbc==5.0.1
+python-dotenv==1.0.0
+python-multipart==0.0.9
+SQLAlchemy==2.0.25
+uvicorn==0.27.1
+
+# Backend API test dependency (FastAPI TestClient transport).
+httpx==0.26.0

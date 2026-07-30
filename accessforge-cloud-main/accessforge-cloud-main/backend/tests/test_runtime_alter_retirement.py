@@ -85,7 +85,7 @@ print(json.dumps({"alter": [s for s in statements if "alter table" in s.lower()]
             database,
         )
         self.assertEqual(result["alter"], [])
-        self.assertEqual(result["counts"], {"users": 1, "roles": 1, "modules": 8})
+        self.assertEqual(result["counts"], {"users": 1, "roles": 1, "modules": 9})
 
     def test_outdated_users_fixture_is_not_repaired(self):
         database = self.tmpdir / "outdated.db"

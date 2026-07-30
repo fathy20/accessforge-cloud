@@ -133,4 +133,5 @@ def list_admin_modules(db: Session = Depends(get_db), current_user: User = Depen
         {"id": "mod-6", "key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
         {"id": "mod-7", "key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
         {"id": "mod-8", "key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
+        {"id": "mod-9", "key": "crew_hours", "name": "Crew Hours", "category": "Statistics", "enabled": True},
     ]

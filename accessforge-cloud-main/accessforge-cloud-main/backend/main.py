@@ -334,6 +334,7 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
         {"key": "cmp_tcm", "name": "CMP / TCM", "enabled": True},
         {"key": "cover_merge", "name": "Cover Merge", "enabled": True},
         {"key": "mail_merge", "name": "Mail Merge", "enabled": True},
+        {"key": "crew_hours", "name": "Crew Hours", "enabled": True},
     ]
 
 # ---------------------------------------------
@@ -364,6 +365,7 @@ def startup_db_seed():
         {"key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
         {"key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
         {"key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
+        {"key": "crew_hours", "name": "Crew Hours", "category": "Statistics", "enabled": True},
     ]
     
     for mod in default_modules:

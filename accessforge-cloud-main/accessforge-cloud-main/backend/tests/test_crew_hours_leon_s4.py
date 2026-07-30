@@ -3,7 +3,7 @@ import sys
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -119,6 +119,14 @@ class TestS4TokenProvider(unittest.TestCase):
             self.assertNotIn(self.refresh_token, str(captured.exception))
 
         rate_limited = self._provider(FakeLeonTransport([LeonRawResponse(429, "{}", {"Retry-After": "7"})]))
+        from backend.statistics.crew_hours.token_provider import LeonAccessTokenProvider
+
+        self.assertEqual(LeonAccessTokenProvider._access_token_lifetime({"expires_in": 120}), 120.0)
+        self.assertEqual(LeonAccessTokenProvider._access_token_lifetime({"expires_in": 12.5}), 12.5)
+        for invalid_expiry in (True, False, None, 0, -1, "NaN", "Infinity", "invalid", {}, []):
+            with self.assertRaises(LeonContractError):
+                LeonAccessTokenProvider._access_token_lifetime({"expires_in": invalid_expiry})
+
         with self.assertRaises(LeonRateLimitError) as captured:
             rate_limited.get_access_token()
         self.assertEqual(captured.exception.retry_after_seconds, 7)
@@ -197,6 +205,7 @@ class TestS4GraphQLExecutor(unittest.TestCase):
 
 class TestS4FlightQuery(unittest.TestCase):
     def test_validated_query_and_nullable_response(self):
+        from backend.statistics.crew_hours.errors import LeonContractError
         from backend.statistics.crew_hours.flight_query import build_flight_list_query, parse_flight_list
 
         query = build_flight_list_query(date(2024, 12, 1), "2024-12-31")
@@ -218,6 +227,10 @@ class TestS4FlightQuery(unittest.TestCase):
         }]})
         self.assertEqual(flights[0].flight_nid, "flight-1")
         self.assertIsNone(flights[0].journey_log)
+        for start, end in ((datetime(2024, 12, 1, 12), date(2024, 12, 2)), (date(2024, 12, 1), datetime(2024, 12, 2, 12)), (datetime(2024, 12, 1, 12), datetime(2024, 12, 2, 12))):
+            with self.assertRaises(LeonContractError):
+                build_flight_list_query(start, end)
+        self.assertNotIn("T12:00:00", query)
 
     def test_invalid_dates_injection_and_malformed_flights_are_rejected(self):
         from backend.statistics.crew_hours.errors import LeonContractError, LeonResponseError

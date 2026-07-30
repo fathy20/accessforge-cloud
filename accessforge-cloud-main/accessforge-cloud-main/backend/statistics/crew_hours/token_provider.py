@@ -96,9 +96,11 @@ class LeonAccessTokenProvider:
 
     @staticmethod
     def _access_token_lifetime(payload: dict) -> float:
-        expires_in = payload.get("expires_in")
-        if expires_in is None:
+        if "expires_in" not in payload:
             return float(DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS)
+        expires_in = payload["expires_in"]
+        if expires_in is None or isinstance(expires_in, bool):
+            raise LeonContractError("LEON refresh response had an invalid expires_in value.")
         try:
             lifetime = float(expires_in)
         except (TypeError, ValueError) as exc:

@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Mapping
 
 from .errors import LeonContractError, LeonResponseError
@@ -76,7 +76,9 @@ def parse_flight_list(data: Mapping[str, object]) -> list[LeonFlight]:
 
 
 def _coerce_date(value: date | str) -> date:
-    if isinstance(value, date):
+    if isinstance(value, datetime):
+        raise LeonContractError("Flight query dates must not include a time component.")
+    if type(value) is date:
         return value
     if not isinstance(value, str) or not ISO_DATE_PATTERN.fullmatch(value):
         raise LeonContractError("Flight query dates must use strict YYYY-MM-DD values.")

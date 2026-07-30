@@ -4,6 +4,10 @@ from typing import Any, Mapping, Protocol
 import httpx
 
 
+SENSITIVE_HEADER_NAMES = {"authorization", "x-api-key"}
+SENSITIVE_FORM_FIELD_NAMES = {"refresh_token", "access_token"}
+
+
 @dataclass(frozen=True)
 class LeonRequest:
     method: str
@@ -11,6 +15,7 @@ class LeonRequest:
     headers: Mapping[str, str] = field(default_factory=dict)
     params: Mapping[str, str] | None = None
     json_body: Mapping[str, Any] | None = None
+    form_data: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,15 @@ class LeonErrorResponse:
     message: str
 
 
+@dataclass(frozen=True)
+class LeonRequestRecord:
+    method: str
+    url: str
+    header_names: tuple[str, ...]
+    form_field_names: tuple[str, ...]
+    json_body: Mapping[str, Any] | None
+
+
 class LeonHttpTransport(Protocol):
     def send(self, request: LeonRequest, timeout_seconds: float) -> LeonRawResponse:
         ...
@@ -48,6 +62,7 @@ class HttpxLeonTransport:
                 headers=dict(request.headers),
                 params=request.params,
                 json=request.json_body,
+                data=request.form_data,
             )
         return LeonRawResponse(
             status_code=response.status_code,
@@ -57,20 +72,26 @@ class HttpxLeonTransport:
 
 
 class FakeLeonTransport:
-    """Deterministic test transport; it never opens a network connection."""
+    """Deterministic test transport; it records metadata only and never opens a network connection."""
 
-    def __init__(self, response: LeonRawResponse | None = None, error: Exception | None = None):
-        self.response = response
+    def __init__(self, responses: list[LeonRawResponse] | None = None, error: Exception | None = None):
+        self._responses = list(responses or [])
         self.error = error
-        self.calls: list[tuple[LeonRequest, float]] = []
+        self.calls: list[LeonRequestRecord] = []
 
     def send(self, request: LeonRequest, timeout_seconds: float) -> LeonRawResponse:
-        self.calls.append((request, timeout_seconds))
+        self.calls.append(LeonRequestRecord(
+            method=request.method,
+            url=request.url,
+            header_names=tuple(sorted(request.headers)),
+            form_field_names=tuple(sorted((request.form_data or {}).keys())),
+            json_body=request.json_body,
+        ))
         if self.error is not None:
             raise self.error
-        if self.response is None:
-            raise AssertionError("FakeLeonTransport requires a response or error.")
-        return self.response
+        if not self._responses:
+            raise AssertionError("FakeLeonTransport requires a queued response or error.")
+        return self._responses.pop(0)
 
 
 def get_leon_transport() -> LeonHttpTransport:

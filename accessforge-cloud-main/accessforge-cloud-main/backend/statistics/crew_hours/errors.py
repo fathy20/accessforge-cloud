@@ -19,4 +19,12 @@ class LeonResponseError(Exception):
 
 
 class LeonContractError(Exception):
-    """Raised when an undocumented LEON contract would be required."""
+    """Raised when a LEON contract cannot be satisfied safely."""
+
+
+class LeonRateLimitError(LeonResponseError):
+    """Raised when LEON rate-limits a request."""
+
+    def __init__(self, retry_after_seconds: int | None):
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__("LEON rate limit exceeded.")

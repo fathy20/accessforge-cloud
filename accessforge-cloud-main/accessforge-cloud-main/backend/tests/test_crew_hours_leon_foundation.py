@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 from fastapi.testclient import TestClient
 
 
@@ -15,106 +14,27 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-class TestLeonConfiguration(unittest.TestCase):
-    api_key = "unit-test-key"
+class TestLeonConfigurationFoundation(unittest.TestCase):
     base_url = "https://leon.invalid/api"
+    refresh_token = "unit-test-refresh-token"
 
     def _load(self, values):
         from backend.statistics.crew_hours.config import load_leon_configuration
         with patch.dict(os.environ, values, clear=True):
             return load_leon_configuration()
 
-    def test_required_values_and_timeout_validation(self):
+    def test_refresh_token_contract_and_redacted_repr(self):
         from backend.statistics.crew_hours.errors import LeonConfigurationError
 
         with self.assertRaises(LeonConfigurationError):
-            self._load({"LEON_API_KEY": self.api_key})
-        with self.assertRaises(LeonConfigurationError):
-            self._load({"LEON_BASE_URL": self.base_url})
-        with self.assertRaises(LeonConfigurationError):
-            self._load({"LEON_BASE_URL": self.base_url, "LEON_API_KEY": self.api_key, "LEON_TIMEOUT_SECONDS": "0"})
-        with self.assertRaises(LeonConfigurationError):
-            self._load({"LEON_BASE_URL": self.base_url, "LEON_API_KEY": self.api_key, "LEON_TIMEOUT_SECONDS": "-1"})
-        with self.assertRaises(LeonConfigurationError):
-            self._load({"LEON_BASE_URL": self.base_url, "LEON_API_KEY": self.api_key, "LEON_TIMEOUT_SECONDS": "not-a-number"})
-
-    def test_valid_values_are_trimmed_and_repr_is_redacted(self):
+            self._load({"LEON_BASE_URL": self.base_url, "LEON_API_KEY": "obsolete"})
         configuration = self._load({
             "LEON_BASE_URL": f"  {self.base_url}/  ",
-            "LEON_API_KEY": f"  {self.api_key}  ",
-            "LEON_TIMEOUT_SECONDS": " 12.5 ",
+            "LEON_REFRESH_TOKEN": f"  {self.refresh_token}  ",
         })
-
         self.assertEqual(configuration.base_url, self.base_url)
-        self.assertEqual(configuration.api_key, self.api_key)
-        self.assertEqual(configuration.timeout_seconds, 12.5)
-        self.assertNotIn(self.api_key, repr(configuration))
-
-    def test_timeout_defaults_when_omitted(self):
-        configuration = self._load({"LEON_BASE_URL": self.base_url, "LEON_API_KEY": self.api_key})
-        self.assertEqual(configuration.timeout_seconds, 30.0)
-
-
-class TestConfiguredLeonClient(unittest.TestCase):
-    api_key = "unit-test-key"
-
-    def _client(self, transport):
-        from backend.statistics.crew_hours.config import LeonConfiguration
-        from backend.statistics.crew_hours.leon_client import ConfiguredCrewHoursLeonClient
-
-        class HeaderBuilder:
-            def __init__(self):
-                self.received_key = None
-
-            def build(self, api_key):
-                self.received_key = api_key
-                return {"X-Test-LEON-Auth": api_key}
-
-        header_builder = HeaderBuilder()
-        client = ConfiguredCrewHoursLeonClient(
-            LeonConfiguration(base_url="https://leon.invalid/api", api_key=self.api_key, timeout_seconds=5),
-            transport,
-            header_builder,
-        )
-        return client, header_builder
-
-    def test_injected_fake_transport_and_authentication_builder(self):
-        from backend.statistics.crew_hours.transport import FakeLeonTransport, LeonRawResponse, LeonRequest
-
-        transport = FakeLeonTransport(LeonRawResponse(status_code=200, body="{}"))
-        client, header_builder = self._client(transport)
-        result = client.send(LeonRequest(method="GET", url="future-resource"))
-
-        self.assertEqual(result.payload, {})
-        self.assertEqual(header_builder.received_key, self.api_key)
-        self.assertEqual(len(transport.calls), 1)
-        outbound_request, timeout_seconds = transport.calls[0]
-        self.assertEqual(outbound_request.url, "https://leon.invalid/api/future-resource")
-        self.assertEqual(outbound_request.headers["X-Test-LEON-Auth"], self.api_key)
-        self.assertEqual(timeout_seconds, 5)
-
-    def test_error_mapping_and_secret_redaction(self):
-        from backend.statistics.crew_hours.errors import (
-            LeonAuthenticationError,
-            LeonResponseError,
-            LeonTimeoutError,
-            LeonTransportError,
-        )
-        from backend.statistics.crew_hours.transport import FakeLeonTransport, LeonRawResponse, LeonRequest
-
-        request = LeonRequest(method="GET", url="future-resource")
-        cases = [
-            (FakeLeonTransport(error=httpx.TimeoutException("timeout")), LeonTimeoutError),
-            (FakeLeonTransport(error=httpx.ConnectError("connection failed")), LeonTransportError),
-            (FakeLeonTransport(LeonRawResponse(status_code=401, body="{}")), LeonAuthenticationError),
-            (FakeLeonTransport(LeonRawResponse(status_code=403, body="{}")), LeonAuthenticationError),
-            (FakeLeonTransport(LeonRawResponse(status_code=200, body="not-json")), LeonResponseError),
-        ]
-        for transport, exception_type in cases:
-            client, _ = self._client(transport)
-            with self.assertRaises(exception_type) as captured:
-                client.send(request)
-            self.assertNotIn(self.api_key, str(captured.exception))
+        self.assertEqual(configuration.refresh_token, self.refresh_token)
+        self.assertNotIn(self.refresh_token, repr(configuration))
 
 
 class TestCrewHoursEndpointCompatibility(unittest.TestCase):

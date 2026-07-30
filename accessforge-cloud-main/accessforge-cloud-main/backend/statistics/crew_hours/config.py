@@ -13,7 +13,7 @@ DEFAULT_LEON_TIMEOUT_SECONDS = 30.0
 @dataclass(frozen=True)
 class LeonConfiguration:
     base_url: str
-    api_key: str = field(repr=False)
+    refresh_token: str = field(repr=False)
     timeout_seconds: float = DEFAULT_LEON_TIMEOUT_SECONDS
 
 
@@ -24,13 +24,13 @@ def load_leon_configuration(
 ) -> LeonConfiguration:
     values = os.environ if environment is None else environment
     base_url = (values.get("LEON_BASE_URL") or "").strip()
-    api_key = (values.get("LEON_API_KEY") or "").strip()
+    refresh_token = (values.get("LEON_REFRESH_TOKEN") or "").strip()
     timeout_text = (values.get("LEON_TIMEOUT_SECONDS") or str(DEFAULT_LEON_TIMEOUT_SECONDS)).strip()
 
     if not base_url:
         raise LeonConfigurationError("LEON_BASE_URL is required.")
-    if not api_key:
-        raise LeonConfigurationError("LEON_API_KEY is required.")
+    if not refresh_token:
+        raise LeonConfigurationError("LEON_REFRESH_TOKEN is required.")
 
     parsed_base_url = urlsplit(base_url)
     allowed_schemes = {"https"}
@@ -50,7 +50,7 @@ def load_leon_configuration(
 
     return LeonConfiguration(
         base_url=base_url.rstrip("/"),
-        api_key=api_key,
+        refresh_token=refresh_token,
         timeout_seconds=timeout_seconds,
     )
 

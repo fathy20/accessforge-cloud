@@ -19,6 +19,7 @@ from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind,
 from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
+from .statistics.router import router as statistics_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(project_router)
+app.include_router(statistics_router)
 
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

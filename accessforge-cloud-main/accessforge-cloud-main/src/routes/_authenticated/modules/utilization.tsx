@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated/modules/utilization")({
       icon={Gauge}
       acceptedKinds={["excel", "csv"]}
       supportsDatabase={true}
+      comingSoon
     />
   ),
 });

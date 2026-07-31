@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated/modules/effectivity")({
       icon={Table2}
       acceptedKinds={["excel", "csv"]}
       supportsDatabase={true}
+      comingSoon
     />
   ),
 });

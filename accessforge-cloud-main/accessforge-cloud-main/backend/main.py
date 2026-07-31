@@ -19,25 +19,10 @@ from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind,
 from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
-
-from sqlalchemy import inspect, text
+from .statistics.router import router as statistics_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
-
-# Auto-migrate missing columns for existing SQLite/SQL Server databases
-try:
-    inspector = inspect(engine)
-    with engine.begin() as conn:
-        for table_name, table in Base.metadata.tables.items():
-            if inspector.has_table(table_name):
-                existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-                for col in table.columns:
-                    if col.name not in existing_cols:
-                        col_type = col.type.compile(engine.dialect)
-                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}"))
-except Exception as e:
-    print(f"Migration note: {e}")
 
 app = FastAPI(title="Redsea Local Backend")
 
@@ -53,6 +38,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(project_router)
+app.include_router(statistics_router)
 
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -280,6 +266,10 @@ def create_job(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    from worker.handlers import REGISTRY
+    if req.module_key not in REGISTRY:
+        raise HTTPException(status_code=422, detail=f"Unknown module: {req.module_key}")
+
     job = Job(
         user_id=current_user.id,
         module_key=req.module_key,
@@ -346,6 +336,7 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
         {"key": "cmp_tcm", "name": "CMP / TCM", "enabled": True},
         {"key": "cover_merge", "name": "Cover Merge", "enabled": True},
         {"key": "mail_merge", "name": "Mail Merge", "enabled": True},
+        {"key": "crew_hours", "name": "Crew Hours", "enabled": True},
     ]
 
 # ---------------------------------------------
@@ -376,6 +367,7 @@ def startup_db_seed():
         {"key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
         {"key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
         {"key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
+        {"key": "crew_hours", "name": "Crew Hours", "category": "Statistics", "enabled": True},
     ]
     
     for mod in default_modules:

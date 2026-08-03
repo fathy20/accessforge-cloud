@@ -15,6 +15,8 @@ from .schemas import (
     FlightItem,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class CrewHoursService(Protocol):
     def get_crew_hours(self, request: CrewHoursRequest) -> CrewHoursResponse:
@@ -58,6 +60,14 @@ class LiveCrewHoursService:
             logging.getLogger(__name__).warning(f"LEON fetch error ({exc}); using mock dataset for report.")
             from .leon_client import MockCrewHoursLeonClient
             flights = MockCrewHoursLeonClient().fetch_flights(from_date, to_date)
+
+        official_totals: dict[str, str] = {}
+        official_source_available = False
+        try:
+            official_totals = self._leon_client.fetch_official_totals(from_date, to_date)
+            official_source_available = True
+        except Exception as exc:
+            logger.warning("LEON official MCP report unavailable: %s", exc)
 
         # Map to group flights per crew member
         crew_map: Dict[str, Dict[str, Any]] = {}
@@ -143,7 +153,10 @@ class LiveCrewHoursService:
                 position_type=data["position_type"],
                 position_name=data["position_name"],
                 status="TRN" if data["has_trn"] else "normal",
-                official_total=None,  # Official total not discovered from LEON query yet
+                official_total=official_totals.get(data["person_code"]),
+                raw_official_total=official_totals.get(data["person_code"]),
+                reference_total=None,
+                variance_minutes=None,
                 flight_count=len(data["flights"]),
                 flights=data["flights"],
             )
@@ -155,7 +168,7 @@ class LiveCrewHoursService:
         return CrewHoursReportResponse(
             period=CrewHoursPeriod(from_date=from_date, to_date=to_date),
             source="leon",
-            hours_source_status="not_discovered",
+            hours_source_status="official_mcp_report" if official_source_available else "not_discovered",
             total_crew=len(crew_summaries),
             total_flights=len(flights),
             crew_members=crew_summaries,

@@ -33,6 +33,9 @@ class CrewMemberSummary(BaseModel):
     position_name: str | None = None
     status: str = "normal"  # "normal" or "TRN"
     official_total: str | None = None
+    raw_official_total: str | None = None
+    reference_total: str | None = None
+    variance_minutes: int | None = None
     flight_count: int = 0
     flights: list[FlightItem] = []
 

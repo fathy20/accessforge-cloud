@@ -15,6 +15,7 @@ class LeonConfiguration:
     base_url: str
     refresh_token: str = field(repr=False)
     timeout_seconds: float = DEFAULT_LEON_TIMEOUT_SECONDS
+    mcp_url: str | None = None
 
 
 def load_leon_configuration(
@@ -26,6 +27,7 @@ def load_leon_configuration(
     base_url = (values.get("LEON_BASE_URL") or "").strip()
     refresh_token = (values.get("LEON_REFRESH_TOKEN") or "").strip()
     timeout_text = (values.get("LEON_TIMEOUT_SECONDS") or str(DEFAULT_LEON_TIMEOUT_SECONDS)).strip()
+    mcp_url = (values.get("LEON_MCP_URL") or "").strip()
 
     if not base_url:
         raise LeonConfigurationError("LEON_BASE_URL is required.")
@@ -41,6 +43,11 @@ def load_leon_configuration(
     if parsed_base_url.query or parsed_base_url.fragment:
         raise LeonConfigurationError("LEON_BASE_URL must not contain a query or fragment.")
 
+    if mcp_url:
+        parsed_mcp_url = urlsplit(mcp_url)
+        if parsed_mcp_url.scheme != "https" or not parsed_mcp_url.netloc or parsed_mcp_url.query or parsed_mcp_url.fragment:
+            raise LeonConfigurationError("LEON_MCP_URL must be an HTTPS URL without query or fragment.")
+
     try:
         timeout_seconds = float(timeout_text)
     except ValueError as exc:
@@ -52,6 +59,7 @@ def load_leon_configuration(
         base_url=base_url.rstrip("/"),
         refresh_token=refresh_token,
         timeout_seconds=timeout_seconds,
+        mcp_url=mcp_url or None
     )
 
 

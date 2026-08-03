@@ -43,3 +43,6 @@ venv/
 backend/.env
 *.db
 storage_data/
+
+# Local SQLite artifact — never commit
+backend/redsea.db

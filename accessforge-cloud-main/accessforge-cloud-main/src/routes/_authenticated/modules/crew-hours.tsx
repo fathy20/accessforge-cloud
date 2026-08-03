@@ -61,7 +61,10 @@ interface CrewMemberSummary {
   position_type?: string;
   position_name?: string;
   status: string;
-  official_total?: string | null;
+  official_total: string | null;
+  raw_official_total: string | null;
+  reference_total: string | null;
+  variance_minutes: number | null;
   flight_count: number;
   flights: FlightItem[];
 }
@@ -73,6 +76,19 @@ interface CrewHoursReport {
   total_crew: number;
   total_flights: number;
   crew_members: CrewMemberSummary[];
+}
+
+const OFFICIAL_MCP_SOURCE = "official_mcp_report";
+
+function hasOfficialTotal(crew: CrewMemberSummary): boolean {
+  return typeof crew.official_total === "string" && crew.official_total.trim().length > 0;
+}
+
+function officialSourceLabel(status: string, ar: boolean): string {
+  if (status === OFFICIAL_MCP_SOURCE) {
+    return ar ? "LEON MCP الرسمي" : "Official LEON MCP";
+  }
+  return ar ? "الساعات الرسمية غير متاحة" : "Official hours unavailable";
 }
 
 function CrewHoursPage() {
@@ -92,6 +108,14 @@ function CrewHoursPage() {
   const [trnOverrides, setTrnOverrides] = useState<Record<string, boolean>>({});
   // Expanded crew cards
   const [expandedCrew, setExpandedCrew] = useState<Record<string, boolean>>({});
+
+  const officialTotalsAvailable = report?.crew_members.filter(hasOfficialTotal).length ?? 0;
+  const officialTotalsUnavailable = report
+    ? report.crew_members.length - officialTotalsAvailable
+    : 0;
+  const officialSourceAvailable = report?.hours_source_status === OFFICIAL_MCP_SOURCE;
+  const allOfficialTotalsAvailable = officialSourceAvailable && officialTotalsUnavailable === 0;
+  const hasPartialOfficialTotals = officialTotalsAvailable > 0 && officialTotalsUnavailable > 0;
 
   const fetchReport = async () => {
     setLoading(true);
@@ -166,11 +190,25 @@ function CrewHoursPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <ShieldCheck className="h-3.5 w-3.5" />
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             {ar ? "اتصال LEON نشط" : "LEON Connection Active"}
           </Badge>
+          {report && (
+            <Badge
+              variant={officialSourceAvailable ? "outline" : "secondary"}
+              className="gap-1.5"
+              aria-label={officialSourceLabel(report.hours_source_status, ar)}
+            >
+              {officialSourceAvailable ? (
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {officialSourceLabel(report.hours_source_status, ar)}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -283,14 +321,14 @@ function CrewHoursPage() {
           <Card className="bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
-                {ar ? "مصدر البيانات" : "Data Source"}
+                {ar ? "الساعات الرسمية المتاحة" : "Official Totals Available"}
               </CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg font-semibold uppercase">{report.source}</div>
+              <div className="text-2xl font-bold">{officialTotalsAvailable}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                GraphQL API (rsx.leon.aero)
+                {ar ? "أفراد لديهم إجمالي LEON رسمي" : "Crew members with official LEON totals"}
               </p>
             </CardContent>
           </Card>
@@ -298,29 +336,24 @@ function CrewHoursPage() {
           <Card className="bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
-                {ar ? "الساعات الرسمية (Hrs)" : "Official Hours Status"}
+                {ar ? "الساعات الرسمية غير المتاحة" : "Official Totals Unavailable"}
               </CardTitle>
-              <Clock className="h-4 w-4 text-amber-500" />
+              <Clock className="h-4 w-4 text-amber-500" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                      Not Discovered
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs text-xs">
-                      {ar
-                        ? "ساعات LEON الرسمية لم تُكتشف بعد في الاستعلام الحالي وسيتم ربطها فور إضافة صلاحية Report Wizard."
-                        : "Official Hrs calculation is pending discovery in LEON schema."}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <p className="text-xs text-muted-foreground mt-2">
-                {ar ? "سيتم التوصيل فور التأكيد" : "Pending schema discovery"}
+              <div className="text-2xl font-bold">{officialTotalsUnavailable}</div>
+              <p className="text-xs text-muted-foreground mt-1" role="status" aria-live="polite">
+                {hasPartialOfficialTotals
+                  ? ar
+                    ? "بيانات رسمية جزئية لهذا التقرير"
+                    : "Partial official totals for this report"
+                  : allOfficialTotalsAvailable
+                    ? ar
+                      ? "كل الإجماليات الرسمية متاحة"
+                      : "All official totals are available"
+                    : ar
+                      ? "الإجماليات الرسمية غير متاحة"
+                      : "Official totals are unavailable"}
               </p>
             </CardContent>
           </Card>
@@ -329,7 +362,13 @@ function CrewHoursPage() {
 
       {/* Main Content Area */}
       {loading && (
-        <Card className="p-8 space-y-4">
+        <Card
+          className="p-8 space-y-4"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label={ar ? "جاري تحميل تقرير ساعات الطاقم" : "Loading crew hours report"}
+        >
           <div className="flex items-center gap-3">
             <Skeleton className="h-10 w-10 rounded-xl" />
             <div className="space-y-2">
@@ -453,9 +492,38 @@ function CrewHoursPage() {
                         {isTrnActive ? (ar ? "حالة تدريب (TRN)" : "Training (TRN)") : (ar ? "عادي (Normal)" : "Normal")}
                       </Button>
 
-                      <div className="text-right text-xs">
-                        <span className="text-muted-foreground block">{ar ? "الساعات الرسمية" : "Official Hrs"}</span>
-                        <span className="font-mono text-muted-foreground font-medium">Not Discovered</span>
+                      <div className="flex items-center gap-2 text-right text-xs">
+                        <div>
+                          <span className="text-muted-foreground block">
+                            {ar ? "الساعات الرسمية" : "Official Block Time"}
+                          </span>
+                          <span
+                            className={`font-mono font-medium ${hasOfficialTotal(crew) ? "text-foreground" : "text-muted-foreground"}`}
+                          >
+                            {crew.official_total ??
+                              (ar ? "الساعات الرسمية غير متاحة" : "Official hours unavailable")}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={
+                            hasOfficialTotal(crew) && officialSourceAvailable
+                              ? "outline"
+                              : "secondary"
+                          }
+                          aria-label={
+                            hasOfficialTotal(crew) && officialSourceAvailable
+                              ? officialSourceLabel(report.hours_source_status, ar)
+                              : ar
+                                ? "الساعات الرسمية غير متاحة"
+                                : "Official hours unavailable"
+                          }
+                        >
+                          {hasOfficialTotal(crew) && officialSourceAvailable
+                            ? officialSourceLabel(report.hours_source_status, ar)
+                            : ar
+                              ? "غير متاح"
+                              : "Unavailable"}
+                        </Badge>
                       </div>
 
                       <Button

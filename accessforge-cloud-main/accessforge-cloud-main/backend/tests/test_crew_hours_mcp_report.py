@@ -9,7 +9,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.statistics.crew_hours.config import LeonConfiguration
 from backend.statistics.crew_hours.errors import LeonContractError
-from backend.statistics.crew_hours.leon_client import LeonFlight
 from backend.statistics.crew_hours.mcp_report import fetch_official_totals
 from backend.statistics.crew_hours.response_models import LeonFlight
 from backend.statistics.crew_hours.service import LiveCrewHoursService
@@ -48,6 +47,8 @@ class TestMcpReport(unittest.TestCase):
         self.assertEqual(totals, {"AKA": "95:45", "AHU": "85:45"})
         self.assertEqual(len(transport.calls), 3)
         self.assertEqual(transport.calls[1].url, "https://mcp.test.example/mcp")
+        self.assertIn("Accept", transport.calls[1].header_names)
+        self.assertIn("Accept", transport.calls[2].header_names)
         self.assertEqual(transport.calls[2].json_body["method"], "tools/call")
         arguments = transport.calls[2].json_body["params"]["arguments"]
         self.assertEqual(arguments["dateFilter"]["start"], "2026-06-01T00:00:00Z")

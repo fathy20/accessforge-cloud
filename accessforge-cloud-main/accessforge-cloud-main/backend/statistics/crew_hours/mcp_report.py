@@ -96,6 +96,7 @@ def _send_json_rpc(
     session_id: str | None = None,
 ) -> LeonRawResponse:
     headers = {
+        "Accept": "application/json, text/event-stream",
         "Content-Type": "application/json",
         "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
         **BearerAccessTokenHeaderBuilder().build(access_token),

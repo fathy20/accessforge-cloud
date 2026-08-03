@@ -27,6 +27,7 @@ import { Route as AuthenticatedModulesTaskStampingRouteImport } from './routes/_
 import { Route as AuthenticatedModulesTaskExtractorRouteImport } from './routes/_authenticated/modules/task-extractor'
 import { Route as AuthenticatedModulesMailMergeRouteImport } from './routes/_authenticated/modules/mail-merge'
 import { Route as AuthenticatedModulesEffectivityRouteImport } from './routes/_authenticated/modules/effectivity'
+import { Route as AuthenticatedModulesCrewHoursRouteImport } from './routes/_authenticated/modules/crew-hours'
 import { Route as AuthenticatedModulesCoverMergeRouteImport } from './routes/_authenticated/modules/cover-merge'
 import { Route as AuthenticatedModulesCmpTcmRouteImport } from './routes/_authenticated/modules/cmp-tcm'
 import { Route as AuthenticatedModulesCheckControlRouteImport } from './routes/_authenticated/modules/check-control'
@@ -130,6 +131,12 @@ const AuthenticatedModulesEffectivityRoute =
     path: '/modules/effectivity',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedModulesCrewHoursRoute =
+  AuthenticatedModulesCrewHoursRouteImport.update({
+    id: '/modules/crew-hours',
+    path: '/modules/crew-hours',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedModulesCoverMergeRoute =
   AuthenticatedModulesCoverMergeRouteImport.update({
     id: '/modules/cover-merge',
@@ -190,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
   '/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
   '/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
@@ -216,6 +224,7 @@ export interface FileRoutesByTo {
   '/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
   '/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
   '/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
@@ -244,6 +253,7 @@ export interface FileRoutesById {
   '/_authenticated/modules/check-control': typeof AuthenticatedModulesCheckControlRoute
   '/_authenticated/modules/cmp-tcm': typeof AuthenticatedModulesCmpTcmRoute
   '/_authenticated/modules/cover-merge': typeof AuthenticatedModulesCoverMergeRoute
+  '/_authenticated/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/_authenticated/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/_authenticated/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
   '/_authenticated/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/modules/check-control'
     | '/modules/cmp-tcm'
     | '/modules/cover-merge'
+    | '/modules/crew-hours'
     | '/modules/effectivity'
     | '/modules/mail-merge'
     | '/modules/task-extractor'
@@ -298,6 +309,7 @@ export interface FileRouteTypes {
     | '/modules/check-control'
     | '/modules/cmp-tcm'
     | '/modules/cover-merge'
+    | '/modules/crew-hours'
     | '/modules/effectivity'
     | '/modules/mail-merge'
     | '/modules/task-extractor'
@@ -325,6 +337,7 @@ export interface FileRouteTypes {
     | '/_authenticated/modules/check-control'
     | '/_authenticated/modules/cmp-tcm'
     | '/_authenticated/modules/cover-merge'
+    | '/_authenticated/modules/crew-hours'
     | '/_authenticated/modules/effectivity'
     | '/_authenticated/modules/mail-merge'
     | '/_authenticated/modules/task-extractor'
@@ -468,6 +481,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedModulesEffectivityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/modules/crew-hours': {
+      id: '/_authenticated/modules/crew-hours'
+      path: '/modules/crew-hours'
+      fullPath: '/modules/crew-hours'
+      preLoaderRoute: typeof AuthenticatedModulesCrewHoursRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/modules/cover-merge': {
       id: '/_authenticated/modules/cover-merge'
       path: '/modules/cover-merge'
@@ -552,6 +572,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedModulesCheckControlRoute: typeof AuthenticatedModulesCheckControlRoute
   AuthenticatedModulesCmpTcmRoute: typeof AuthenticatedModulesCmpTcmRoute
   AuthenticatedModulesCoverMergeRoute: typeof AuthenticatedModulesCoverMergeRoute
+  AuthenticatedModulesCrewHoursRoute: typeof AuthenticatedModulesCrewHoursRoute
   AuthenticatedModulesEffectivityRoute: typeof AuthenticatedModulesEffectivityRoute
   AuthenticatedModulesMailMergeRoute: typeof AuthenticatedModulesMailMergeRoute
   AuthenticatedModulesTaskExtractorRoute: typeof AuthenticatedModulesTaskExtractorRoute
@@ -572,6 +593,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedModulesCheckControlRoute: AuthenticatedModulesCheckControlRoute,
   AuthenticatedModulesCmpTcmRoute: AuthenticatedModulesCmpTcmRoute,
   AuthenticatedModulesCoverMergeRoute: AuthenticatedModulesCoverMergeRoute,
+  AuthenticatedModulesCrewHoursRoute: AuthenticatedModulesCrewHoursRoute,
   AuthenticatedModulesEffectivityRoute: AuthenticatedModulesEffectivityRoute,
   AuthenticatedModulesMailMergeRoute: AuthenticatedModulesMailMergeRoute,
   AuthenticatedModulesTaskExtractorRoute:

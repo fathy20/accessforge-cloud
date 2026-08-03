@@ -71,6 +71,7 @@ const moduleNav: NavItem[] = [
     comingSoon: true,
   },
   { to: "/modules/cmp-tcm", label: "CMP / TCM Tasks", icon: Layers, moduleKey: "cmp_tcm" },
+  { to: "/modules/crew-hours", label: "Crew Hours (LEON)", icon: Users2, moduleKey: "crew_hours" },
   { to: "/modules/cover-merge", label: "Cover Merge", icon: BookCopy, moduleKey: "cover_merge" },
   {
     to: "/modules/mail-merge",

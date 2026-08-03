@@ -94,5 +94,19 @@ class FakeLeonTransport:
         return self._responses.pop(0)
 
 
+class LeonAuthenticationHeaderBuilder(Protocol):
+    def build(self, access_token: str) -> Mapping[str, str]:
+        ...
+
+
+class BearerAccessTokenHeaderBuilder:
+    def build(self, access_token: str) -> Mapping[str, str]:
+        return {"Authorization": f"Bearer {access_token}"}
+
+
+def get_leon_authentication_header_builder() -> LeonAuthenticationHeaderBuilder:
+    return BearerAccessTokenHeaderBuilder()
+
+
 def get_leon_transport() -> LeonHttpTransport:
     return HttpxLeonTransport()

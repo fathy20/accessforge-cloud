@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  FileSearch, Stamp, Table2, ListChecks, Gauge, FolderTree, Layers, Mail,
+  FileSearch, Stamp, Table2, ListChecks, Gauge, FolderTree, Layers, Mail, Users2,
   ArrowRight, Lock, type LucideIcon,
 } from "lucide-react";
 import { usePermissions } from "@/lib/auth/use-permissions";
@@ -77,6 +77,13 @@ const MODULES: ModuleCard[] = [
     description: "Merge cover PDFs onto task-card PDFs.",
     descriptionAr: "دمج ملفات الأغلفة على بطاقات المهام.",
     accepts: "PDF",
+  },
+  {
+    to: "/modules/crew-hours", moduleKey: "crew_hours", icon: Users2,
+    title: "Crew Hours (LEON)", titleAr: "Crew Hours (LEON) — ساعات الطاقم",
+    description: "Official LEON flight & crew records, position details, and TRN status.",
+    descriptionAr: "بيانات الرحلات وأفراد الطاقم وحالات التدريب الرسمية من LEON.",
+    accepts: "LEON API",
   },
   {
     to: "/modules/mail-merge", moduleKey: "mail_merge", icon: Mail,

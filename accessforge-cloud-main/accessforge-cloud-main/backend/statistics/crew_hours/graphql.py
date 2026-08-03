@@ -5,9 +5,8 @@ import httpx
 
 from .config import LeonConfiguration
 from .errors import LeonAuthenticationError, LeonResponseError, LeonTimeoutError, LeonTransportError
-from .leon_client import LeonAuthenticationHeaderBuilder
 from .token_provider import LeonAccessTokenProvider
-from .transport import LeonHttpTransport, LeonRawResponse, LeonRequest
+from .transport import BearerAccessTokenHeaderBuilder, LeonAuthenticationHeaderBuilder, LeonHttpTransport, LeonRawResponse, LeonRequest
 
 
 class LeonGraphQLExecutor:

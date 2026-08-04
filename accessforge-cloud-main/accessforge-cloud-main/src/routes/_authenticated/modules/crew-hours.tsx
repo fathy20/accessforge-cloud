@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApiClient } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/modules/crew-hours")({
@@ -130,11 +131,9 @@ function CrewHoursPage() {
         params.append("crew_member", crewSearch.trim());
       }
 
-      const res = await fetch(`/api/statistics/crew-hours/report?${params.toString()}`);
-      if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
-      }
-      const data: CrewHoursReport = await res.json();
+      const data = await ApiClient.fetch<CrewHoursReport>(
+        `/statistics/crew-hours/report?${params.toString()}`,
+      );
       setReport(data);
 
       // Expand all crew members by default

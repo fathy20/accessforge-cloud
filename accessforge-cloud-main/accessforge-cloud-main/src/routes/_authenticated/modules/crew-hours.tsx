@@ -41,24 +41,26 @@ export const Route = createFileRoute("/_authenticated/modules/crew-hours")({
 
 interface FlightItem {
   flight_nid: string;
-  flight_number?: string;
-  departure_airport?: string;
-  arrival_airport?: string;
-  start_time_utc: string;
-  end_time_utc: string;
-  aircraft_reg?: string;
-  aircraft_type?: string;
-  position?: string;
-  flight_training_type?: string;
+  flight_number: string | null;
+  departure_airport: string | null;
+  arrival_airport: string | null;
+  start_time_utc: string | null;
+  end_time_utc: string | null;
+  aircraft_reg: string | null;
+  aircraft_type: string | null;
+  flight_date: string | null;
+  block_time: string | null;
+  position: string | null;
+  flight_training_type: string | null;
   is_trn: boolean;
-  journey_log?: any;
+  journey_log?: unknown;
 }
 
 interface CrewMemberSummary {
   crew_id: string;
   person_code?: string;
-  name: string;
-  surname: string;
+  display_name: string;
+  full_name: string | null;
   position_type?: string;
   position_name?: string;
   status: string;
@@ -76,6 +78,9 @@ interface CrewHoursReport {
   hours_source_status: string;
   total_crew: number;
   total_flights: number;
+  records_count: number;
+  official_totals_available: number;
+  official_totals_unavailable: number;
   crew_members: CrewMemberSummary[];
 }
 
@@ -83,6 +88,28 @@ const OFFICIAL_MCP_SOURCE = "official_mcp_report";
 
 function hasOfficialTotal(crew: CrewMemberSummary): boolean {
   return typeof crew.official_total === "string" && crew.official_total.trim().length > 0;
+}
+
+function displayValue(value?: string | null): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : "—";
+}
+
+function displayUtcTime(value?: string | null): string {
+  return displayValue(value?.replace("T", " ").replace("Z", ""));
+}
+
+function displayAircraft(registration?: string | null, aircraftType?: string | null): string {
+  const displayedRegistration = displayValue(registration);
+  const displayedType = displayValue(aircraftType);
+  if (displayedRegistration === "—" && displayedType === "—") {
+    return "—";
+  }
+  return `${displayedRegistration} (${displayedType})`;
+}
+
+function crewInitials(displayName?: string | null): string {
+  const initials = displayName?.trim().split(/\s+/).map((part) => part.charAt(0)).join("").slice(0, 2) ?? "";
+  return initials || "—";
 }
 
 function officialSourceLabel(status: string, ar: boolean): string {
@@ -110,13 +137,13 @@ function CrewHoursPage() {
   // Expanded crew cards
   const [expandedCrew, setExpandedCrew] = useState<Record<string, boolean>>({});
 
-  const officialTotalsAvailable = report?.crew_members.filter(hasOfficialTotal).length ?? 0;
-  const officialTotalsUnavailable = report
-    ? report.crew_members.length - officialTotalsAvailable
-    : 0;
   const officialSourceAvailable = report?.hours_source_status === OFFICIAL_MCP_SOURCE;
-  const allOfficialTotalsAvailable = officialSourceAvailable && officialTotalsUnavailable === 0;
-  const hasPartialOfficialTotals = officialTotalsAvailable > 0 && officialTotalsUnavailable > 0;
+  const allOfficialTotalsAvailable =
+    officialSourceAvailable && report?.official_totals_unavailable === 0;
+  const hasPartialOfficialTotals =
+    report !== null &&
+    report.official_totals_available > 0 &&
+    report.official_totals_unavailable > 0;
 
   const fetchReport = async () => {
     setLoading(true);
@@ -190,10 +217,12 @@ function CrewHoursPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {ar ? "اتصال LEON نشط" : "LEON Connection Active"}
-          </Badge>
+          {officialSourceAvailable && !error && (
+            <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              {ar ? "اتصال LEON نشط" : "LEON Connection Active"}
+            </Badge>
+          )}
           {report && (
             <Badge
               variant={officialSourceAvailable ? "outline" : "secondary"}
@@ -286,18 +315,18 @@ function CrewHoursPage() {
 
       {/* Summary Cards */}
       {report && (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
           <Card className="bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
-                {ar ? "إجمالي الطاقم" : "Total Crew Members"}
+                {ar ? "أفراد الطاقم" : "Crew Members"}
               </CardTitle>
               <Users className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{report.total_crew}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {ar ? "أفراد مسجلين في الفتره" : "Active during selected period"}
+                {ar ? "الطاقم في التقرير المصفّى" : "Crew in the filtered report"}
               </p>
             </CardContent>
           </Card>
@@ -305,14 +334,29 @@ function CrewHoursPage() {
           <Card className="bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
-                {ar ? "إجمالي الرحلات" : "Total Flights"}
+                {ar ? "سجلات LEON" : "LEON Records"}
+              </CardTitle>
+              <FileSpreadsheet className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{report.records_count}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {ar ? "كل صف أعاده LEON للفترة" : "Every row LEON returned for the period"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">
+                {ar ? "الأرجل المطابقة" : "Matched Legs"}
               </CardTitle>
               <Plane className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{report.total_flights}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {ar ? "رحلة مؤكدة من LEON" : "Confirmed flights in interval"}
+                {ar ? "الصفوف المطابقة للفلاتر النشطة" : "Rows matching the active filters"}
               </p>
             </CardContent>
           </Card>
@@ -325,7 +369,7 @@ function CrewHoursPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{officialTotalsAvailable}</div>
+              <div className="text-2xl font-bold">{report.official_totals_available}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {ar ? "أفراد لديهم إجمالي LEON رسمي" : "Crew members with official LEON totals"}
               </p>
@@ -340,7 +384,7 @@ function CrewHoursPage() {
               <Clock className="h-4 w-4 text-amber-500" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{officialTotalsUnavailable}</div>
+              <div className="text-2xl font-bold">{report.official_totals_unavailable}</div>
               <p className="text-xs text-muted-foreground mt-1" role="status" aria-live="polite">
                 {hasPartialOfficialTotals
                   ? ar
@@ -439,7 +483,7 @@ function CrewHoursPage() {
 
           <div className="space-y-4">
             {report.crew_members.map((crew) => {
-              const isTrnActive = trnOverrides[crew.crew_id] ?? (crew.status === "TRN");
+              const isTrnActive = trnOverrides[crew.crew_id] ?? false;
               const isExpanded = expandedCrew[crew.crew_id] ?? true;
 
               return (
@@ -449,24 +493,23 @@ function CrewHoursPage() {
                     className="flex flex-col gap-3 p-4 bg-muted/30 sm:flex-row sm:items-center sm:justify-between cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => toggleExpand(crew.crew_id)}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 font-bold text-primary">
-                        {crew.name[0]}
-                        {crew.surname[0]}
+                        {crewInitials(crew.display_name)}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-base">
-                            {crew.name} {crew.surname}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <h3 className="min-w-0 flex-1 truncate font-semibold text-base" title={crew.display_name}>
+                            {crew.display_name}
                           </h3>
-                          {crew.person_code && (
+                          {crew.person_code && crew.display_name !== crew.person_code && (
                             <Badge variant="secondary" className="text-xs">
                               {crew.person_code}
                             </Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {crew.position_name || crew.position_type} • {crew.flight_count}{" "}
+                          {displayValue(crew.position_type)} • {crew.flight_count}{" "}
                           {ar ? "رحلات" : "flights"}
                         </p>
                       </div>
@@ -474,22 +517,46 @@ function CrewHoursPage() {
 
                     <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                       {/* TRN Override Toggle */}
-                      <Button
-                        variant={isTrnActive ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleTrn(crew.crew_id)}
-                        className={`h-8 gap-1.5 text-xs ${
-                          isTrnActive ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
-                        }`}
-                      >
-                        <Badge
-                          variant={isTrnActive ? "secondary" : "outline"}
-                          className="px-1 py-0 text-[10px]"
-                        >
-                          TRN
-                        </Badge>
-                        {isTrnActive ? (ar ? "حالة تدريب (TRN)" : "Training (TRN)") : (ar ? "عادي (Normal)" : "Normal")}
-                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={isTrnActive ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => toggleTrn(crew.crew_id)}
+                              className={`h-8 gap-1.5 text-xs ${
+                                isTrnActive ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
+                              }`}
+                              aria-label={
+                                ar
+                                  ? `علامة TRN يدوية ومحلية: ${isTrnActive ? "تدريب" : "عادي"}`
+                                  : `Manual local TRN marker: ${isTrnActive ? "Training" : "Normal"}`
+                              }
+                            >
+                              <Badge
+                                variant={isTrnActive ? "secondary" : "outline"}
+                                className="px-1 py-0 text-[10px]"
+                              >
+                                TRN
+                              </Badge>
+                              {isTrnActive
+                                ? ar
+                                  ? "يدوي · تدريب (TRN)"
+                                  : "Manual · Training (TRN)"
+                                : ar
+                                  ? "يدوي · عادي"
+                                  : "Manual · Normal"}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">
+                              {ar
+                                ? "هذه علامة TRN يدوية ومحلية، وليست من LEON ولا تؤثر على الإجمالي الرسمي."
+                                : "This is a manual local TRN marker; it is not from LEON and does not affect the official total."}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
 
                       <div className="flex items-center gap-2 text-right text-xs">
                         <div>
@@ -543,11 +610,13 @@ function CrewHoursPage() {
                         <table className="w-full text-sm text-left">
                           <thead className="bg-muted/20 text-xs uppercase text-muted-foreground">
                             <tr>
+                              <th className="py-2.5 px-4 font-medium">{ar ? "التاريخ" : "Date"}</th>
                               <th className="py-2.5 px-4 font-medium">{ar ? "الرحلة" : "Flight"}</th>
                               <th className="py-2.5 px-4 font-medium">{ar ? "المغادرة" : "DEP"}</th>
-                              <th className="py-2.5 px-4 font-medium">{ar ? "الوصول" : "ARR"}</th>
-                              <th className="py-2.5 px-4 font-medium">{ar ? "وقت الاقلاع (UTC)" : "Start (UTC)"}</th>
-                              <th className="py-2.5 px-4 font-medium">{ar ? "وقت الهبوط (UTC)" : "End (UTC)"}</th>
+                              <th className="py-2.5 px-4 font-medium">{ar ? "الوصول (ADES)" : "ADES"}</th>
+                              <th className="py-2.5 px-4 font-medium">{ar ? "الإقلاع (OFF) (UTC)" : "OFF (UTC)"}</th>
+                              <th className="py-2.5 px-4 font-medium">{ar ? "الهبوط (ON) (UTC)" : "ON (UTC)"}</th>
+                              <th className="py-2.5 px-4 font-medium">{ar ? "زمن البلوك" : "Block Time"}</th>
                               <th className="py-2.5 px-4 font-medium">{ar ? "الطائرة" : "Aircraft"}</th>
                               <th className="py-2.5 px-4 font-medium">{ar ? "الموقع" : "Position"}</th>
                               <th className="py-2.5 px-4 font-medium">{ar ? "التدريب" : "TRN"}</th>
@@ -556,37 +625,42 @@ function CrewHoursPage() {
                           <tbody className="divide-y divide-border">
                             {crew.flights.map((flight, idx) => (
                               <tr key={`${crew.crew_id}-${flight.flight_nid}-${idx}`} className="hover:bg-muted/10">
-                                <td className="py-2.5 px-4 font-mono font-medium">{flight.flight_nid}</td>
+                                <td className="py-2.5 px-4 font-mono text-xs">{displayValue(flight.flight_date)}</td>
+                                <td className="py-2.5 px-4 font-mono font-medium" title={flight.flight_nid}>
+                                  {displayValue(flight.flight_number)}
+                                </td>
                                 <td className="py-2.5 px-4">
                                   <Badge variant="outline" className="font-mono">
-                                    {flight.departure_airport || "CAI"}
+                                    {displayValue(flight.departure_airport)}
                                   </Badge>
                                 </td>
                                 <td className="py-2.5 px-4">
                                   <Badge variant="outline" className="font-mono">
-                                    {flight.arrival_airport || "MED"}
+                                    {displayValue(flight.arrival_airport)}
                                   </Badge>
                                 </td>
                                 <td className="py-2.5 px-4 text-xs font-mono">
-                                  {flight.start_time_utc.replace("T", " ").replace("Z", "")}
+                                  {displayUtcTime(flight.start_time_utc)}
                                 </td>
                                 <td className="py-2.5 px-4 text-xs font-mono">
-                                  {flight.end_time_utc.replace("T", " ").replace("Z", "")}
+                                  {displayUtcTime(flight.end_time_utc)}
+                                </td>
+                                <td className="py-2.5 px-4 text-xs font-mono">
+                                  {displayValue(flight.block_time)}
                                 </td>
                                 <td className="py-2.5 px-4 text-xs">
-                                  {flight.aircraft_reg || "SU-RSX"}{" "}
-                                  <span className="text-muted-foreground">({flight.aircraft_type || "B738"})</span>
+                                  {displayAircraft(flight.aircraft_reg, flight.aircraft_type)}
                                 </td>
                                 <td className="py-2.5 px-4 text-xs font-medium">
-                                  {flight.position || "CPT"}
+                                  {displayValue(flight.position)}
                                 </td>
                                 <td className="py-2.5 px-4">
-                                  {flight.is_trn || isTrnActive ? (
+                                  {flight.is_trn ? (
                                     <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[11px]">
                                       TRN
                                     </Badge>
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">-</span>
+                                    <span className="text-xs text-muted-foreground">—</span>
                                   )}
                                 </td>
                               </tr>

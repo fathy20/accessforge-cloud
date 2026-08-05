@@ -15,13 +15,39 @@ from .transport import BearerAccessTokenHeaderBuilder, LeonHttpTransport, LeonRa
 MCP_PROTOCOL_VERSION = "2025-03-26"
 MCP_REPORT_TOOL = "get-report-wizard-flight-scope-report"
 
-MCP_REPORT_COLUMNS = (
+REQUIRED_COLUMNS = (
+    "scope_row_unique_id",
     "crew_codes",
-    "crew_names",
     "blockTimeJourneyLog",
-    "blockTimePlan",
 )
+OPTIONAL_COLUMNS = (
+    "crew_names",
+    "crew_position_names",
+    "date_STD_log_UTC",
+    "registration",
+    "acftType",
+    "flightNo",
+    "jl_adep_preferred_code",
+    "jl_ades_preferred_code",
+    "JL_STD_UTC",
+    "JL_STA_UTC",
+    "positioning_crew",
+)
+MCP_REPORT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_COLUMNS
 
+
+class OfficialMcpReport(dict[str, str]):
+    """Official totals plus the validated rows used to build the report.
+
+    The mapping interface preserves the existing ``fetch_official_totals``
+    contract while the row payload lets the service render the authoritative
+    MCP report without a second flight source.
+    """
+
+    def __init__(self, totals: Mapping[str, str], rows: list[Mapping[str, Any]]):
+        super().__init__(totals)
+        self.rows = tuple(dict(row) for row in rows)
+        self.records_count = len(self.rows)
 
 def fetch_official_totals(
     configuration: LeonConfiguration,
@@ -29,8 +55,18 @@ def fetch_official_totals(
     token_provider: LeonAccessTokenProvider,
     from_date: str,
     to_date: str,
-) -> dict[str, str]:
-    """Fetch and aggregate the official LEON Report Wizard block times."""
+) -> OfficialMcpReport:
+    """Fetch the official report while preserving the legacy totals mapping."""
+    return fetch_official_report(configuration, transport, token_provider, from_date, to_date)
+
+def fetch_official_report(
+    configuration: LeonConfiguration,
+    transport: LeonHttpTransport,
+    token_provider: LeonAccessTokenProvider,
+    from_date: str,
+    to_date: str,
+) -> OfficialMcpReport:
+    """Fetch and validate the official LEON Report Wizard rows and totals."""
     mcp_url = _mcp_url(configuration)
     date_filter = {
         "start": f"{_validate_date(from_date)}T00:00:00Z",
@@ -42,6 +78,13 @@ def fetch_official_totals(
     arguments = {
         "dateFilter": date_filter,
         "columnList": list(MCP_REPORT_COLUMNS),
+        "acftNidList": None,
+        "crewMemberNidList": None,
+        "adepLocationNidList": None,
+        "adesLocationNidList": None,
+        "airportLocationNidList": None,
+        "isCanceled": None,
+        "permitsCountryList": None,
     }
 
     for attempt in range(2):
@@ -81,7 +124,8 @@ def fetch_official_totals(
             if attempt == 0:
                 continue
             raise LeonAuthenticationError("LEON MCP authentication failed.")
-        return _aggregate_report_rows(_extract_report_rows(_ensure_rpc_success(response)))
+        rows = _extract_report_rows(_ensure_rpc_success(response))
+        return OfficialMcpReport(_aggregate_report_rows(rows), rows)
 
     raise AssertionError("MCP authentication retry loop exhausted unexpectedly.")
 
@@ -135,17 +179,25 @@ def _parse_rpc_body(body: str) -> Mapping[str, Any]:
     try:
         payload = json.loads(body)
     except (TypeError, ValueError):
-        payload = None
+        payloads: list[Mapping[str, Any]] = []
         for line in body.splitlines():
-            if line.startswith("data:"):
-                try:
-                    payload = json.loads(line[5:].strip())
-                except (TypeError, ValueError):
-                    continue
-                if isinstance(payload, dict):
-                    break
-        if payload is None:
+            if not line.startswith("data:"):
+                continue
+            raw_event = line[5:].strip()
+            if not raw_event or raw_event == "[DONE]":
+                continue
+            try:
+                event_payload = json.loads(raw_event)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(event_payload, dict):
+                payloads.append(event_payload)
+        if not payloads:
             raise LeonResponseError("LEON MCP response was not valid JSON.")
+        payload = next(
+            (event for event in reversed(payloads) if "result" in event or "error" in event),
+            payloads[-1],
+        )
     if not isinstance(payload, dict):
         raise LeonResponseError("LEON MCP response had an invalid shape.")
     return payload
@@ -163,42 +215,70 @@ def _extract_report_rows(result: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     raise LeonResponseError("LEON MCP report response did not contain report rows.")
 
 
-def _find_rows(value: Any) -> list[Mapping[str, Any]] | None:
+def _find_rows(value: Any, *, decode_text: bool = True) -> list[Mapping[str, Any]] | None:
+    if isinstance(value, str):
+        if not decode_text:
+            return None
+        decoded = _decode_embedded_json(value)
+        if decoded is not None:
+            return _find_rows(decoded, decode_text=False)
+        return None
     if isinstance(value, Mapping):
+        # Anchor on crew_codes, not REQUIRED_COLUMNS, so missing required columns reach named validation.
         if "crew_codes" in value:
             return [value]
-        for key in ("data", "rows", "items", "records", "report", "flightScopeReport"):
-            if key in value:
-                rows = _find_rows(value[key])
+        if isinstance(value.get("text"), str) and decode_text:
+            decoded = _decode_embedded_json(value["text"])
+            if decoded is not None:
+                rows = _find_rows(decoded, decode_text=False)
                 if rows is not None:
                     return rows
-        for nested in value.values():
-            rows = _find_rows(nested)
+        for key in ("data", "rows", "items", "records", "report", "flightScopeReport", "resource"):
+            if key in value:
+                rows = _find_rows(value[key], decode_text=decode_text)
+                if rows is not None:
+                    return rows
+        for key, nested in value.items():
+            if key in {"text", "resource"}:
+                continue
+            rows = _find_rows(nested, decode_text=decode_text)
             if rows is not None:
                 return rows
         return None
     if isinstance(value, list):
-        if value and all(isinstance(item, Mapping) and "crew_codes" in item for item in value):
+        if value and all(isinstance(item, Mapping) for item in value) and any("crew_codes" in item for item in value):
             return value
         for item in value:
-            if isinstance(item, Mapping) and item.get("type") == "text":
-                text = item.get("text")
-                if isinstance(text, str):
-                    try:
-                        rows = _find_rows(json.loads(text))
-                    except (TypeError, ValueError):
-                        rows = None
-                    if rows is not None:
-                        return rows
-            rows = _find_rows(item)
+            rows = _find_rows(item, decode_text=decode_text)
             if rows is not None:
                 return rows
     return None
 
 
+def _decode_embedded_json(value: str) -> Any | None:
+    """Decode one JSON layer and one optional nested JSON string layer."""
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(decoded, str):
+        try:
+            return json.loads(decoded)
+        except (TypeError, ValueError):
+            return decoded
+    return decoded
+
+
 def _aggregate_report_rows(rows: list[Mapping[str, Any]]) -> dict[str, str]:
     totals: dict[str, int] = {}
     for row in rows:
+        if not isinstance(row, Mapping):
+            raise LeonContractError("LEON MCP report row had an invalid shape.")
+        for column in REQUIRED_COLUMNS:
+            if column not in row:
+                raise LeonContractError(
+                    f"LEON MCP report row was missing required column '{column}'."
+                )
         codes = row.get("crew_codes")
         if not isinstance(codes, list) or any(not isinstance(code, str) for code in codes):
             raise LeonContractError("LEON MCP report row had invalid crew_codes.")
@@ -206,9 +286,11 @@ def _aggregate_report_rows(rows: list[Mapping[str, Any]]) -> dict[str, str]:
         if block_time in (None, ""):
             continue
         minutes = _parse_block_time(block_time)
+        seen_codes: set[str] = set()
         for code in codes:
             normalized_code = code.strip()
-            if normalized_code:
+            if normalized_code and normalized_code not in seen_codes:
+                seen_codes.add(normalized_code)
                 totals[normalized_code] = totals.get(normalized_code, 0) + minutes
     return {code: _format_minutes(minutes) for code, minutes in totals.items()}
 
@@ -216,9 +298,13 @@ def _aggregate_report_rows(rows: list[Mapping[str, Any]]) -> dict[str, str]:
 def _parse_block_time(value: Any) -> int:
     if not isinstance(value, str):
         raise LeonContractError("LEON MCP report blockTimeJourneyLog was invalid.")
-    match = re.fullmatch(r"(\d{1,3}):(\d{2})", value.strip())
-    if not match or int(match.group(2)) > 59:
+    match = re.fullmatch(r"(\d+):(\d{2})(?::(\d{2}))?", value.strip())
+    if not match or int(match.group(2)) > 59 or (match.group(3) is not None and int(match.group(3)) > 59):
         raise LeonContractError("LEON MCP report blockTimeJourneyLog was invalid.")
+    if match.group(3) is not None and int(match.group(3)) != 0:
+        raise LeonContractError(
+            "LEON MCP report blockTimeJourneyLog carried unsupported non-zero seconds."
+        )
     return int(match.group(1)) * 60 + int(match.group(2))
 
 

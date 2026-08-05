@@ -22,6 +22,10 @@ class LeonContractError(Exception):
     """Raised when a LEON contract cannot be satisfied safely."""
 
 
+class CrewHoursCapabilityError(Exception):
+    """Raised when the official report cannot satisfy a requested filter."""
+
+
 class LeonRateLimitError(LeonResponseError):
     """Raised when LEON rate-limits a request."""
 

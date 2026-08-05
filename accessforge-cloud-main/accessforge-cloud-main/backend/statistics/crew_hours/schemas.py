@@ -14,10 +14,12 @@ class FlightItem(BaseModel):
     flight_number: str | None = None
     departure_airport: str | None = None
     arrival_airport: str | None = None
-    start_time_utc: str
-    end_time_utc: str
+    start_time_utc: str | None = None
+    end_time_utc: str | None = None
     aircraft_reg: str | None = None
     aircraft_type: str | None = None
+    flight_date: str | None = None
+    block_time: str | None = None
     position: str | None = None
     flight_training_type: str | None = None
     is_trn: bool = False
@@ -27,9 +29,9 @@ class FlightItem(BaseModel):
 class CrewMemberSummary(BaseModel):
     crew_id: str
     person_code: str | None = None
-    name: str
-    surname: str
-    position_type: str | None = "Cockpit"
+    display_name: str
+    full_name: str | None = None
+    position_type: str | None = None
     position_name: str | None = None
     status: str = "normal"  # "normal" or "TRN"
     official_total: str | None = None
@@ -45,7 +47,10 @@ class CrewHoursReportResponse(BaseModel):
     source: str = "leon"
     hours_source_status: str = "not_discovered"
     total_crew: int = 0
-    total_flights: int = 0
+    total_flights: int = 0  # Selected rows; records_count is every row LEON returned.
+    records_count: int = 0
+    official_totals_available: int = 0
+    official_totals_unavailable: int = 0
     crew_members: list[CrewMemberSummary] = []
 
 

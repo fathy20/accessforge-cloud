@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text
+from sqlalchemy import Column, String, Unicode, UnicodeText, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text
 from sqlalchemy.orm import relationship
 import enum
 import uuid
@@ -38,10 +38,10 @@ class User(Base):
     hashed_password = Column(String(255))
     
     # Profile fields
-    full_name = Column(String(255))
+    full_name = Column(Unicode(255))
     avatar_url = Column(String(512), nullable=True)
-    department = Column(String(255), nullable=True)
-    job_title = Column(String(255), nullable=True)
+    department = Column(Unicode(255), nullable=True)
+    job_title = Column(Unicode(255), nullable=True)
     phone = Column(String(64), nullable=True)
     employee_id = Column(String(64), nullable=True)
     status = Column(String(32), default="active")
@@ -68,10 +68,10 @@ class Module(Base):
     __tablename__ = "modules"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     key = Column(String(128), unique=True, index=True)
-    name = Column(String(255))
-    description = Column(String(1024), nullable=True)
+    name = Column(Unicode(255))
+    description = Column(Unicode(1024), nullable=True)
     icon = Column(String(128), nullable=True)
-    category = Column(String(128), nullable=True)
+    category = Column(Unicode(128), nullable=True)
     enabled = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
 
@@ -79,7 +79,7 @@ class Upload(Base):
     __tablename__ = "uploads"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
-    original_name = Column(String(512))
+    original_name = Column(Unicode(512))
     storage_path = Column(String(1024))
     kind = Column(Enum(UploadKind))
     mime = Column(String(128))
@@ -100,7 +100,7 @@ class Job(Base):
     output_refs = Column(JSON, default=dict)
     
     logs = Column(JSON, default=list)
-    error_message = Column(Text, nullable=True)
+    error_message = Column(UnicodeText().with_variant(Unicode(), "mssql"), nullable=True)
     progress = Column(Integer, default=0)
     
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -113,9 +113,9 @@ class Project(Base):
     __tablename__ = "projects"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     owner_id = Column(String(36), ForeignKey("users.id"))
-    name = Column(String(255))
+    name = Column(Unicode(255))
     code = Column(String(64), nullable=True)
-    description = Column(Text, nullable=True)
+    description = Column(UnicodeText().with_variant(Unicode(), "mssql"), nullable=True)
     status = Column(String(32), default="active")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -126,7 +126,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
-    actor_name = Column(String(255), nullable=True)
+    actor_name = Column(Unicode(255), nullable=True)
     action = Column(String(128))
     entity = Column(String(128), nullable=True)
     entity_id = Column(String(128), nullable=True)
@@ -138,8 +138,8 @@ class Notification(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     kind = Column(String(64))
-    title = Column(String(255))
-    body = Column(Text, nullable=True)
+    title = Column(Unicode(255))
+    body = Column(UnicodeText().with_variant(Unicode(), "mssql"), nullable=True)
     link = Column(String(512), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

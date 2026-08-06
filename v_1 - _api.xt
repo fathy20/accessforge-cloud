@@ -1,0 +1,83 @@
+                                                                statistics
+                                                                __________
+phase_1(CREW HOURS)
+report --->(HRS OLNY)--->EXTRACT PDF AND COPY  IN THE EXL AND SPARITED 
+_____
+BEFOR
+THIS THE DATA RESORS AND I NEED TAKE THE DATA IN THE API FOR leon.aero AND I HAVE ACSS IN THE API KEY IN THE leon.aero
+_____
+Position type	Name	Surname	Date ADEP [JL][UTC]	Aircraft type	Aircraft	Flight number	ADEP preferred code [JL]	ADES preferred code [JL]	OFF	ON	Block time [JL]
+Cockpit	Mostafa	Hussein	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cabin	Lubna	Abdrabu	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cabin	Neveen	Osama	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cabin	Aysar	Mohamed	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cockpit	Donia	Hatem	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cabin	Mahmoud	Elkhouly	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Maintenance	Mark	Maher	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+Cabin	Dina	Ramadan	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Maintenance	Nader	Gamal	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cockpit	Omar	Saber	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cabin	Mariam	Nabil	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cabin	Marwan	Tarek	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cockpit	Mina	Nashed	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cabin	Bahaa	Ayman	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+Cabin	Tuqa	Magdy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Cabin	Bahaaeldin	Ibrahim	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Maintenance	Mohamed	Magdy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Cabin	Philip	Dahabiy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Cockpit	Salah	Hesham	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Cockpit	Mohamed	Elwy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+Cabin	Adham	Tarek	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+____
+____AFTER
+												
+Position type	Name	Surname	Date	Aircraft	Flight number	ADEP 	ADES	OFF	ON	Block time		
+Cockpit	Sherif	Laz	2026-06-05	SURSB	RSX311	SSH	VKO	15:35	21:25	5:50	No	
+Cockpit	Sherif	Laz	2026-06-06	SURSB	RSX334	VKO	SSH	13:40	19:25	5:45	No	
+Cockpit	Sherif	Laz	2026-06-07	SURSB	RSX337	SSH	VKO	22:15	4:10	5:55	No	
+Cockpit	Sherif	Laz	2026-06-09	SURSA	RSX316	VKO	SSH	3:55	9:40	5:45	No	
+Cockpit	Sherif	Laz	2026-06-09	SURSC	RSX123	SSH	EVN	23:20	2:15	2:55	No	
+Cockpit	Sherif	Laz	2026-06-10	SURSC	RSX124	EVN	SSH	3:30	6:55	3:25	No	
+Cockpit	Sherif	Laz	2026-06-14	SURSD	RSX323	HRG	LED	17:45	23:35	5:50	No	
+Cockpit	Sherif	Laz	2026-06-17	SURSD	RSX322	LED	HRG	22:05	3:40	5:35	No	
+Cockpit	Sherif	Laz	2026-06-19	SURSD	RSX321	HRG	LED	16:50	22:40	5:50	No	
+Cockpit	Sherif	Laz	2026-06-22	SURSA	RSX328	LED	SSH	2:25	8:05	5:40	No	
+Cockpit	Sherif	Laz	2026-06-26	SURSB	RSX321	HRG	LED	16:40	22:20	5:40	No	
+Cockpit	Sherif	Laz	2026-06-29	SURSA	RSX328	LED	SSH	2:10	7:35	5:25	No	
+Not-Active	Sherif	Laz	2026-06-30	SURSB	RSX331	SSH	SVX	17:20	23:05	5:45	PAD	
+Cockpit	Sherif	Laz	2026-06-30	SURSB	RSX332	SVX	SSH	23:55	5:40	5:45	No	
+Sherif	Laz		Jun-26					Total		75:05		
+__
+	Cockpit HRS.Jun.26		
+	Name		Block time
+	Amro	Nasef	
+1	Abdullah	Elshershaby	57:35
+2	Abdulrahman	alabbas	TRN
+3	Adel	Refay	88:30
+	Ahmed	Adawy	TRN
+4	Ahmed	Elmahdy	75:30
+5	Ahmed	Farag	68:55
+6	Ahmed	Kamel	94:40
+7	Ahmed	Okba	63:20
+8	AHMED	SAMY	79:30
+
+___
+every one people
+and i nedd a summery 
+total hr
+__
+and inedd extract the EXL cockpit |Cockpit Summary |Cabin |Cabin Summary
+____
+THIS THE DATA RESORS AND I NEED TAKE THE DATA IN THE API FOR leon.aero AND I HAVE ACSS IN THE API KEY IN THE leon.aero | AND  I NEED CARETE A DASHBORD MODULE AS WEB AND  INEED ADD THE MODULE A A BIG SYSTEM THE 
+AND MY IDEA I NEED BIG SYSTEM IN THE SYSTEM MULTE SECTOR EX: statistics| ENGINRING | INVERTOY |......
+AND I NEED Future ADD A MOUDULE IN THE SECTOR  OR MOUDEL .
+AND  I NEED GOOD IDEA IN TEH MOUDEL IN THE MOUDLE MULTE PHASE -->FRIST PHASE statistics DASHBORD TAKE THE API IN THE LEON AND I NEED 
+FORMAT LIKE THIS  extract the EXL cockpit |Cockpit Summary |Cabin |Cabin Summary
+AND FINSH THE FRIST PHASE---> WELL DO THE NEXT PHASE AND THIS INDEE OVER VIEW IN THE SYSEM AND STONG structures AND I NEED ARCTHER A VERY STRONG.
+__
+and i have scend idea i need take api in the Crew Days 
+i need comper between 2 idea
+__
+api key
+0c95fc513bdac51728f6392d3b7f29c2a8349bd4e29c42b94283e8887b63d70e336cf0f9

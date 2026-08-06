@@ -65,6 +65,35 @@ Reconciliation was run over all 552 flights in June 2026 by aggregating `blockTi
 
 ---
 
+## Positioning (PAD) Legs — Approved Operations Rule
+
+**Decision: PAD / positioning legs ARE included in official Crew Hours totals.**
+Approved as an Operations rule on 2026-08-05.
+
+**Current aggregation behaviour already matches this rule.** No code change was required.
+Aggregation is position-blind by design: it reads only `crew_codes` and
+`blockTimeJourneyLog`, so a positioning leg is summed into the crew member's
+`official_total` exactly like any other leg.
+
+Observed context (live June 2026 report): `PAD` and the tokens `PSN`, `FDP`, `FDPI`,
+`RMP`, `INSP` appear as **values inside `crew_position_names`**, not as separate columns.
+The `positioning_crew` column was an empty array in every row and remains inert.
+
+**Classification is separate from total inclusion.** The tokens above are not declared in
+LEON's role-slot vocabulary, so they remain unclassified (`position_type = null`) and are
+excluded from Cockpit/Cabin filtering. Filtering affects which crew and legs are
+displayed; it never affects whether block time counts.
+
+**Unknown or unclassified role tokens must never cause official block time to be
+excluded from a total.** This applies to the six tokens above and to any future token
+LEON introduces.
+
+**Scope limit:** this decision governs Crew Hours reporting only. It does **not** define
+Crew Days, payroll, allowance, or compensation rules. Those are separate, versioned
+business rules to be approved independently.
+
+---
+
 ## Rejected Alternatives
 
 ### OFFICIAL_GRAPHQL_EXPERIENCE
@@ -91,3 +120,4 @@ Reconciliation was run over all 552 flights in June 2026 by aggregating `blockTi
 | :--- | :--- | :--- |
 | 1.0 | 2026-08-03 | Initial ADR (No official source found due to missing scopes) |
 | 2.0 | 2026-08-03 | **DECIDED: OFFICIAL_MCP_REPORT** post scope grant & Report Wizard June 2026 validation |
+| 3.0 | 2026-08-05 | **Operations rule approved:** positioning (PAD) legs are included in official totals; position classification kept separate from total calculation |

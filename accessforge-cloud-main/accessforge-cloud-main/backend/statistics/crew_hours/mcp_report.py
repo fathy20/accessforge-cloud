@@ -44,8 +44,18 @@ class OfficialMcpReport(dict[str, str]):
     MCP report without a second flight source.
     """
 
-    def __init__(self, totals: Mapping[str, str], rows: list[Mapping[str, Any]]):
+    def __init__(
+        self,
+        totals: Mapping[str, str],
+        rows: list[Mapping[str, Any]],
+        total_minutes: Mapping[str, int] | None = None,
+    ):
         super().__init__(totals)
+        self.total_minutes: Mapping[str, int] = dict(
+            total_minutes
+            if total_minutes is not None
+            else _derive_total_minutes(totals)
+        )
         self.rows = tuple(dict(row) for row in rows)
         self.records_count = len(self.rows)
 
@@ -125,7 +135,8 @@ def fetch_official_report(
                 continue
             raise LeonAuthenticationError("LEON MCP authentication failed.")
         rows = _extract_report_rows(_ensure_rpc_success(response))
-        return OfficialMcpReport(_aggregate_report_rows(rows), rows)
+        formatted_totals, total_minutes = _aggregate_report_rows(rows)
+        return OfficialMcpReport(formatted_totals, rows, total_minutes)
 
     raise AssertionError("MCP authentication retry loop exhausted unexpectedly.")
 
@@ -269,7 +280,9 @@ def _decode_embedded_json(value: str) -> Any | None:
     return decoded
 
 
-def _aggregate_report_rows(rows: list[Mapping[str, Any]]) -> dict[str, str]:
+def _aggregate_report_rows(
+    rows: list[Mapping[str, Any]],
+) -> tuple[dict[str, str], dict[str, int]]:
     totals: dict[str, int] = {}
     for row in rows:
         if not isinstance(row, Mapping):
@@ -292,7 +305,22 @@ def _aggregate_report_rows(rows: list[Mapping[str, Any]]) -> dict[str, str]:
             if normalized_code and normalized_code not in seen_codes:
                 seen_codes.add(normalized_code)
                 totals[normalized_code] = totals.get(normalized_code, 0) + minutes
-    return {code: _format_minutes(minutes) for code, minutes in totals.items()}
+    return (
+        {code: _format_minutes(minutes) for code, minutes in totals.items()},
+        totals,
+    )
+
+
+def _derive_total_minutes(totals: Mapping[str, str]) -> dict[str, int]:
+    """Recover raw minutes for legacy two-argument report construction."""
+    derived: dict[str, int] = {}
+    for code, formatted in totals.items():
+        if not isinstance(formatted, str):
+            continue
+        match = re.fullmatch(r"(\d+):(\d{2})", formatted)
+        if match and int(match.group(2)) <= 59:
+            derived[code] = int(match.group(1)) * 60 + int(match.group(2))
+    return derived
 
 
 def _parse_block_time(value: Any) -> int:

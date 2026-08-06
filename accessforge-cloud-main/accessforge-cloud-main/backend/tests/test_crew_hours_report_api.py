@@ -148,6 +148,7 @@ class TestCrewHoursReportApi(unittest.TestCase):
         self.assertEqual(data["records_count"], 2)
         self.assertEqual(data["official_totals_available"], 2)
         self.assertEqual(data["official_totals_unavailable"], 0)
+        self.assertEqual(data["official_totals_by_position"], {"Cockpit": "181:30"})
         self.assertEqual(fake_client.flight_calls, 0)
         by_code = {member["person_code"]: member for member in data["crew_members"]}
         self.assertEqual(by_code["AKA"]["official_total"], "95:45")
@@ -181,6 +182,7 @@ class TestCrewHoursReportApi(unittest.TestCase):
         self.assertEqual(data["total_crew"], 0)
         self.assertEqual(data["total_flights"], 0)
         self.assertEqual(data["records_count"], 0)
+        self.assertEqual(data["official_totals_by_position"], {})
         self.assertEqual(fake_client.calls, 1)
 
     def test_invalid_report_dates_are_rejected_before_service_invocation(self):

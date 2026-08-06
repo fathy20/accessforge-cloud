@@ -1,11 +1,14 @@
 import os
+import logging
 import shutil
 from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import Session
 from typing import Optional
 import tempfile
@@ -14,6 +17,7 @@ from pydantic import BaseModel
 import traceback
 import json
 
+from .config import get_app_env, should_auto_create_schema
 from .database import engine, Base, get_db
 from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind, Module, Notification
 from .auth import router as auth_router, get_current_user
@@ -21,10 +25,93 @@ from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+APP_ENV = get_app_env()
+
+
+def _create_schema_if_allowed() -> None:
+    if should_auto_create_schema(APP_ENV, engine.dialect.name):
+        Base.metadata.create_all(bind=engine)
+        return
+    if APP_ENV == "production":
+        logger.info("Production schema management: Alembic owns the schema; skipping create_all.")
+    else:
+        logger.info("Automatic schema creation disabled; Alembic owns non-SQLite schemas.")
+
+
+_create_schema_if_allowed()
 
 app = FastAPI(title="Redsea Local Backend")
+
+
+def _database_dialect_only() -> str:
+    dialect = getattr(getattr(engine, "dialect", None), "name", "unknown")
+    return dialect if dialect in {"sqlite", "mssql", "postgresql", "mysql", "oracle"} else "unknown"
+
+
+def _expected_migration_head() -> str | None:
+    """Load the Alembic head from local scripts without touching a database."""
+
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+        config = Config(str(config_path))
+        script_directory = ScriptDirectory.from_config(config)
+        heads = script_directory.get_heads()
+        return heads[0] if len(heads) == 1 else None
+    except Exception:
+        return None
+
+
+def _migration_table_is_missing(exc: Exception) -> bool:
+    if isinstance(exc, NoSuchTableError):
+        return True
+
+    message = str(exc).casefold()
+    if "alembic_version" not in message:
+        return False
+    return any(
+        marker in message
+        for marker in ("no such table", "invalid object name", "does not exist")
+    )
+
+
+def _migration_state(connection) -> str:
+    expected_head = _expected_migration_head()
+    if expected_head is None:
+        return "unavailable"
+
+    try:
+        result = connection.execute(text("SELECT version_num FROM alembic_version"))
+        revisions = [row[0] for row in result.fetchall()]
+    except Exception as exc:
+        return "unmanaged" if _migration_table_is_missing(exc) else "unavailable"
+
+    return "current" if revisions == [expected_head] else "behind"
+
+
+@app.get("/health/live")
+def health_live():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready():
+    dialect = _database_dialect_only()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            migration = _migration_state(connection)
+    except Exception:
+        logger.warning("Database readiness probe failed.")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "dialect": dialect, "migration": "unavailable"},
+        )
+
+    return {"status": "ok", "dialect": dialect, "migration": migration}
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(

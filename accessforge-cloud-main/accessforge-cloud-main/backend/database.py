@@ -1,68 +1,179 @@
-import os
-import logging
-import urllib.parse
+from __future__ import annotations
+
+import re
+import time
+from enum import Enum
+from typing import Any, Callable
+
 from sqlalchemy import MetaData, create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import (
+    DisconnectionError,
+    IntegrityError,
+    OperationalError,
+    ProgrammingError,
+    TimeoutError as SQLAlchemyTimeoutError,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
-from dotenv import load_dotenv
 
-load_dotenv()
+from .config import (
+    ConfigurationError,
+    database_dialect,
+    get_app_env,
+    resolve_database_url,
+    sql_echo_enabled,
+)
 
-logger = logging.getLogger(__name__)
 
-# Support either full DATABASE_URL or individual SQL Server environment variables
-DATABASE_URL = os.getenv("DATABASE_URL")
+class DatabaseFailureKind(Enum):
+    """Coarse database failure classes used by the deferred retry policy."""
 
-if not DATABASE_URL:
-    sql_host = os.getenv("SQL_SERVER_HOST")
-    sql_user = os.getenv("SQL_SERVER_USER")
-    sql_pass = os.getenv("SQL_SERVER_PASSWORD")
-    sql_db = os.getenv("SQL_SERVER_DB", "redsea_db")
-    sql_driver = os.getenv("SQL_SERVER_DRIVER", "ODBC Driver 17 for SQL Server")
-    sql_trusted = os.getenv("SQL_SERVER_TRUSTED_CONNECTION", "").lower() in ("yes", "true", "1")
+    TRANSIENT = "transient"
+    TIMEOUT = "timeout"
+    DEADLOCK = "deadlock"
+    INTEGRITY = "integrity"
+    PROGRAMMING = "programming"
+    UNKNOWN = "unknown"
 
-    if sql_host:
-        if sql_trusted:
-            # Windows Authentication (no username/password needed)
-            params = urllib.parse.quote_plus(
-                f"DRIVER={{{sql_driver}}};SERVER={sql_host};DATABASE={sql_db};"
-                f"Trusted_Connection=yes;TrustServerCertificate=yes;"
-            )
-        elif sql_user and sql_pass:
-            # SQL Server Authentication
-            params = urllib.parse.quote_plus(
-                f"DRIVER={{{sql_driver}}};SERVER={sql_host};DATABASE={sql_db};"
-                f"UID={sql_user};PWD={sql_pass};TrustServerCertificate=yes;"
-            )
-        else:
-            params = None
 
-        if params:
-            DATABASE_URL = f"mssql+pyodbc:///?odbc_connect={params}"
-        else:
-            logger.warning("SQL Server configured but missing credentials — falling back to SQLite")
-            DATABASE_URL = "sqlite:///./redsea.db"
+_DEADLOCK_ERROR_NUMBERS = frozenset({1205})
+_TIMEOUT_ERROR_NUMBERS = frozenset({-2})
+_TRANSIENT_ERROR_NUMBERS = frozenset(
+    {64, 233, 4060, 40197, 40501, 40613, 49918, 49919, 49920, 10928, 10929}
+)
+_KNOWN_ERROR_NUMBERS = (
+    _DEADLOCK_ERROR_NUMBERS | _TIMEOUT_ERROR_NUMBERS | _TRANSIENT_ERROR_NUMBERS
+)
+_ERROR_NUMBER_PATTERN = re.compile(r"(?<!\d)-?\d{1,5}(?!\d)")
+
+
+def _sql_server_error_numbers(exc: BaseException) -> set[int]:
+    """Extract only known SQL Server numbers from the wrapped DB-API error."""
+
+    original = getattr(exc, "orig", None)
+    values: list[Any] = []
+    if original is not None:
+        values.append(original)
+        values.extend(getattr(original, "args", ()))
     else:
-        DATABASE_URL = "sqlite:///./redsea.db"
+        values.extend(getattr(exc, "args", ()))
+    for attribute in ("number", "error_number"):
+        value = getattr(original, attribute, None)
+        if value is not None:
+            values.append(value)
 
-# Build engine based on dialect
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False}
-    )
-    logger.info("Database: SQLite (development)")
-elif DATABASE_URL.startswith("mssql"):
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
-        pool_recycle=3600,         # Prevent connection timeout after 1 hour idle
-        echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-    )
-    logger.info(f"Database: SQL Server ({os.getenv('SQL_SERVER_HOST')})")
-else:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    numbers: set[int] = set()
+    for value in values:
+        if isinstance(value, int) and not isinstance(value, bool):
+            if value in _KNOWN_ERROR_NUMBERS:
+                numbers.add(value)
+            continue
+        for match in _ERROR_NUMBER_PATTERN.finditer(str(value)):
+            number = int(match.group())
+            if number in _KNOWN_ERROR_NUMBERS:
+                numbers.add(number)
+    return numbers
+
+
+def classify_database_error(exc: BaseException) -> DatabaseFailureKind:
+    """Classify a SQLAlchemy/SQL Server failure without making retry decisions."""
+
+    if isinstance(exc, IntegrityError):
+        return DatabaseFailureKind.INTEGRITY
+    if isinstance(exc, ProgrammingError):
+        return DatabaseFailureKind.PROGRAMMING
+    if isinstance(exc, SQLAlchemyTimeoutError):
+        return DatabaseFailureKind.TIMEOUT
+    if isinstance(exc, DisconnectionError):
+        return DatabaseFailureKind.TRANSIENT
+    if isinstance(exc, OperationalError):
+        error_numbers = _sql_server_error_numbers(exc)
+        if error_numbers & _DEADLOCK_ERROR_NUMBERS:
+            return DatabaseFailureKind.DEADLOCK
+        if error_numbers & _TIMEOUT_ERROR_NUMBERS:
+            return DatabaseFailureKind.TIMEOUT
+        if error_numbers & _TRANSIENT_ERROR_NUMBERS:
+            return DatabaseFailureKind.TRANSIENT
+        if getattr(exc, "connection_invalidated", False):
+            return DatabaseFailureKind.TRANSIENT
+    return DatabaseFailureKind.UNKNOWN
+
+
+_RETRYABLE_FAILURES = frozenset(
+    {
+        DatabaseFailureKind.TRANSIENT,
+        DatabaseFailureKind.TIMEOUT,
+        DatabaseFailureKind.DEADLOCK,
+    }
+)
+
+
+def retry_idempotent(
+    operation: Callable[[], Any], *, attempts: int = 3, base_delay: float = 0.1
+) -> Any:
+    """Run a bounded idempotent operation with exponential backoff.
+
+    Callers MUST reset transaction state with ``rollback()`` before each retry.
+    Only TRANSIENT, TIMEOUT, and DEADLOCK failures are retryable. INTEGRITY,
+    PROGRAMMING, and UNKNOWN failures are never retried. This helper must not
+    be used for user creation, permission assignment, artifact creation, job
+    submission, or any write lacking an idempotency key. It is intentionally not
+    wired into application code in this slice.
+    """
+
+    if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1:
+        raise ValueError("attempts must be a positive integer")
+    if base_delay < 0:
+        raise ValueError("base_delay must not be negative")
+
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except Exception as exc:
+            if classify_database_error(exc) not in _RETRYABLE_FAILURES or attempt == attempts - 1:
+                raise
+            time.sleep(base_delay * (2**attempt))
+
+    raise RuntimeError("retry operation exhausted without a result")
+
+
+def engine_options_for(dialect_name: str, app_env: str) -> dict[str, Any]:
+    """Return pure, dialect-specific ``create_engine`` kwargs."""
+
+    if dialect_name == "sqlite":
+        return {"connect_args": {"check_same_thread": False}}
+    if dialect_name == "mssql":
+        return {
+            "pool_pre_ping": True,  # Validate pooled connections before use; idle TCP sessions can be silently dropped.
+            "pool_size": 10,  # Keep ten steady-state concurrent connections available.
+            "max_overflow": 20,  # Allow burst headroom while capping the pool at thirty connections.
+            "pool_recycle": 3600,  # Recycle before common one-hour idle connection timeouts.
+            "pool_timeout": 30,  # Bound pool-exhaustion waits instead of blocking request threads indefinitely.
+            "connect_args": {"timeout": 10},  # Bound the pyodbc login wait so unreachable servers fail fast.
+        }
+    return {"pool_pre_ping": True}
+
+
+def create_database_engine(database_url: str, app_env: str) -> Engine:
+    """Create the application engine without opening a database connection."""
+
+    try:
+        dialect_name = database_dialect(database_url)
+        options = engine_options_for(dialect_name, app_env)
+        if dialect_name == "mssql":
+            options["echo"] = sql_echo_enabled() and app_env != "production"
+        return create_engine(database_url, **options)
+    except Exception:
+        raise ConfigurationError("DATABASE_URL could not initialize a database engine.") from None
+
+
+APP_ENV = get_app_env()
+DATABASE_URL = resolve_database_url(APP_ENV)
+_DIALECT = database_dialect(DATABASE_URL)
+
+# Build the engine without opening a connection. Configuration failures are kept
+# value-free so a malformed or unusable target cannot leak connection details.
+engine = create_database_engine(DATABASE_URL, APP_ENV)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -82,5 +193,8 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

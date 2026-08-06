@@ -155,6 +155,7 @@ The curated list contains 33 additional definitions. Omitted additional Crew Hou
 - The role-specific name columns, for example crew_CPT_name and crew_FO_name, cannot be reinterpreted as a generic scalar first-name or surname field.
 - No report rows were fetched by the captured call. No value-level conclusion is made about nulls, arrays, formats, duplicate IDs, or actual row expansion.
 - comment is optional free text and is not a type contract. A null comment is not evidence that a value is scalar, nullable, or required.
+- **Post-capture live finding (June 2026).** Target 14 is recorded above as UNRESOLVED at the column level, and that remains correct: no PAD / Not-Active column exists. A later read-only report call showed that positioning is expressed as a **value** inside `crew_position_names` — `PAD` appeared 216 times, alongside `PSN`, `FDP`, `FDPI`, `RMP` and `INSP` — while `positioning_crew` was an empty array in every row. None of those six tokens is declared in LEON's role-slot vocabulary, so they map to `position_type = null` and are excluded from Cockpit/Cabin filtering. Their official block time is still included in every total, per the approved Operations rule recorded in `crew-hours-source-decision.md`.
 
 ## What this file does NOT establish
 

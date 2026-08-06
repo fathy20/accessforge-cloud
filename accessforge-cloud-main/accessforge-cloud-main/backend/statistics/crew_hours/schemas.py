@@ -51,6 +51,8 @@ class CrewHoursReportResponse(BaseModel):
     records_count: int = 0
     official_totals_available: int = 0
     official_totals_unavailable: int = 0
+    # Server-computed from integer minutes; clients must never recompute or re-sum these values.
+    official_totals_by_position: dict[str, str] = {}
     crew_members: list[CrewMemberSummary] = []
 
 

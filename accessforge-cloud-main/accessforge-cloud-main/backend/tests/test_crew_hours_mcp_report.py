@@ -93,6 +93,9 @@ class TestMcpReport(unittest.TestCase):
         )
 
         self.assertEqual(totals, {"AKA": "95:45", "AHU": "85:45"})
+        self.assertEqual(dict(totals), {"AKA": "95:45", "AHU": "85:45"})
+        self.assertEqual(totals.get("AKA"), "95:45")
+        self.assertEqual(totals.total_minutes, {"AKA": 5745, "AHU": 5145})
         self.assertEqual(len(transport.calls), 3)
         self.assertEqual(transport.calls[1].url, "https://mcp.test.example/mcp")
         self.assertIn("Accept", transport.calls[1].header_names)
@@ -360,8 +363,162 @@ class TestMcpReport(unittest.TestCase):
         self.assertNotIn("secret-person-payload", str(raised.exception))
         self.assertNotIn("refresh-token", str(raised.exception))
 
+    def test_official_mcp_report_two_argument_constructor_derives_minutes(self):
+        report = OfficialMcpReport({"AKA": "9:45"}, [])
+
+        self.assertEqual(dict(report), {"AKA": "9:45"})
+        self.assertEqual(report.get("AKA"), "9:45")
+        self.assertEqual(report.total_minutes, {"AKA": 585})
+
 
 class TestOfficialTotalsInService(unittest.TestCase):
+    def test_group_totals_use_integer_minutes_for_returned_crew(self):
+        rows = [
+            {
+                "scope_row_unique_id": "scope-cockpit-one",
+                "crew_codes": ["COCKPIT-ONE"],
+                "crew_names": ["Cockpit One"],
+                "crew_position_names": ["CPT"],
+                "blockTimeJourneyLog": "9:45",
+            },
+            {
+                "scope_row_unique_id": "scope-cockpit-two",
+                "crew_codes": ["COCKPIT-TWO"],
+                "crew_names": ["Cockpit Two"],
+                "crew_position_names": ["FO"],
+                "blockTimeJourneyLog": "0:30",
+            },
+            {
+                "scope_row_unique_id": "scope-cabin",
+                "crew_codes": ["CABIN"],
+                "crew_names": ["Cabin Member"],
+                "crew_position_names": ["FA3"],
+                "blockTimeJourneyLog": "1:00",
+            },
+            {
+                "scope_row_unique_id": "scope-maintenance-one",
+                "crew_codes": ["MAINTENANCE-ONE"],
+                "crew_names": ["Maintenance One"],
+                "crew_position_names": ["ENG1"],
+                "blockTimeJourneyLog": "59:59",
+            },
+            {
+                "scope_row_unique_id": "scope-maintenance-two",
+                "crew_codes": ["MAINTENANCE-TWO"],
+                "crew_names": ["Maintenance Two"],
+                "crew_position_names": ["ENG2"],
+                "blockTimeJourneyLog": "0:02",
+            },
+            {
+                "scope_row_unique_id": "scope-unclassified",
+                "crew_codes": ["UNCLASSIFIED"],
+                "crew_names": ["Unclassified Member"],
+                "crew_position_names": [None],
+                "blockTimeJourneyLog": "2:03",
+            },
+            {
+                "scope_row_unique_id": "scope-no-total",
+                "crew_codes": ["NO-TOTAL"],
+                "crew_names": ["No Total Member"],
+                "crew_position_names": ["CPT"],
+                "blockTimeJourneyLog": "1:00",
+            },
+        ]
+
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {
+                        "COCKPIT-ONE": "9:45",
+                        "COCKPIT-TWO": "0:30",
+                        "CABIN": "1:00",
+                        "MAINTENANCE-ONE": "59:59",
+                        "MAINTENANCE-TWO": "0:02",
+                        "UNCLASSIFIED": "2:03",
+                    },
+                    rows,
+                    total_minutes={
+                        "COCKPIT-ONE": 585,
+                        "COCKPIT-TWO": 30,
+                        "CABIN": 60,
+                        "MAINTENANCE-ONE": 3599,
+                        "MAINTENANCE-TWO": 2,
+                        "UNCLASSIFIED": 123,
+                    },
+                )
+
+        report = LiveCrewHoursService(FakeCrewClient()).get_crew_hours_report(
+            "2026-06-01", "2026-06-30"
+        )
+
+        self.assertEqual(
+            report.official_totals_by_position,
+            {
+                "Cockpit": "10:15",
+                "Cabin": "1:00",
+                "Maintenance": "60:01",
+                "Unclassified": "2:03",
+            },
+        )
+        self.assertEqual(report.official_totals_available, 6)
+        self.assertEqual(report.official_totals_unavailable, 1)
+        by_code = {member.person_code: member for member in report.crew_members}
+        self.assertIsNone(by_code["UNCLASSIFIED"].position_type)
+        self.assertIsNone(by_code["NO-TOTAL"].official_total)
+
+    def test_group_total_above_24_hours_keeps_all_hours(self):
+        rows = [{
+            "scope_row_unique_id": "scope-long",
+            "crew_codes": ["LONG"],
+            "crew_position_names": ["CPT"],
+            "blockTimeJourneyLog": "1234:56",
+        }]
+
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {"LONG": "1234:56"},
+                    rows,
+                    total_minutes={"LONG": 1234 * 60 + 56},
+                )
+
+        report = LiveCrewHoursService(FakeCrewClient()).get_crew_hours_report(
+            "2026-06-01", "2026-06-30"
+        )
+        self.assertEqual(report.official_totals_by_position, {"Cockpit": "1234:56"})
+
+    def test_positioning_leg_tokens_remain_included_in_group_total(self):
+        durations = (
+            ("PAD", "1:00"),
+            ("PSN", "2:00"),
+            ("FDP", "3:00"),
+            ("FDPI", "4:00"),
+            ("RMP", "5:00"),
+            ("INSP", "6:00"),
+        )
+        rows = [
+            {
+                "scope_row_unique_id": f"scope-{token.lower()}",
+                "crew_codes": ["POSITIONING"],
+                "crew_position_names": [token],
+                "blockTimeJourneyLog": block_time,
+            }
+            for token, block_time in durations
+        ]
+        formatted_totals, total_minutes = _aggregate_report_rows(rows)
+
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(formatted_totals, rows, total_minutes)
+
+        report = LiveCrewHoursService(FakeCrewClient()).get_crew_hours_report(
+            "2026-06-01", "2026-06-30"
+        )
+
+        self.assertEqual(formatted_totals, {"POSITIONING": "21:00"})
+        self.assertEqual(total_minutes, {"POSITIONING": 1260})
+        self.assertEqual(report.official_totals_by_position, {"Unclassified": "21:00"})
+
     def test_mcp_rows_are_the_report_source_without_graphql_or_manual_adjustment(self):
         class FakeCrewClient:
             def __init__(self):
@@ -853,6 +1010,7 @@ class TestOfficialTotalsInService(unittest.TestCase):
         self.assertEqual(cockpit.total_flights, 1)
         self.assertEqual(cockpit.official_totals_available, 1)
         self.assertEqual(cockpit.official_totals_unavailable, 0)
+        self.assertEqual(cockpit.official_totals_by_position, {"Cockpit": "1:00"})
 
     def test_records_count_differs_from_selected_flights_and_official_counts_are_explicit(self):
         class FakeCrewClient:

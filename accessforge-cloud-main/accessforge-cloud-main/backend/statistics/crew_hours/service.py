@@ -13,7 +13,7 @@ from .errors import (
     LeonTransportError,
 )
 from .leon_client import CrewHoursLeonClient, get_crew_hours_leon_client
-from .mcp_report import OfficialMcpReport
+from .mcp_report import OfficialMcpReport, _format_minutes
 from .schemas import (
     CrewHoursPeriod,
     CrewHoursReportResponse,
@@ -287,6 +287,25 @@ def _build_mcp_report_response(
         for item in crew_summaries
         if isinstance(item.official_total, str) and item.official_total.strip()
     )
+    official_totals_by_position_minutes: dict[str, int] = {}
+    for item in crew_summaries:
+        if (
+            item.person_code is None
+            or not isinstance(item.official_total, str)
+            or not item.official_total.strip()
+        ):
+            continue
+        minutes = report.total_minutes.get(item.person_code)
+        if not isinstance(minutes, int):
+            continue
+        position_type = item.position_type or "Unclassified"
+        official_totals_by_position_minutes[position_type] = (
+            official_totals_by_position_minutes.get(position_type, 0) + minutes
+        )
+    official_totals_by_position = {
+        position_type: _format_minutes(minutes)
+        for position_type, minutes in official_totals_by_position_minutes.items()
+    }
     crew_summaries.sort(key=lambda item: (item.display_name.casefold(), item.person_code or ""))
     return CrewHoursReportResponse(
         period=CrewHoursPeriod(from_date=from_date, to_date=to_date),
@@ -297,6 +316,7 @@ def _build_mcp_report_response(
         records_count=report.records_count,
         official_totals_available=official_totals_available,
         official_totals_unavailable=len(crew_summaries) - official_totals_available,
+        official_totals_by_position=official_totals_by_position,
         crew_members=crew_summaries,
     )
 

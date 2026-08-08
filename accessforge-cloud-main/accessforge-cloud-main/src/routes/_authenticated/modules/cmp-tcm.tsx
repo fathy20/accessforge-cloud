@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { FolderTree } from "lucide-react";
 import { ModuleRunner } from "@/components/app/ModuleRunner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 
 export const Route = createFileRoute("/_authenticated/modules/cmp-tcm")({
   head: () => ({ meta: [{ title: "CMP / TCM · REDSEA" }] }),
@@ -59,7 +59,7 @@ function CmpTcmPage() {
       titleAr="CMP / TCM Tasks"
       description="Extract TCM tasks using an MPD RSD Excel and index them."
       descriptionAr="استخراج مهام TCM باستخدام ملف Excel MPD RSD وفهرستها."
-      icon={FolderTree}
+      icon={MODULE_ICONS.cmp_tcm}
       acceptedKinds={["pdf", "excel"]}
       minFiles={1}
       extraControls={extraControls}

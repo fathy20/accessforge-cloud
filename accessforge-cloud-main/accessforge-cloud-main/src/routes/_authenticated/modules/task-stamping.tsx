@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Stamp } from "lucide-react";
 import { ModuleRunner } from "@/components/app/ModuleRunner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/lib/i18n";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 
 export const Route = createFileRoute("/_authenticated/modules/task-stamping")({
   head: () => ({ meta: [{ title: "Task Stamping · REDSEA" }] }),
@@ -61,7 +61,7 @@ function TaskStampingPage() {
       titleAr="ختم المهام"
       description="Stamp Tail / Station / Date onto selected PDFs."
       descriptionAr="ختم رقم الطائرة والمحطة والتاريخ على ملفات PDF المختارة."
-      icon={Stamp}
+      icon={MODULE_ICONS.task_stamping}
       acceptedKinds={["pdf"]}
       extraControls={extraControls}
       extraInput={{ tail, station, date }}

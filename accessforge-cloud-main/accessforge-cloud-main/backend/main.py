@@ -434,7 +434,7 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
     }
     modules = db.query(Module).order_by(Module.sort_order, Module.key).all()
     return [
-        _module_payload(module)
+        _module_payload(module, permissions)
         for module in modules
         if _module_is_visible(module, permissions, disabled_module_ids)
     ]
@@ -459,14 +459,14 @@ def get_module(
     }
     if not _module_is_visible(module, permissions, disabled_module_ids):
         raise HTTPException(status_code=403, detail="Module access denied")
-    return _module_payload(module)
+    return _module_payload(module, permissions)
 
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else value
 
 
-def _module_payload(module: Module) -> dict:
+def _module_payload(module: Module, permissions: set[str]) -> dict:
     return {
         "key": module.key,
         "name": module.name,
@@ -482,6 +482,7 @@ def _module_payload(module: Module) -> dict:
         "required_view_permission": module.required_view_permission,
         "display_name_key": module.display_name_key,
         "action_permissions": list(module.action_permissions or []),
+        "granted_action_permissions": sorted(set(module.action_permissions or []) & permissions),
     }
 
 

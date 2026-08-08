@@ -1,15 +1,7 @@
 import { FlightPathBackground } from "@/components/FlightPathBackground/FlightPathBackground";
+import { DEFAULT_MODULE_ICON, MODULE_ICONS } from "@/lib/modules/icons";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Plane,
-  FileSearch,
-  Stamp,
-  ListChecks,
-  CheckCircle,
-  GaugeCircle,
-  Layers,
-  BookCopy,
-  Mailbox,
   ShieldCheck,
   Zap,
   Users,
@@ -39,15 +31,20 @@ export const Route = createFileRoute("/")({
 });
 
 const modules = [
-  { icon: FileSearch, title: "Task Extractor", desc: "Extract maintenance tasks from PDFs with OCR fallback." },
-  { icon: Stamp, title: "Task Stamping", desc: "Overlay tail number, station and date on every task page." },
-  { icon: ListChecks, title: "EFFECTIVITY / TCM", desc: "Normalize Excel/CSV effectivity data across fleets." },
-  { icon: CheckCircle, title: "Check Control", desc: "Expand check relations and validate maintenance packages." },
-  { icon: GaugeCircle, title: "Utilization", desc: "Compute hash-verified utilization rows for audit trails." },
-  { icon: Layers, title: "CMP / TCM Tasks", desc: "Index and cross-reference CMP tasks with TCM entries." },
-  { icon: BookCopy, title: "Cover Merge", desc: "Merge cover pages onto task cards, cleanly and reproducibly." },
-  { icon: Mailbox, title: "Mail Merge", desc: "Populate DOCX templates with per-task merge fields." },
+  { key: "task_extractor", title: "Task Extractor", desc: "Extract maintenance tasks from PDFs with OCR fallback." },
+  { key: "task_stamping", title: "Task Stamping", desc: "Overlay tail number, station and date on every task page." },
+  { key: "effectivity", title: "EFFECTIVITY / TCM", desc: "Normalize Excel/CSV effectivity data across fleets." },
+  { key: "check_control", title: "Check Control", desc: "Expand check relations and validate maintenance packages." },
+  { key: "utilization", title: "Utilization", desc: "Compute hash-verified utilization rows for audit trails." },
+  { key: "cmp_tcm", title: "CMP / TCM Tasks", desc: "Index and cross-reference CMP tasks with TCM entries." },
+  { key: "cover_merge", title: "Cover Merge", desc: "Merge cover pages onto task cards, cleanly and reproducibly." },
+  { key: "mail_merge", title: "Mail Merge", desc: "Populate DOCX templates with per-task merge fields." },
 ];
+
+function RegistryModuleIcon({ moduleKey }: { moduleKey: string }) {
+  const Icon = MODULE_ICONS[moduleKey] ?? DEFAULT_MODULE_ICON;
+  return <Icon className="size-5 text-primary-foreground" />;
+}
 
 const features = [
   {
@@ -196,11 +193,11 @@ function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {modules.map((m) => (
               <div
-                key={m.title}
+                key={m.key}
                 className="group rounded-xl border border-border bg-card p-5 hover:border-primary/50 transition-colors"
               >
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center mb-3 group-hover:glow-ring transition-shadow">
-                  <m.icon className="size-5 text-primary-foreground" />
+                  <RegistryModuleIcon moduleKey={m.key} />
                 </div>
                 <h3 className="font-semibold text-sm mb-1">{m.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{m.desc}</p>

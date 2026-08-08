@@ -25,6 +25,7 @@ import { Route as AuthenticatedModulesIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedModulesUtilizationRouteImport } from './routes/_authenticated/modules/utilization'
 import { Route as AuthenticatedModulesTaskStampingRouteImport } from './routes/_authenticated/modules/task-stamping'
 import { Route as AuthenticatedModulesTaskExtractorRouteImport } from './routes/_authenticated/modules/task-extractor'
+import { Route as AuthenticatedModulesMaintenanceRouteImport } from './routes/_authenticated/modules/maintenance'
 import { Route as AuthenticatedModulesMailMergeRouteImport } from './routes/_authenticated/modules/mail-merge'
 import { Route as AuthenticatedModulesEffectivityRouteImport } from './routes/_authenticated/modules/effectivity'
 import { Route as AuthenticatedModulesCrewHoursRouteImport } from './routes/_authenticated/modules/crew-hours'
@@ -119,6 +120,12 @@ const AuthenticatedModulesTaskExtractorRoute =
     path: '/modules/task-extractor',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedModulesMaintenanceRoute =
+  AuthenticatedModulesMaintenanceRouteImport.update({
+    id: '/modules/maintenance',
+    path: '/modules/maintenance',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedModulesMailMergeRoute =
   AuthenticatedModulesMailMergeRouteImport.update({
     id: '/modules/mail-merge',
@@ -200,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/modules/maintenance': typeof AuthenticatedModulesMaintenanceRoute
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
@@ -227,6 +235,7 @@ export interface FileRoutesByTo {
   '/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/modules/maintenance': typeof AuthenticatedModulesMaintenanceRoute
   '/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
@@ -256,6 +265,7 @@ export interface FileRoutesById {
   '/_authenticated/modules/crew-hours': typeof AuthenticatedModulesCrewHoursRoute
   '/_authenticated/modules/effectivity': typeof AuthenticatedModulesEffectivityRoute
   '/_authenticated/modules/mail-merge': typeof AuthenticatedModulesMailMergeRoute
+  '/_authenticated/modules/maintenance': typeof AuthenticatedModulesMaintenanceRoute
   '/_authenticated/modules/task-extractor': typeof AuthenticatedModulesTaskExtractorRoute
   '/_authenticated/modules/task-stamping': typeof AuthenticatedModulesTaskStampingRoute
   '/_authenticated/modules/utilization': typeof AuthenticatedModulesUtilizationRoute
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/modules/crew-hours'
     | '/modules/effectivity'
     | '/modules/mail-merge'
+    | '/modules/maintenance'
     | '/modules/task-extractor'
     | '/modules/task-stamping'
     | '/modules/utilization'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/modules/crew-hours'
     | '/modules/effectivity'
     | '/modules/mail-merge'
+    | '/modules/maintenance'
     | '/modules/task-extractor'
     | '/modules/task-stamping'
     | '/modules/utilization'
@@ -340,6 +352,7 @@ export interface FileRouteTypes {
     | '/_authenticated/modules/crew-hours'
     | '/_authenticated/modules/effectivity'
     | '/_authenticated/modules/mail-merge'
+    | '/_authenticated/modules/maintenance'
     | '/_authenticated/modules/task-extractor'
     | '/_authenticated/modules/task-stamping'
     | '/_authenticated/modules/utilization'
@@ -467,6 +480,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedModulesTaskExtractorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/modules/maintenance': {
+      id: '/_authenticated/modules/maintenance'
+      path: '/modules/maintenance'
+      fullPath: '/modules/maintenance'
+      preLoaderRoute: typeof AuthenticatedModulesMaintenanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/modules/mail-merge': {
       id: '/_authenticated/modules/mail-merge'
       path: '/modules/mail-merge'
@@ -575,6 +595,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedModulesCrewHoursRoute: typeof AuthenticatedModulesCrewHoursRoute
   AuthenticatedModulesEffectivityRoute: typeof AuthenticatedModulesEffectivityRoute
   AuthenticatedModulesMailMergeRoute: typeof AuthenticatedModulesMailMergeRoute
+  AuthenticatedModulesMaintenanceRoute: typeof AuthenticatedModulesMaintenanceRoute
   AuthenticatedModulesTaskExtractorRoute: typeof AuthenticatedModulesTaskExtractorRoute
   AuthenticatedModulesTaskStampingRoute: typeof AuthenticatedModulesTaskStampingRoute
   AuthenticatedModulesUtilizationRoute: typeof AuthenticatedModulesUtilizationRoute
@@ -596,6 +617,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedModulesCrewHoursRoute: AuthenticatedModulesCrewHoursRoute,
   AuthenticatedModulesEffectivityRoute: AuthenticatedModulesEffectivityRoute,
   AuthenticatedModulesMailMergeRoute: AuthenticatedModulesMailMergeRoute,
+  AuthenticatedModulesMaintenanceRoute: AuthenticatedModulesMaintenanceRoute,
   AuthenticatedModulesTaskExtractorRoute:
     AuthenticatedModulesTaskExtractorRoute,
   AuthenticatedModulesTaskStampingRoute: AuthenticatedModulesTaskStampingRoute,

@@ -6,21 +6,23 @@ import { useI18n } from "@/lib/i18n";
 import { sortModules } from "@/lib/modules/registry";
 import { Card, CardContent } from "@/components/ui/card";
 
-export const Route = createFileRoute("/_authenticated/modules/")({
-  head: () => ({ meta: [{ title: "Modules · REDSEA" }] }),
-  component: ModulesIndex,
+export const Route = createFileRoute("/_authenticated/modules/maintenance")({
+  head: () => ({ meta: [{ title: "Maintenance · REDSEA" }] }),
+  component: MaintenancePage,
 });
 
-export function ModulesIndex() {
+export function MaintenancePage() {
   const perms = usePermissions();
   const { t } = useI18n();
-  const modules = sortModules(perms.modules);
+  const modules = sortModules(
+    perms.modules.filter((module) => module.business_area === "maintenance"),
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("nav.modules")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mod.index.description")}</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("mod.maintenance.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("mod.maintenance.status_note")}</p>
       </div>
 
       {perms.loading ? (

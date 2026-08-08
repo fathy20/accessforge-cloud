@@ -36,7 +36,7 @@ finally:
         os.environ["DATABASE_URL"] = _original_database_url
 
 
-BASELINE_REVISION = "c7e4a1b93d42"
+BASELINE_REVISION = "d9f0a2b7c4e1"
 IGNORED_TABLES = frozenset({"alembic_version"})
 
 EXIT_COMPATIBLE = 0

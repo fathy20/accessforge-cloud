@@ -14,7 +14,7 @@ from backend.tools import db_adopt
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "c7e4a1b93d42"
+BASELINE = "d9f0a2b7c4e1"
 
 
 class TestDbAdopt(unittest.TestCase):

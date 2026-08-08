@@ -10,7 +10,7 @@ class TestAccountLifecycle(unittest.TestCase):
     def tearDown(self):
         self.app.close()
 
-    def test_only_active_accounts_can_login(self):
+    def test_only_active_or_password_change_required_accounts_can_login(self):
         from backend.models import UserStatus
 
         blocked_statuses = (
@@ -18,7 +18,6 @@ class TestAccountLifecycle(unittest.TestCase):
             UserStatus.disabled,
             UserStatus.locked,
             UserStatus.rejected,
-            UserStatus.password_change_required,
         )
         for index, account_status in enumerate(blocked_statuses):
             email = f"blocked-{index}@example.test"
@@ -29,6 +28,14 @@ class TestAccountLifecycle(unittest.TestCase):
 
         self.app.create_user("active@example.test", status=UserStatus.active)
         self.assertEqual(self.app.login("active@example.test").status_code, 200)
+
+        self.app.create_user(
+            "password-change-required@example.test",
+            status=UserStatus.password_change_required,
+        )
+        required = self.app.login("password-change-required@example.test")
+        self.assertEqual(required.status_code, 200)
+        self.assertTrue(required.json()["must_change_password"])
 
     def test_wrong_password_is_checked_before_status_gate(self):
         from backend.models import UserStatus

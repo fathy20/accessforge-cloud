@@ -1,11 +1,12 @@
 import uuid
+from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .auth import get_current_user
+from .auth import generate_temporary_password, reset_login_rate_limit
 from .database import get_db
 from .models import (
     AppRole,
@@ -17,19 +18,15 @@ from .models import (
     UserRole,
     UserStatus,
 )
-from .rbac.permissions import get_effective_permissions, record_audit, require_permission
+from .rbac.permissions import (
+    get_effective_permissions,
+    has_permission,
+    record_audit,
+    require_permission,
+)
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-def check_admin(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Legacy coarse dependency kept for non-route callers during the transition."""
-
-    user_roles = [role.role for role in current_user.roles]
-    if AppRole.super_admin not in user_roles and AppRole.admin not in user_roles:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user
 
 
 class StatusUpdate(BaseModel):
@@ -41,6 +38,12 @@ class RoleUpdate(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
+    roles: List[str]
+
+
+class AdminUserCreate(BaseModel):
+    email: str
+    full_name: str | None = None
     roles: List[str]
 
 
@@ -57,6 +60,10 @@ def _role_values(user: User) -> list[str]:
     return [str(_enum_value(role.role)) for role in user.roles]
 
 
+def _has_super_admin_role(user: User) -> bool:
+    return any(role.role == AppRole.super_admin for role in user.roles)
+
+
 def _parse_roles(role_values: List[str]) -> list[AppRole]:
     parsed: list[AppRole] = []
     invalid: list[str] = []
@@ -71,6 +78,24 @@ def _parse_roles(role_values: List[str]) -> list[AppRole]:
     if invalid:
         raise HTTPException(status_code=400, detail=f"Unknown role: {invalid[0]}")
     return parsed
+
+
+def _require_super_admin_role_permission(
+    db: Session,
+    current_user: User,
+    old_roles: set[AppRole],
+    new_roles: set[AppRole],
+) -> None:
+    role_changed = (AppRole.super_admin in old_roles) != (AppRole.super_admin in new_roles)
+    if role_changed and not has_permission(
+        db,
+        current_user,
+        "admin.roles.manage_super_admin",
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Super-admin role changes require the admin.roles.manage_super_admin permission",
+        )
 
 
 def _module_payload(module: Module, *, include_id: bool = True) -> dict:
@@ -142,6 +167,23 @@ def update_user_status(
     }:
         raise HTTPException(status_code=409, detail="You cannot disable or reject your own account")
 
+    target_has_super_admin = _has_super_admin_role(user)
+    if target_has_super_admin and new_status != UserStatus.active:
+        active_super_admins = (
+            db.query(User.id)
+            .select_from(User)
+            .join(UserRole, User.id == UserRole.user_id)
+            .filter(
+                UserRole.role == AppRole.super_admin,
+                User.status == UserStatus.active,
+                User.id != user.id,
+            )
+            .distinct()
+            .count()
+        )
+        if active_super_admins == 0:
+            raise HTTPException(status_code=409, detail="The last active super-admin cannot be deactivated")
+
     old_status = user.status
     if old_status != new_status:
         user.status = new_status
@@ -183,6 +225,7 @@ def update_user_roles(
     new_roles = _parse_roles(payload.roles)
     old_roles = {role.role for role in user.roles}
     new_role_set = set(new_roles)
+    _require_super_admin_role_permission(db, current_user, old_roles, new_role_set)
     removes_super_admin = AppRole.super_admin in old_roles and AppRole.super_admin not in new_role_set
 
     if removes_super_admin and current_user.id == user.id:
@@ -233,6 +276,7 @@ def approve_user(
         raise HTTPException(status_code=400, detail="At least one role is required")
 
     old_roles = {role.role for role in user.roles}
+    _require_super_admin_role_permission(db, current_user, old_roles, set(new_roles))
     removes_super_admin = AppRole.super_admin in old_roles and AppRole.super_admin not in set(new_roles)
     if removes_super_admin:
         super_admin_assignments = (
@@ -265,6 +309,127 @@ def approve_user(
         "user_id": user_id,
         "new_status": UserStatus.active.value,
         "roles": [role.value for role in new_roles],
+    }
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def create_admin_user(
+    payload: AdminUserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin.users.manage")),
+):
+    if db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(status_code=409, detail="Email already registered")
+    if not payload.roles:
+        raise HTTPException(status_code=400, detail="At least one role is required")
+
+    new_roles = _parse_roles(payload.roles)
+    if not new_roles:
+        raise HTTPException(status_code=400, detail="At least one role is required")
+    _require_super_admin_role_permission(db, current_user, set(), set(new_roles))
+
+    temporary_password, hashed_password = generate_temporary_password()
+    user = User(
+        email=payload.email,
+        full_name=payload.full_name,
+        hashed_password=hashed_password,
+        status=UserStatus.password_change_required,
+        password_changed_at=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    db.flush()
+    for role in new_roles:
+        db.add(UserRole(user_id=user.id, role=role))
+
+    role_values = [role.value for role in new_roles]
+    record_audit(
+        db,
+        current_user,
+        "admin_user_creation",
+        "user",
+        user.id,
+        email=user.email,
+        roles=role_values,
+    )
+    for role in new_roles:
+        record_audit(db, current_user, "role_assignment", "user", user.id, role=role)
+    db.commit()
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "status": _enum_value(user.status),
+        "roles": role_values,
+        "temporary_password": temporary_password,
+    }
+
+
+@router.post("/users/{user_id}/unlock")
+def unlock_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin.users.manage")),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.status != UserStatus.locked:
+        raise HTTPException(status_code=400, detail="User is not locked")
+
+    user.status = UserStatus.active
+    user.failed_login_count = 0
+    user.locked_at = None
+    record_audit(db, current_user, "account_unlock", "user", user.id)
+    db.commit()
+    reset_login_rate_limit(user.email)
+    return {
+        "status": "success",
+        "user_id": user.id,
+        "new_status": UserStatus.active.value,
+    }
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("admin.users.manage")),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if _has_super_admin_role(user) and not has_permission(
+        db,
+        current_user,
+        "admin.roles.manage_super_admin",
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Resetting a super-admin password requires the admin.roles.manage_super_admin permission",
+        )
+    if user.status in {UserStatus.rejected, UserStatus.pending_approval}:
+        raise HTTPException(status_code=400, detail="Password reset is not available for this account status")
+
+    temporary_password, hashed_password = generate_temporary_password()
+    user.hashed_password = hashed_password
+    user.password_changed_at = datetime.now(timezone.utc)
+    user.failed_login_count = 0
+    user.locked_at = None
+    user.status = UserStatus.password_change_required
+    record_audit(
+        db,
+        current_user,
+        "password_reset",
+        "user",
+        user.id,
+        target_status=UserStatus.password_change_required,
+    )
+    db.commit()
+    reset_login_rate_limit(user.email)
+    return {
+        "status": "success",
+        "user_id": user.id,
+        "temporary_password": temporary_password,
     }
 
 

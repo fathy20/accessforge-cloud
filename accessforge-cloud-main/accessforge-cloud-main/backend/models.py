@@ -78,6 +78,10 @@ class User(Base):
         ),
         default=UserStatus.active,
     )
+    failed_login_count = Column(Integer, default=0, nullable=False, server_default="0")
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

@@ -55,8 +55,11 @@ def get_app_env(environment: Mapping[str, str] | None = None) -> AppEnv:
     return cast(AppEnv, value)
 
 
-def _read_flag(environment: Mapping[str, str], name: str) -> bool:
-    return environment.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+def _read_flag(environment: Mapping[str, str], name: str, default: bool = False) -> bool:
+    value = environment.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def sql_echo_enabled(environment: Mapping[str, str] | None = None) -> bool:
@@ -195,3 +198,4 @@ def resolve_database_url(
 
 APP_ENV: AppEnv = get_app_env()
 DATABASE_URL: str = resolve_database_url(APP_ENV)
+SELF_SIGNUP_ENABLED: bool = _read_flag(os.environ, "SELF_SIGNUP_ENABLED", default=True)

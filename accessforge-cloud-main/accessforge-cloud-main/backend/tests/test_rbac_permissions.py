@@ -151,7 +151,7 @@ class TestRbacPermissions(unittest.TestCase):
                 session.query(UserRole).count(),
             )
 
-        self.assertEqual(before, (9, 17, 55, 0, 0))
+        self.assertEqual(before, (9, 18, 56, 0, 0))
         self.assertEqual(middle, before)
         self.assertEqual(after, before)
 

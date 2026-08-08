@@ -166,6 +166,7 @@ ADMIN_PERMISSION_KEYS: tuple[str, ...] = (
     "admin.users.view",
     "admin.users.manage",
     "admin.roles.manage",
+    "admin.roles.manage_super_admin",
     "admin.modules.manage",
     "admin.audit.view",
 )
@@ -174,6 +175,11 @@ _ADMIN_PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("admin.users.view", "View user accounts.", BusinessArea.admin),
     PermissionDefinition("admin.users.manage", "Approve, reject, enable, or disable users.", BusinessArea.admin),
     PermissionDefinition("admin.roles.manage", "Assign and remove application roles.", BusinessArea.admin),
+    PermissionDefinition(
+        "admin.roles.manage_super_admin",
+        "Grant or revoke the super-admin role.",
+        BusinessArea.admin,
+    ),
     PermissionDefinition("admin.modules.manage", "Manage the module registry projection.", BusinessArea.admin),
     PermissionDefinition("admin.audit.view", "View audit events.", BusinessArea.admin),
 )
@@ -196,7 +202,10 @@ ALL_MODULE_PERMISSION_KEYS: frozenset[str] = frozenset(
 
 ROLE_PERMISSION_DEFAULTS: dict[AppRole, frozenset[str]] = {
     AppRole.super_admin: frozenset(PERMISSION_KEYS),
-    AppRole.admin: frozenset(set(ADMIN_PERMISSION_KEYS) | set(ALL_MODULE_PERMISSION_KEYS)),
+    AppRole.admin: frozenset(
+        (set(ADMIN_PERMISSION_KEYS) - {"admin.roles.manage_super_admin"})
+        | set(ALL_MODULE_PERMISSION_KEYS)
+    ),
     AppRole.engineer: frozenset(ALL_MODULE_PERMISSION_KEYS),
     AppRole.viewer: MODULE_VIEW_PERMISSION_KEYS,
     AppRole.guest: frozenset(),

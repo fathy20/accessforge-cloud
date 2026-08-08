@@ -27,14 +27,26 @@ class TestStatisticsModuleRegistration(unittest.TestCase):
 
         import backend.database as database
         import backend.main as main
+        from backend.auth import get_password_hash
+        from backend.models import AppRole, User, UserRole
 
         cls.database = database
         cls.main = main
+        with database.SessionLocal() as session:
+            admin = User(
+                email="statistics-admin@example.test",
+                hashed_password=get_password_hash("STATISTICS_TEST_ONLY_PASSWORD"),
+                full_name="Statistics Test Admin",
+            )
+            session.add(admin)
+            session.flush()
+            session.add(UserRole(user_id=admin.id, role=AppRole.super_admin))
+            session.commit()
         cls.client_context = TestClient(main.app)
         cls.client = cls.client_context.__enter__()
         login = cls.client.post(
             "/api/auth/login",
-            json={"email": "admin@redsea.com", "password": "password"},
+            json={"email": "statistics-admin@example.test", "password": "STATISTICS_TEST_ONLY_PASSWORD"},
         )
         login.raise_for_status()
         cls.headers = {"Authorization": f"Bearer {login.json()['access_token']}"}

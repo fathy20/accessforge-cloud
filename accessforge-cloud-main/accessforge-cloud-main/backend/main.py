@@ -19,7 +19,7 @@ import json
 
 from .config import get_app_env, should_auto_create_schema
 from .database import engine, Base, get_db
-from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind, Module, Notification
+from .models import User, Upload, Job, JobStatus, UploadKind, Module, Notification
 from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
@@ -432,18 +432,6 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
 @app.on_event("startup")
 def startup_db_seed():
     db = next(get_db())
-    # Create a default user if none exists
-    if not db.query(User).first():
-        from .auth import get_password_hash
-        admin = User(email="admin@redsea.com", hashed_password=get_password_hash("password"), full_name="Local Admin")
-        db.add(admin)
-        db.commit()
-        db.refresh(admin)
-        role = UserRole(user_id=admin.id, role=AppRole.super_admin)
-        db.add(role)
-        db.commit()
-        print("Created default user: admin@redsea.com / password")
-        
     # Seed default modules
     default_modules = [
         {"key": "task_extractor", "name": "Task Extractor", "category": "PDF Processing", "enabled": True},

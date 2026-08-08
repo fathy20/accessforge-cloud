@@ -24,9 +24,12 @@ class RegisterRequest(BaseModel):
     full_name: Optional[str] = "User"
 
 # Authentication config
+MIN_JWT_SECRET_KEY_LENGTH = 32
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY environment variable is required")
+if len(SECRET_KEY) < MIN_JWT_SECRET_KEY_LENGTH:
+    raise ValueError("JWT_SECRET_KEY must be at least 32 characters long")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 

@@ -30,3 +30,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3

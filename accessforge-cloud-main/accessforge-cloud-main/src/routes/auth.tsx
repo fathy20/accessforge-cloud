@@ -98,28 +98,6 @@ function AuthPage() {
     }
   };
 
-  const isDev = import.meta.env.DEV;
-
-  const demoLogin = async () => {
-    setLoading(true);
-    try {
-      // Offline local mode fallback quick sign in
-      const data = await ApiClient.fetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@redsea.com", password: "password" }),
-      });
-      if (data.access_token) {
-        ApiClient.setToken(data.access_token);
-      }
-      toast.success("Signed in with demo account!");
-      navigate({ to: "/dashboard", replace: true });
-    } catch (err) {
-      toast.error("Demo sign in failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div 
       className="dark min-h-screen w-full flex items-center justify-center p-4 relative"
@@ -202,22 +180,6 @@ function AuthPage() {
             </TabsContent>
           </Tabs>
 
-          {isDev && (
-            <>
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                  <span className="bg-card px-2 text-muted-foreground">dev only</span>
-                </div>
-              </div>
-
-              <Button type="button" variant="outline" className="w-full" onClick={demoLogin} disabled={loading}>
-                🧪 Quick Demo Login (Admin)
-              </Button>
-            </>
-          )}
         </div>
       </div>
     </div>
@@ -251,4 +213,3 @@ function Field({
     </div>
   );
 }
-

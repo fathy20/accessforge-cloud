@@ -15,7 +15,7 @@ _API_TEMP_DB = _API_TEMP_DIR / "api.db"
 _original_database_url = os.environ.get("DATABASE_URL")
 _original_jwt_secret = os.environ.get("JWT_SECRET_KEY")
 os.environ["DATABASE_URL"] = f"sqlite:///{_API_TEMP_DB.as_posix()}"
-os.environ["JWT_SECRET_KEY"] = _original_jwt_secret or "test-secret-key-for-ci"
+os.environ["JWT_SECRET_KEY"] = _original_jwt_secret or "test-secret-key-for-ci-only-32-chars"
 # Keep this API test deterministic: never load live LEON credentials during collection.
 for _name in ("LEON_BASE_URL", "LEON_REFRESH_TOKEN", "LEON_MCP_URL", "LEON_TIMEOUT_SECONDS"):
     os.environ[_name] = ""

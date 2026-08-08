@@ -46,3 +46,10 @@ storage_data/
 
 # Local SQLite artifact — never commit
 backend/redsea.db
+
+# Environment files
+!.env.example
+
+# Local database files
+*.sqlite
+*.sqlite3

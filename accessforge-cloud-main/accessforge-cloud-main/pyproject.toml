@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Keep test discovery anchored to the backend test suite from the project root.
+testpaths = ["backend/tests"]
+# Make the project root importable so `import backend...` works from any cwd.
+pythonpath = ["."]

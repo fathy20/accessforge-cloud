@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Unicode, UnicodeText, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text
+from sqlalchemy import CheckConstraint, Column, String, Unicode, UnicodeText, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 import uuid
@@ -15,6 +15,25 @@ class AppRole(str, enum.Enum):
     engineer = "engineer"
     viewer = "viewer"
     guest = "guest"
+
+class UserStatus(str, enum.Enum):
+    pending_approval = "pending_approval"
+    active = "active"
+    disabled = "disabled"
+    locked = "locked"
+    rejected = "rejected"
+    password_change_required = "password_change_required"
+
+class BusinessArea(str, enum.Enum):
+    crew = "crew"
+    maintenance = "maintenance"
+    stores = "stores"
+    admin = "admin"
+
+class ModuleStatus(str, enum.Enum):
+    active = "active"
+    frozen = "frozen"
+    hidden = "hidden"
 
 class JobStatus(str, enum.Enum):
     queued = "queued"
@@ -33,6 +52,12 @@ class UploadKind(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_approval', 'active', 'disabled', 'locked', 'rejected', 'password_change_required')",
+            name="ck_users_status",
+        ),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     email = Column(String(255), unique=True, index=True)
     hashed_password = Column(String(255))
@@ -44,7 +69,15 @@ class User(Base):
     job_title = Column(Unicode(255), nullable=True)
     phone = Column(String(64), nullable=True)
     employee_id = Column(String(64), nullable=True)
-    status = Column(String(32), default="active")
+    status = Column(
+        Enum(
+            UserStatus,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_users_status",
+        ),
+        default=UserStatus.active,
+    )
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -66,6 +99,16 @@ class UserRole(Base):
 
 class Module(Base):
     __tablename__ = "modules"
+    __table_args__ = (
+        CheckConstraint(
+            "business_area IN ('crew', 'maintenance', 'stores', 'admin')",
+            name="ck_modules_business_area",
+        ),
+        CheckConstraint(
+            "module_status IN ('active', 'frozen', 'hidden')",
+            name="ck_modules_module_status",
+        ),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     key = Column(String(128), unique=True, index=True)
     name = Column(Unicode(255))
@@ -74,6 +117,72 @@ class Module(Base):
     category = Column(Unicode(128), nullable=True)
     enabled = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
+    business_area = Column(
+        Enum(
+            BusinessArea,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_modules_business_area",
+        ),
+        nullable=True,
+    )
+    route = Column(String(255), nullable=True)
+    module_status = Column(
+        Enum(
+            ModuleStatus,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_modules_module_status",
+        ),
+        default=ModuleStatus.active,
+        nullable=True,
+    )
+    required_view_permission = Column(String(128), nullable=True)
+    display_name_key = Column(String(128), nullable=True)
+    action_permissions = Column(JSON, default=list)
+
+class Permission(Base):
+    __tablename__ = "permissions"
+    __table_args__ = (
+        CheckConstraint(
+            "business_area IN ('crew', 'maintenance', 'stores', 'admin')",
+            name="ck_permissions_business_area",
+        ),
+    )
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    key = Column(String(128), unique=True, index=True, nullable=False)
+    description = Column(Unicode(1024), nullable=True)
+    business_area = Column(
+        Enum(
+            BusinessArea,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_permissions_business_area",
+        ),
+        nullable=True,
+    )
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        UniqueConstraint("role", "permission_key"),
+        CheckConstraint(
+            "role IN ('super_admin', 'admin', 'engineer', 'viewer', 'guest')",
+            name="ck_role_permissions_role",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    role = Column(
+        Enum(
+            AppRole,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_role_permissions_role",
+        ),
+        nullable=False,
+    )
+    permission_key = Column(String(128), index=True, nullable=False)
 
 class Upload(Base):
     __tablename__ = "uploads"

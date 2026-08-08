@@ -37,6 +37,7 @@ import backend.models  # noqa: F401
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG_PATH = REPOSITORY_ROOT / "alembic.ini"
 BASELINE_REVISION = "a4fcbd8f8388"
+CURRENT_HEAD = "c7e4a1b93d42"
 BASELINE_PATH = REPOSITORY_ROOT / "alembic" / "versions" / "a4fcbd8f8388_current_schema_baseline.py"
 APP_TABLES = frozenset(Base.metadata.tables)
 
@@ -321,7 +322,7 @@ class TestMigrationIntegrity(_TemporarySQLiteTestCase):
     def test_exactly_one_alembic_head_exists(self):
         script_directory = ScriptDirectory.from_config(Config(str(ALEMBIC_CONFIG_PATH)))
 
-        self.assertEqual(script_directory.get_heads(), [BASELINE_REVISION])
+        self.assertEqual(script_directory.get_heads(), [CURRENT_HEAD])
 
     def test_importing_migration_revision_does_not_import_backend_main(self):
         database_url = self._temporary_sqlite_url("import-only.sqlite")

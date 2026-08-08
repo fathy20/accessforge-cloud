@@ -21,7 +21,9 @@ EXPECTED_TABLES = {
     "module_access",
     "modules",
     "notifications",
+    "permissions",
     "projects",
+    "role_permissions",
     "uploads",
     "user_invitations",
     "user_roles",
@@ -85,7 +87,7 @@ engine.dispose()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(result["status"], "created")
         self.assertTrue(result["migrations_applied"])
-        self.assertEqual(result["final_revision"], "a4fcbd8f8388")
+        self.assertEqual(result["final_revision"], "c7e4a1b93d42")
         self.assertEqual(self._sqlite_tables(path), EXPECTED_TABLES)
         self.assertFalse(self.fallback_path.exists())
         connection = sqlite3.connect(path)

@@ -12,7 +12,8 @@ import time
 from collections import defaultdict
 
 from .database import get_db
-from .models import User, UserRole, AppRole
+from .models import User, UserStatus
+from .rbac.permissions import record_audit
 
 class LoginRequest(BaseModel):
     email: str
@@ -69,6 +70,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
+    if user.status != UserStatus.active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
     return user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -89,12 +92,38 @@ def _check_rate_limit(email: str):
 def login_for_access_token(data: LoginRequest, db: Session = Depends(get_db)):
     _check_rate_limit(data.email)
     user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    credentials_valid = bool(user and verify_password(data.password, user.hashed_password))
+    if not credentials_valid:
+        record_audit(
+            db,
+            None,
+            "login_failure",
+            "user",
+            user.id if user is not None else None,
+            reason="invalid_credentials",
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.status != UserStatus.active:
+        record_audit(
+            db,
+            user,
+            "login_failure",
+            "user",
+            user.id,
+            reason="inactive_account",
+            status=user.status,
+        )
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
+
+    record_audit(db, user, "login_success", "user", user.id)
+    db.commit()
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -102,26 +131,27 @@ def login_for_access_token(data: LoginRequest, db: Session = Depends(get_db)):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/register")
+@router.post("/register", status_code=status.HTTP_202_ACCEPTED)
 def register_user(data: RegisterRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if user:
         raise HTTPException(status_code=409, detail="Email already registered")
 
     hashed_password = get_password_hash(data.password)
-    user = User(email=data.email, hashed_password=hashed_password, full_name=data.full_name or "User")
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    new_role = UserRole(user_id=user.id, role=AppRole.guest)
-    db.add(new_role)
-    db.commit()
-        
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    user = User(
+        email=data.email,
+        hashed_password=hashed_password,
+        full_name=data.full_name or "User",
+        status=UserStatus.pending_approval,
     )
-    return {"access_token": access_token, "token_type": "bearer", "id": user.id, "email": user.email}
+    db.add(user)
+    db.flush()
+    record_audit(db, user, "signup", "user", user.id)
+    db.commit()
+    return {
+        "status": UserStatus.pending_approval.value,
+        "message": "Registration request is pending approval.",
+    }
 
 @router.get("/me")
 def read_users_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

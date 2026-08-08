@@ -33,13 +33,26 @@ class TestCheckControlApi(unittest.TestCase):
 
         import backend.database as database
         import backend.main as main
+        from backend.auth import get_password_hash
+        from backend.models import AppRole, User, UserRole, UserStatus
 
         cls.database = database
         cls.main = main
+        with database.SessionLocal() as session:
+            user = User(
+                email="api-test@example.com",
+                hashed_password=get_password_hash("test-password"),
+                full_name="API Test",
+                status=UserStatus.active,
+            )
+            session.add(user)
+            session.flush()
+            session.add(UserRole(user_id=user.id, role=AppRole.engineer))
+            session.commit()
         cls.client = TestClient(main.app)
         auth = cls.client.post(
-            "/api/auth/register",
-            json={"email": "api-test@example.com", "password": "test-password", "full_name": "API Test"},
+            "/api/auth/login",
+            json={"email": "api-test@example.com", "password": "test-password"},
         )
         auth.raise_for_status()
         cls.headers = {"Authorization": f"Bearer {auth.json()['access_token']}"}

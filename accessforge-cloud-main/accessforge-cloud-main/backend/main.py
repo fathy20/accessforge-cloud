@@ -19,11 +19,23 @@ import json
 
 from .config import get_app_env, should_auto_create_schema
 from .database import engine, Base, get_db
-from .models import User, Upload, Job, JobStatus, UploadKind, Module, Notification
+from .models import (
+    Job,
+    JobStatus,
+    Module,
+    ModuleAccess,
+    ModuleStatus,
+    Notification,
+    Upload,
+    UploadKind,
+    User,
+)
 from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
+from .rbac.permissions import get_effective_permissions
+from .tools.sync_registry import sync_registry
 
 logger = logging.getLogger(__name__)
 APP_ENV = get_app_env()
@@ -413,18 +425,77 @@ def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Dep
 # ---------------------------------------------
 @app.get("/api/modules")
 def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # In a real app we'd fetch from DB. Let's return the hardcoded list for now to unblock UI
+    permissions = get_effective_permissions(db, current_user)
+    disabled_module_ids = {
+        module_id
+        for (module_id,) in db.query(ModuleAccess.module_id)
+        .filter(ModuleAccess.user_id == current_user.id, ModuleAccess.enabled == False)  # noqa: E712
+        .all()
+    }
+    modules = db.query(Module).order_by(Module.sort_order, Module.key).all()
     return [
-        {"key": "task_extractor", "name": "Task Extractor", "enabled": True},
-        {"key": "task_stamping", "name": "Task Stamping", "enabled": True},
-        {"key": "effectivity", "name": "Effectivity / TCM", "enabled": True},
-        {"key": "check_control", "name": "Check Control", "enabled": True},
-        {"key": "utilization", "name": "Utilization", "enabled": True},
-        {"key": "cmp_tcm", "name": "CMP / TCM", "enabled": True},
-        {"key": "cover_merge", "name": "Cover Merge", "enabled": True},
-        {"key": "mail_merge", "name": "Mail Merge", "enabled": True},
-        {"key": "crew_hours", "name": "Crew Hours", "enabled": True},
+        _module_payload(module)
+        for module in modules
+        if _module_is_visible(module, permissions, disabled_module_ids)
     ]
+
+
+@app.get("/api/modules/{module_key}")
+def get_module(
+    module_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    module = db.query(Module).filter(Module.key == module_key).first()
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    permissions = get_effective_permissions(db, current_user)
+    disabled_module_ids = {
+        module_id
+        for (module_id,) in db.query(ModuleAccess.module_id)
+        .filter(ModuleAccess.user_id == current_user.id, ModuleAccess.enabled == False)  # noqa: E712
+        .all()
+    }
+    if not _module_is_visible(module, permissions, disabled_module_ids):
+        raise HTTPException(status_code=403, detail="Module access denied")
+    return _module_payload(module)
+
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else value
+
+
+def _module_payload(module: Module) -> dict:
+    return {
+        "key": module.key,
+        "name": module.name,
+        "description": module.description,
+        "icon": module.icon,
+        "category": module.category,
+        "enabled": bool(module.enabled),
+        "sort_order": module.sort_order,
+        "business_area": _enum_value(module.business_area),
+        "route": module.route,
+        "module_status": _enum_value(module.module_status),
+        "required_view_permission": module.required_view_permission,
+        "display_name_key": module.display_name_key,
+        "action_permissions": list(module.action_permissions or []),
+    }
+
+
+def _module_is_visible(
+    module: Module,
+    permissions: set[str],
+    disabled_module_ids: set[str],
+) -> bool:
+    return (
+        bool(module.enabled)
+        and module.module_status != ModuleStatus.hidden
+        and module.id not in disabled_module_ids
+        and bool(module.required_view_permission)
+        and module.required_view_permission in permissions
+    )
 
 # ---------------------------------------------
 # App Init
@@ -432,20 +503,7 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
 @app.on_event("startup")
 def startup_db_seed():
     db = next(get_db())
-    # Seed default modules
-    default_modules = [
-        {"key": "task_extractor", "name": "Task Extractor", "category": "PDF Processing", "enabled": True},
-        {"key": "task_stamping", "name": "Task Stamping", "category": "PDF Processing", "enabled": True},
-        {"key": "effectivity", "name": "Effectivity / TCM", "category": "Aviation", "enabled": True},
-        {"key": "check_control", "name": "Check Control", "category": "Quality", "enabled": True},
-        {"key": "utilization", "name": "Utilization", "category": "Analytics", "enabled": True},
-        {"key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
-        {"key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
-        {"key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
-        {"key": "crew_hours", "name": "Crew Hours", "category": "Statistics", "enabled": True},
-    ]
-    
-    for mod in default_modules:
-        if not db.query(Module).filter(Module.key == mod["key"]).first():
-            db.add(Module(**mod))
-    db.commit()
+    try:
+        sync_registry(db)
+    finally:
+        db.close()

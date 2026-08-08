@@ -77,26 +77,24 @@ class TestStatisticsModuleRegistration(unittest.TestCase):
         public.raise_for_status()
         public_modules = public.json()
         public_crew_hours = [module for module in public_modules if module["key"] == "crew_hours"]
-        self.assertEqual(public_crew_hours, [{
-            "key": "crew_hours",
-            "name": "Crew Hours",
-            "enabled": True,
-        }])
+        self.assertEqual(len(public_crew_hours), 1)
+        self.assertEqual(public_crew_hours[0]["name"], "Crew Hours")
+        self.assertEqual(public_crew_hours[0]["enabled"], True)
+        self.assertEqual(public_crew_hours[0]["route"], "/modules/crew-hours")
+        self.assertEqual(public_crew_hours[0]["required_view_permission"], "crew_hours.view")
+        self.assertEqual(public_crew_hours[0]["action_permissions"], ["crew_hours.export"])
         self.assertEqual(len(public_modules), 9)
         self.assertTrue(expected_existing_keys.issubset({module["key"] for module in public_modules}))
-        self.assertTrue(all(set(module) == {"key", "name", "enabled"} for module in public_modules))
+        self.assertTrue(all(module["module_status"] == "active" for module in public_modules))
 
         admin = self.client.get("/api/admin/modules", headers=self.headers)
         admin.raise_for_status()
         admin_modules = admin.json()
         admin_crew_hours = [module for module in admin_modules if module["key"] == "crew_hours"]
-        self.assertEqual(admin_crew_hours, [{
-            "id": "mod-9",
-            "key": "crew_hours",
-            "name": "Crew Hours",
-            "category": "Statistics",
-            "enabled": True,
-        }])
+        self.assertEqual(len(admin_crew_hours), 1)
+        self.assertTrue(admin_crew_hours[0]["id"])
+        self.assertEqual(admin_crew_hours[0]["category"], "Statistics")
+        self.assertEqual(admin_crew_hours[0]["business_area"], "crew")
         self.assertEqual(len(admin_modules), 9)
         self.assertTrue(expected_existing_keys.issubset({module["key"] for module in admin_modules}))
 

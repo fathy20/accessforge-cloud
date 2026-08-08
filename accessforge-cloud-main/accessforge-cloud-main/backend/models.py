@@ -35,6 +35,15 @@ class ModuleStatus(str, enum.Enum):
     frozen = "frozen"
     hidden = "hidden"
 
+class ModuleReadiness(str, enum.Enum):
+    available = "available"
+    pilot = "pilot"
+    under_validation = "under_validation"
+    requires_configuration = "requires_configuration"
+    under_development = "under_development"
+    not_migrated = "not_migrated"
+    discovery_required = "discovery_required"
+
 class JobStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
@@ -112,6 +121,10 @@ class Module(Base):
             "module_status IN ('active', 'frozen', 'hidden')",
             name="ck_modules_module_status",
         ),
+        CheckConstraint(
+            "readiness IN ('available', 'pilot', 'under_validation', 'requires_configuration', 'under_development', 'not_migrated', 'discovery_required')",
+            name="ck_modules_readiness",
+        ),
     )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     key = Column(String(128), unique=True, index=True)
@@ -139,6 +152,16 @@ class Module(Base):
             name="ck_modules_module_status",
         ),
         default=ModuleStatus.active,
+        nullable=True,
+    )
+    readiness = Column(
+        Enum(
+            ModuleReadiness,
+            native_enum=False,
+            create_constraint=False,
+            name="ck_modules_readiness",
+        ),
+        default=ModuleReadiness.under_development,
         nullable=True,
     )
     required_view_permission = Column(String(128), nullable=True)

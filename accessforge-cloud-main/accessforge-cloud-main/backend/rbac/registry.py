@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from ..models import AppRole, BusinessArea, ModuleStatus
+from ..models import AppRole, BusinessArea, ModuleReadiness, ModuleStatus
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,8 @@ class ModuleDefinition:
     category: str
     business_area: BusinessArea
     module_status: ModuleStatus
-    route: str
+    readiness: ModuleReadiness
+    route: str | None
     required_view_permission: str
     display_name_key: str
     action_permissions: tuple[str, ...] = ()
@@ -33,8 +34,10 @@ def _module(
     name: str,
     category: str,
     business_area: BusinessArea,
-    route: str,
+    route: str | None,
     *,
+    readiness: ModuleReadiness,
+    required_view_permission: str | None = None,
     action_permissions: tuple[str, ...] = (),
     sort_order: int,
 ) -> ModuleDefinition:
@@ -44,8 +47,9 @@ def _module(
         category=category,
         business_area=business_area,
         module_status=ModuleStatus.active,
+        readiness=readiness,
         route=route,
-        required_view_permission=f"{key}.view",
+        required_view_permission=required_view_permission or f"{key}.view",
         display_name_key=f"modules.{key}.name",
         action_permissions=action_permissions,
         sort_order=sort_order,
@@ -59,6 +63,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "PDF Processing",
         BusinessArea.maintenance,
         "/modules/task-extractor",
+        readiness=ModuleReadiness.under_validation,
         sort_order=1,
     ),
     _module(
@@ -67,6 +72,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "PDF Processing",
         BusinessArea.maintenance,
         "/modules/task-stamping",
+        readiness=ModuleReadiness.under_validation,
         sort_order=2,
     ),
     _module(
@@ -75,6 +81,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Aviation",
         BusinessArea.maintenance,
         "/modules/effectivity",
+        readiness=ModuleReadiness.discovery_required,
         sort_order=3,
     ),
     _module(
@@ -83,6 +90,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Quality",
         BusinessArea.maintenance,
         "/modules/check-control",
+        readiness=ModuleReadiness.under_validation,
         action_permissions=("check_control.export",),
         sort_order=4,
     ),
@@ -92,6 +100,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Analytics",
         BusinessArea.maintenance,
         "/modules/utilization",
+        readiness=ModuleReadiness.discovery_required,
         action_permissions=("utilization.export",),
         sort_order=5,
     ),
@@ -101,6 +110,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Compliance",
         BusinessArea.maintenance,
         "/modules/cmp-tcm",
+        readiness=ModuleReadiness.under_validation,
         sort_order=6,
     ),
     _module(
@@ -109,6 +119,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Documents",
         BusinessArea.maintenance,
         "/modules/cover-merge",
+        readiness=ModuleReadiness.under_development,
         sort_order=7,
     ),
     _module(
@@ -117,6 +128,7 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Documents",
         BusinessArea.maintenance,
         "/modules/mail-merge",
+        readiness=ModuleReadiness.under_validation,
         sort_order=8,
     ),
     _module(
@@ -125,8 +137,48 @@ MODULE_REGISTRY: tuple[ModuleDefinition, ...] = (
         "Statistics",
         BusinessArea.crew,
         "/modules/crew-hours",
+        readiness=ModuleReadiness.available,
         action_permissions=("crew_hours.export",),
         sort_order=9,
+    ),
+    _module(
+        "tcm_indexing",
+        "TCM Indexing",
+        "Aviation",
+        BusinessArea.maintenance,
+        None,
+        readiness=ModuleReadiness.not_migrated,
+        sort_order=10,
+    ),
+    _module(
+        "admin_users",
+        "User Management",
+        "Administration",
+        BusinessArea.admin,
+        "/admin/users",
+        readiness=ModuleReadiness.available,
+        required_view_permission="admin.users.view",
+        sort_order=11,
+    ),
+    _module(
+        "admin_audit",
+        "Audit Log",
+        "Administration",
+        BusinessArea.admin,
+        "/admin/audit",
+        readiness=ModuleReadiness.available,
+        required_view_permission="admin.audit.view",
+        sort_order=12,
+    ),
+    _module(
+        "admin_settings",
+        "Settings",
+        "Administration",
+        BusinessArea.admin,
+        "/admin/settings",
+        readiness=ModuleReadiness.available,
+        required_view_permission="admin.modules.manage",
+        sort_order=13,
     ),
 )
 
@@ -144,6 +196,8 @@ class PermissionDefinition:
 def _module_permissions() -> tuple[PermissionDefinition, ...]:
     definitions: list[PermissionDefinition] = []
     for module in MODULE_REGISTRY:
+        if module.business_area is BusinessArea.admin:
+            continue
         definitions.append(
             PermissionDefinition(
                 key=module.required_view_permission,
@@ -191,10 +245,15 @@ PERMISSION_CATALOGUE: tuple[PermissionDefinition, ...] = (
 
 PERMISSION_KEYS: tuple[str, ...] = tuple(item.key for item in PERMISSION_CATALOGUE)
 MODULE_VIEW_PERMISSION_KEYS: frozenset[str] = frozenset(
-    module.required_view_permission for module in MODULE_REGISTRY
+    module.required_view_permission
+    for module in MODULE_REGISTRY
+    if module.business_area is not BusinessArea.admin
 )
 MODULE_ACTION_PERMISSION_KEYS: frozenset[str] = frozenset(
-    action for module in MODULE_REGISTRY for action in module.action_permissions
+    action
+    for module in MODULE_REGISTRY
+    if module.business_area is not BusinessArea.admin
+    for action in module.action_permissions
 )
 ALL_MODULE_PERMISSION_KEYS: frozenset[str] = frozenset(
     MODULE_VIEW_PERMISSION_KEYS | MODULE_ACTION_PERMISSION_KEYS

@@ -110,6 +110,7 @@ def _module_payload(module: Module, *, include_id: bool = True) -> dict:
         "business_area": _enum_value(module.business_area),
         "route": module.route,
         "module_status": _enum_value(module.module_status),
+        "readiness": _enum_value(module.readiness),
         "required_view_permission": module.required_view_permission,
         "display_name_key": module.display_name_key,
         "action_permissions": list(module.action_permissions or []),

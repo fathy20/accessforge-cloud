@@ -34,6 +34,7 @@ def sync_registry(db: Session | None = None) -> dict[str, int]:
             module.business_area = definition.business_area
             module.route = definition.route
             module.module_status = definition.module_status
+            module.readiness = definition.readiness
             module.required_view_permission = definition.required_view_permission
             module.display_name_key = definition.display_name_key
             module.action_permissions = list(definition.action_permissions)

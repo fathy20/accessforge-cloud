@@ -110,7 +110,7 @@ print(json.dumps(result, sort_keys=True))
         self.assertEqual(json.loads(completed.stdout.strip().splitlines()[-1]), {
             "users": 0,
             "roles": 0,
-            "modules": 9,
+            "modules": 13,
         })
 
     def test_cli_creates_one_super_admin_with_hashed_password(self):

@@ -83,7 +83,7 @@ class TestStatisticsModuleRegistration(unittest.TestCase):
         self.assertEqual(public_crew_hours[0]["route"], "/modules/crew-hours")
         self.assertEqual(public_crew_hours[0]["required_view_permission"], "crew_hours.view")
         self.assertEqual(public_crew_hours[0]["action_permissions"], ["crew_hours.export"])
-        self.assertEqual(len(public_modules), 9)
+        self.assertEqual(len(public_modules), 13)
         self.assertTrue(expected_existing_keys.issubset({module["key"] for module in public_modules}))
         self.assertTrue(all(module["module_status"] == "active" for module in public_modules))
 
@@ -95,21 +95,21 @@ class TestStatisticsModuleRegistration(unittest.TestCase):
         self.assertTrue(admin_crew_hours[0]["id"])
         self.assertEqual(admin_crew_hours[0]["category"], "Statistics")
         self.assertEqual(admin_crew_hours[0]["business_area"], "crew")
-        self.assertEqual(len(admin_modules), 9)
+        self.assertEqual(len(admin_modules), 13)
         self.assertTrue(expected_existing_keys.issubset({module["key"] for module in admin_modules}))
 
     def test_startup_seed_is_idempotent_for_crew_hours(self):
         from backend.models import Module
 
         with self.database.SessionLocal() as session:
-            self.assertEqual(session.query(Module).count(), 9)
+            self.assertEqual(session.query(Module).count(), 13)
             self.assertEqual(session.query(Module).filter(Module.key == "crew_hours").count(), 1)
 
         self.main.startup_db_seed()
 
         with self.database.SessionLocal() as session:
             crew_hours = session.query(Module).filter(Module.key == "crew_hours").all()
-            self.assertEqual(session.query(Module).count(), 9)
+            self.assertEqual(session.query(Module).count(), 13)
             self.assertEqual(len(crew_hours), 1)
             self.assertEqual(crew_hours[0].name, "Crew Hours")
             self.assertEqual(crew_hours[0].category, "Statistics")

@@ -9,6 +9,9 @@ import sys
 # Pytest must never collect tests under production database rules.
 os.environ["APP_ENV"] = "test"
 
+# Re-imported auth modules need a deliberately fake signing key in tests only.
+os.environ.setdefault("JWT_SECRET_KEY", "TEST_ONLY_NOT_A_SECRET_JWT_KEY_32_CHARS")
+
 # Existing tests choose their own temporary file before importing backend.database.
 # A process-scoped in-memory target keeps import-only tests isolated when they do
 # not need a file, while explicit unsafe targets are still rejected below.

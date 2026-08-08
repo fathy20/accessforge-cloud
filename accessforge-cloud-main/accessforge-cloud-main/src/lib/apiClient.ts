@@ -42,4 +42,45 @@ export class ApiClient {
 
     return res.json();
   }
+
+  static async fetchBlob(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<{ blob: Blob; filename: string | null }> {
+    const token = this.getToken();
+    const headers = new Headers(options.headers || {});
+
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    const res = await fetch(`${this.API_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        this.clearToken();
+      }
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || "API request failed");
+    }
+
+    const contentDisposition = res.headers.get("Content-Disposition");
+    const filenameMatch = contentDisposition?.match(
+      /filename\*=UTF-8''([^;]+)|filename=(?:"([^"]+)"|([^;]+))/i,
+    );
+    const encodedFilename = filenameMatch?.[1] || filenameMatch?.[2] || filenameMatch?.[3];
+    let filename: string | null = null;
+    if (encodedFilename) {
+      try {
+        filename = decodeURIComponent(encodedFilename.trim());
+      } catch {
+        filename = encodedFilename.trim();
+      }
+    }
+
+    return { blob: await res.blob(), filename };
+  }
 }

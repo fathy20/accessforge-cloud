@@ -37,7 +37,7 @@ import backend.models  # noqa: F401
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG_PATH = REPOSITORY_ROOT / "alembic.ini"
 BASELINE_REVISION = "a4fcbd8f8388"
-CURRENT_HEAD = "e1a2b3c4d5f6"
+CURRENT_HEAD = "f7a8b9c0d1e2"
 BASELINE_PATH = REPOSITORY_ROOT / "alembic" / "versions" / "a4fcbd8f8388_current_schema_baseline.py"
 APP_TABLES = frozenset(Base.metadata.tables)
 

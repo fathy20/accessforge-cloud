@@ -59,6 +59,12 @@ class UploadKind(str, enum.Enum):
     image = "image"
     other = "other"
 
+class UploadScanState(str, enum.Enum):
+    not_scanned = "not_scanned"
+    pending = "pending"
+    clean = "clean"
+    infected = "infected"
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
@@ -213,6 +219,12 @@ class RolePermission(Base):
 
 class Upload(Base):
     __tablename__ = "uploads"
+    __table_args__ = (
+        CheckConstraint(
+            "scan_state IN ('not_scanned', 'pending', 'clean', 'infected')",
+            name="ck_uploads_scan_state",
+        ),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     original_name = Column(Unicode(512))
@@ -220,6 +232,14 @@ class Upload(Base):
     kind = Column(Enum(UploadKind))
     mime = Column(String(128))
     size_bytes = Column(Integer)
+    sha256 = Column(String(64), index=True, nullable=True)
+    scan_state = Column(
+        String(16),
+        default=UploadScanState.not_scanned.value,
+        nullable=False,
+        server_default="not_scanned",
+    )
+    retention_expires_at = Column(DateTime(timezone=True), nullable=True)
     metadata_json = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

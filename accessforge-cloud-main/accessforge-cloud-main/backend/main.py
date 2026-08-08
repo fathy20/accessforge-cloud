@@ -34,7 +34,8 @@ from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
-from .rbac.permissions import get_effective_permissions
+from .rbac.permissions import get_effective_permissions, record_audit
+from . import storage as storage_backend
 from .tools.sync_registry import sync_registry
 
 logger = logging.getLogger(__name__)
@@ -162,10 +163,8 @@ def mark_all_notifications_read(db: Session = Depends(get_db), current_user: Use
     db.commit()
     return {"status": "success"}
 
-UPLOAD_DIR = Path("local_storage/uploads")
-OUTPUT_DIR = Path("local_storage/outputs")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = storage_backend.UPLOAD_DIR
+OUTPUT_DIR = storage_backend.OUTPUT_DIR
 
 # ---------------------------------------------
 # Uploads API
@@ -180,45 +179,62 @@ async def upload_files(
 ):
     results = []
     for file in files:
-        contents = await file.read()
-        if len(contents) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File {file.filename} exceeds 100MB limit")
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext == '.pdf':
-            kind = UploadKind.pdf
-        elif file_ext in ['.xlsx', '.xls']:
-            kind = UploadKind.excel
-        elif file_ext == '.csv':
-            kind = UploadKind.csv
-        elif file_ext in ['.doc', '.docx']:
-            kind = UploadKind.docx
-        elif file_ext in ['.png', '.jpg', '.jpeg']:
-            kind = UploadKind.image
-        else:
-            kind = UploadKind.other
+        try:
+            artifact = await storage_backend.store_upload(
+                file,
+                UPLOAD_DIR,
+                MAX_UPLOAD_SIZE,
+            )
+        except storage_backend.UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except storage_backend.UnsupportedArtifactError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except storage_backend.StorageConflictError:
+            logger.exception("Generated upload storage target already exists.")
+            raise HTTPException(status_code=500, detail="Could not store upload.") from None
+        except OSError:
+            logger.exception("Upload filesystem operation failed.")
+            raise HTTPException(status_code=500, detail="Could not store upload.") from None
 
-        # Save to disk
-        safe_name = f"{current_user.id}_{file.filename}"
-        file_path = UPLOAD_DIR / safe_name
-        
-        with open(file_path, "wb") as buffer:
-            buffer.write(contents)
-            
-        size = file_path.stat().st_size
-        
-        # Create DB record
+        scan_state = storage_backend.scan_artifact(artifact.path)
         upload = Upload(
             user_id=current_user.id,
-            original_name=file.filename,
-            storage_path=str(file_path),
-            kind=kind,
-            mime=file.content_type,
-            size_bytes=size
+            original_name=artifact.original_name,
+            storage_path=str(artifact.path),
+            kind=UploadKind(artifact.kind),
+            mime=artifact.mime,
+            size_bytes=artifact.size_bytes,
+            sha256=artifact.sha256,
+            scan_state=scan_state,
+            retention_expires_at=storage_backend.retention_expires_at(),
         )
-        db.add(upload)
-        db.commit()
-        db.refresh(upload)
-        
+        try:
+            db.add(upload)
+            db.flush()
+            record_audit(
+                db,
+                current_user,
+                "upload",
+                "upload",
+                upload.id,
+                artifact_type="upload",
+                original_name=upload.original_name,
+                size=upload.size_bytes,
+                size_bytes=upload.size_bytes,
+                sha256=upload.sha256,
+                mime=upload.mime,
+                scan_state=upload.scan_state,
+            )
+            db.commit()
+            db.refresh(upload)
+        except Exception:
+            db.rollback()
+            try:
+                storage_backend.delete_artifact_file(UPLOAD_DIR, artifact.path)
+            except Exception:
+                logger.exception("Could not remove upload after database failure.")
+            raise
+
         results.append({
             "id": upload.id,
             "original_name": upload.original_name,
@@ -238,22 +254,71 @@ def delete_upload(upload_id: str, db: Session = Depends(get_db), current_user: U
     upload = db.query(Upload).filter(Upload.id == upload_id, Upload.user_id == current_user.id).first()
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
-    # Try deleting physical file
+
+    filesystem_error = None
     try:
-        if os.path.exists(upload.storage_path):
-            os.remove(upload.storage_path)
-    except Exception:
-        pass
+        storage_backend.delete_artifact_file(UPLOAD_DIR, upload.storage_path)
+    except Exception as exc:
+        filesystem_error = type(exc).__name__
+        logger.warning(
+            "Upload artifact filesystem deletion failed.",
+            extra={"upload_id": str(upload.id), "failure_kind": filesystem_error},
+        )
+
     db.delete(upload)
+    record_audit(
+        db,
+        current_user,
+        "delete",
+        "upload",
+        upload.id,
+        artifact_type="upload",
+        original_name=upload.original_name,
+        size=upload.size_bytes,
+        size_bytes=upload.size_bytes,
+        sha256=upload.sha256,
+        mime=upload.mime,
+        filesystem_status="deleted" if filesystem_error is None else "failed",
+        filesystem_error=filesystem_error,
+    )
     db.commit()
+
+    if filesystem_error is not None:
+        raise HTTPException(
+            status_code=500,
+            detail="Upload metadata was removed but the artifact file could not be removed.",
+        )
     return {"status": "success"}
 
 @app.get("/api/uploads/{upload_id}/download")
 def download_upload(upload_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     upload = db.query(Upload).filter(Upload.id == upload_id, Upload.user_id == current_user.id).first()
-    if not upload or not os.path.exists(upload.storage_path):
+    if not upload:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path=upload.storage_path, filename=upload.original_name)
+    try:
+        file_path = storage_backend.existing_artifact_path(UPLOAD_DIR, upload.storage_path)
+    except (OSError, storage_backend.StorageError):
+        raise HTTPException(status_code=404, detail="File not found") from None
+
+    record_audit(
+        db,
+        current_user,
+        "download",
+        "upload",
+        upload.id,
+        artifact_type="upload",
+        original_name=upload.original_name,
+        size=upload.size_bytes,
+        size_bytes=upload.size_bytes,
+        sha256=upload.sha256,
+        mime=upload.mime,
+    )
+    db.commit()
+    return FileResponse(
+        path=file_path,
+        filename=storage_backend.sanitize_original_name(upload.original_name),
+        media_type=upload.mime,
+    )
 
 # ---------------------------------------------
 # Jobs API
@@ -320,26 +385,48 @@ def run_job_background(job_id: str):
             
             # Process outputs
             output_refs = {"files": []}
+            output_artifacts = []
             for path_str in out_paths:
                 path = Path(path_str)
-                if path.exists():
-                    # Move to local storage
-                    final_path = OUTPUT_DIR / f"{job.user_id}_{job.id}_{path.name}"
-                    shutil.copy(path, final_path)
-                    
-                    # We could create an Upload record, but we just need a download URL.
-                    # Let's save it directly in output_refs for now
-                    base_url = os.getenv("BASE_URL", "http://localhost:8000")
-                    output_refs["files"].append({
-                        "name": path.name,
-                        "url": f"{base_url}/api/downloads/{final_path.name}"
-                    })
-            
+                try:
+                    artifact = storage_backend.persist_output_artifact(path, OUTPUT_DIR)
+                except FileNotFoundError:
+                    logger.warning("Generated output was not found.", extra={"job_id": str(job.id)})
+                    continue
+
+                output_artifacts.append(artifact)
+                base_url = os.getenv("BASE_URL", "http://localhost:8000")
+                output_refs["files"].append({
+                    "id": artifact.storage_name,
+                    "name": artifact.original_name,
+                    "original_name": artifact.original_name,
+                    "storage_name": artifact.storage_name,
+                    "size_bytes": artifact.size_bytes,
+                    "sha256": artifact.sha256,
+                    "mime": artifact.mime,
+                    "url": f"{base_url}/api/downloads/{artifact.storage_name}",
+                })
+
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 _j.status = JobStatus.done
                 _j.progress = 100
                 _j.output_refs = output_refs
+                output_owner = _db.query(User).filter(User.id == job.user_id).first()
+                for artifact in output_artifacts:
+                    record_audit(
+                        _db,
+                        output_owner,
+                        "upload",
+                        "output",
+                        artifact.storage_name,
+                        artifact_type="output",
+                        original_name=artifact.original_name,
+                        size=artifact.size_bytes,
+                        size_bytes=artifact.size_bytes,
+                        sha256=artifact.sha256,
+                        mime=artifact.mime,
+                    )
                 _db.commit()
                 
         except Exception as e:
@@ -383,19 +470,92 @@ def create_job(
     
     return {"id": job.id, "status": job.status}
 
-# Add download endpoint
+def _output_entry_storage_name(job: Job, entry: dict) -> str:
+    for key in ("storage_name", "storage_path", "url"):
+        value = entry.get(key)
+        if value:
+            return storage_backend.storage_basename(str(value).split("?", 1)[0])
+
+    original_name = storage_backend.sanitize_original_name(entry.get("name"))
+    return f"{job.user_id}_{job.id}_{original_name}"
+
+
+def _owned_output_artifact(db: Session, user_id: str, filename: str) -> dict | None:
+    requested_name = storage_backend.storage_basename(filename)
+    jobs = db.query(Job).filter(Job.user_id == user_id).all()
+    for job in jobs:
+        output_refs = job.output_refs or {}
+        for entry in output_refs.get("files", []):
+            if not isinstance(entry, dict):
+                continue
+            storage_name = _output_entry_storage_name(job, entry)
+            if storage_name not in {filename, requested_name}:
+                continue
+            return {
+                "id": str(entry.get("id") or f"{job.id}:{storage_name}"),
+                "storage_name": storage_name,
+                "original_name": storage_backend.sanitize_original_name(
+                    entry.get("original_name") or entry.get("name") or storage_name
+                ),
+                "size_bytes": entry.get("size_bytes"),
+                "sha256": entry.get("sha256"),
+                "mime": entry.get("mime"),
+            }
+    return None
+
 
 @app.get("/api/downloads/{filename}")
-def download_file(filename: str, current_user: User = Depends(get_current_user)):
-    file_path = OUTPUT_DIR / filename
-    if not file_path.exists():
+def download_file(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Authorization is DB-scoped and completes before the filesystem is probed.
+    artifact = _owned_output_artifact(db, current_user.id, filename)
+    if artifact is None:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Optional: Verify ownership if needed, assuming filename format user_id_job_id_name
-    if not filename.startswith(f"{current_user.id}_"):
-        raise HTTPException(status_code=403, detail="Not authorized to download this file")
-        
-    return FileResponse(path=file_path, filename=filename.split("_", 2)[-1])
+
+    try:
+        file_path = storage_backend.existing_artifact_path(
+            OUTPUT_DIR,
+            filename,
+            relative_to_root=True,
+        )
+    except (OSError, storage_backend.StorageError):
+        raise HTTPException(status_code=404, detail="File not found") from None
+
+    if (
+        artifact["size_bytes"] is None
+        or artifact["sha256"] is None
+        or artifact["mime"] is None
+    ):
+        described = storage_backend.describe_artifact(
+            file_path,
+            artifact["original_name"],
+        )
+        artifact["size_bytes"] = described.size_bytes
+        artifact["sha256"] = described.sha256
+        artifact["mime"] = described.mime
+
+    record_audit(
+        db,
+        current_user,
+        "download",
+        "output",
+        artifact["id"],
+        artifact_type="output",
+        original_name=artifact["original_name"],
+        size=artifact["size_bytes"],
+        size_bytes=artifact["size_bytes"],
+        sha256=artifact["sha256"],
+        mime=artifact["mime"],
+    )
+    db.commit()
+    return FileResponse(
+        path=file_path,
+        filename=artifact["original_name"],
+        media_type=artifact["mime"],
+    )
 
 @app.get("/api/jobs")
 def get_jobs(

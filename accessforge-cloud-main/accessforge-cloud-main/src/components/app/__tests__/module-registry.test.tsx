@@ -45,6 +45,13 @@ const moduleFixture = (
 const apiModules = [
   moduleFixture(),
   moduleFixture({
+    key: "task_stamping",
+    name: "Task Stamping",
+    route: "/modules/task-stamping",
+    sort_order: 2,
+    readiness: "under_validation",
+  }),
+  moduleFixture({
     key: "crew_hours",
     name: "Crew Hours",
     business_area: "crew",
@@ -64,6 +71,13 @@ const apiModules = [
     business_area: "admin",
     route: "/admin/users",
     sort_order: 11,
+  }),
+  moduleFixture({
+    key: "mail_merge",
+    name: "Mail Merge",
+    route: null,
+    sort_order: 12,
+    readiness: "not_migrated",
   }),
 ];
 
@@ -131,5 +145,28 @@ describe("registry-driven module UI", () => {
     await waitFor(() => expect(screen.getByTestId("readiness-badge-tcm_indexing")).toBeInTheDocument());
 
     expect(screen.getByTestId("readiness-badge-tcm_indexing")).toHaveTextContent("Discovery required");
+  });
+
+  it("renders different status treatments for different readiness families", async () => {
+    renderWithProviders(<AppSidebar />);
+
+    const validationItem = await screen.findByTestId("module-nav-task_stamping");
+    const notMigratedItem = screen.getByTestId("module-nav-mail_merge");
+    const validationIndicator = screen.getByTestId("module-readiness-task_stamping");
+    const notMigratedIndicator = screen.getByTestId("module-readiness-mail_merge");
+
+    expect(validationItem).toHaveAttribute("data-readiness-status", "info");
+    expect(notMigratedItem).toHaveAttribute("data-readiness-status", "neutral");
+    expect(validationIndicator.className).not.toBe(notMigratedIndicator.className);
+  });
+
+  it("does not expose a not-migrated module with a link role", async () => {
+    renderWithProviders(<AppSidebar />);
+
+    const item = await screen.findByTestId("module-nav-mail_merge");
+
+    expect(item).not.toHaveAttribute("role");
+    expect(item).toHaveAccessibleName("Mail Merge — Not migrated");
+    expect(screen.queryByRole("link", { name: "Mail Merge — Not migrated" })).not.toBeInTheDocument();
   });
 });

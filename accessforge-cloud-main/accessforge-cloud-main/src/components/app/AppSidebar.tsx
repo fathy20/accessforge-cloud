@@ -1,206 +1,441 @@
+import { useEffect, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  FileBarChart,
-  FolderKanban,
-  LayoutDashboard,
-  ListTodo,
-  Mailbox,
-  Search,
-  Upload,
+  CircleCheck,
+  Info,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SquareMinus,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/auth/use-permissions";
+import { useI18n } from "@/lib/i18n";
 import { DEFAULT_MODULE_ICON, MODULE_ICONS } from "@/lib/modules/icons";
 import {
   getModuleLabel,
   getReadinessLabel,
+  getReadinessStatusFamily,
   sortModules,
   type ModuleRegistryItem,
+  type ModuleReadinessStatusFamily,
 } from "@/lib/modules/registry";
+import {
+  getActiveShellNavigationItem,
+  getShellNavigationItems,
+  SHELL_RELEASE_LABEL_KEY,
+  SHELL_SECTION_LABELS,
+  SHELL_SIDEBAR_STORAGE_KEY,
+  shellRouteMatches,
+  type ShellNavigationItem,
+  type ShellNavigationSection,
+} from "@/lib/navigation/shell-nav";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
+export interface AppSidebarProps {
+  isMobile?: boolean;
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
 }
 
-const mainNav: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/projects", label: "Projects", icon: FolderKanban },
-  { to: "/uploads", label: "Uploads", icon: Upload },
-  { to: "/search", label: "Search", icon: Search },
-  { to: "/jobs", label: "Jobs", icon: ListTodo },
-  { to: "/reports", label: "Reports", icon: FileBarChart },
-];
+interface RegistryGroupOptions {
+  staticSection?: ShellNavigationSection;
+  showWhenLoading?: boolean;
+}
 
-export function AppSidebar() {
+const READINESS_INDICATOR: Record<
+  ModuleReadinessStatusFamily,
+  { icon: LucideIcon; className: string; shapeClassName: string }
+> = {
+  success: {
+    icon: CircleCheck,
+    shapeClassName: "rounded-full",
+    className:
+      "border-status-success-border bg-status-success-background text-status-success-foreground",
+  },
+  info: {
+    icon: Info,
+    shapeClassName: "rounded-full",
+    className:
+      "border-status-info-border bg-status-info-background text-status-info-foreground",
+  },
+  warning: {
+    icon: TriangleAlert,
+    shapeClassName: "rounded-sm",
+    className:
+      "border-status-warning-border bg-status-warning-background text-status-warning-foreground",
+  },
+  neutral: {
+    icon: SquareMinus,
+    shapeClassName: "rounded-none",
+    className:
+      "border-status-neutral-border bg-status-neutral-background text-status-neutral-foreground",
+  },
+};
+
+export function AppSidebar({
+  isMobile = false,
+  mobileOpen = false,
+  onMobileOpenChange,
+}: AppSidebarProps = {}) {
   const perms = usePermissions();
-  const { t } = useI18n();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { dir, t } = useI18n();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [collapsed, setCollapsed] = useState(false);
 
-  const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  const renderStaticGroup = (title: string, items: NavItem[]) => (
-    <div className="px-3 py-2">
-      <p className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
-        {title}
-      </p>
-      <nav className="flex flex-col gap-0.5">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.to}
-              to={item.to as any}
-              className={cn(
-                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-                isActive(item.to)
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
-  );
-
-  const renderRegistryItem = (module: ModuleRegistryItem) => {
-    const Icon = MODULE_ICONS[module.key] ?? DEFAULT_MODULE_ICON;
-    const label = getModuleLabel(module, t);
-    const readinessLabel = getReadinessLabel(module, t);
-    const showReadiness = module.route === null || module.readiness !== "available";
-    const itemClassName = cn(
-      "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-      module.route === null
-        ? "text-sidebar-foreground/50 cursor-not-allowed"
-        : isActive(module.route)
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-    );
-
-    const content = (
-      <>
-        <Icon className="size-4 shrink-0" />
-        <span className="truncate">{label}</span>
-        {showReadiness && (
-          <span className="ms-auto text-[9px] tracking-wide text-sidebar-foreground/50 text-end">
-            {readinessLabel}
-          </span>
-        )}
-      </>
-    );
-
-    if (module.route === null) {
-      return (
-        <div key={module.key} data-testid={`module-nav-${module.key}`} className={itemClassName} aria-disabled="true">
-          {content}
-        </div>
-      );
+    try {
+      setCollapsed(window.localStorage.getItem(SHELL_SIDEBAR_STORAGE_KEY) === "true");
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser contexts.
     }
-
-    return (
-      <Link
-        key={module.key}
-        data-testid={`module-nav-${module.key}`}
-        to={module.route as any}
-        className={itemClassName}
-      >
-        {content}
-      </Link>
-    );
-  };
-
-  const renderRegistryGroup = (
-    title: string,
-    modules: ModuleRegistryItem[],
-    options: { includeAllModules?: boolean; includeInvitations?: boolean } = {},
-  ) => {
-    const includeAllModules = options.includeAllModules ?? false;
-    const includeInvitations = options.includeInvitations ?? false;
-    if (!includeAllModules && !modules.length && !includeInvitations) return null;
-
-    return (
-      <div className="px-3 py-2">
-        <p className="px-2 mb-1.5 text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
-          {title}
-        </p>
-        <nav className="flex flex-col gap-0.5">
-          {includeAllModules && (
-            <Link
-              to="/modules"
-              className={cn(
-                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-                isActive("/modules")
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <LayoutDashboard className="size-4 shrink-0" />
-              <span className="truncate">{t("nav.modules")}</span>
-            </Link>
-          )}
-          {perms.loading && includeAllModules ? (
-            <div className="px-2.5 py-2 text-xs text-sidebar-foreground/50" role="status">
-              {t("mod.loading")}
-            </div>
-          ) : (
-            modules.map(renderRegistryItem)
-          )}
-          {includeInvitations && (
-            // Invitations is not a registry module yet; keep this static until the backend adds it.
-            <Link
-              to="/admin/invitations"
-              className={cn(
-                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-                isActive("/admin/invitations")
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Mailbox className="size-4 shrink-0" />
-              <span className="truncate">Invitations</span>
-            </Link>
-          )}
-        </nav>
-      </div>
-    );
-  };
+  }, []);
 
   const registryModules = sortModules(perms.modules);
   const workspaceModules = registryModules.filter(
     (module) => module.business_area === "maintenance" || module.business_area === "crew",
   );
   const adminModules = registryModules.filter((module) => module.business_area === "admin");
+  const activeShellItem = getActiveShellNavigationItem(pathname);
+  const activeRegistryModule = registryModules
+    .filter((module) => module.route && shellRouteMatches(pathname, module.route))
+    .sort((a, b) => (b.route?.length ?? 0) - (a.route?.length ?? 0))[0];
+  const activeRoute =
+    (activeRegistryModule?.route?.length ?? 0) > (activeShellItem?.to.length ?? 0)
+      ? activeRegistryModule?.route
+      : activeShellItem?.to;
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(SHELL_SIDEBAR_STORAGE_KEY, String(next));
+        } catch {
+          // The visual preference still works for this session without persistence.
+        }
+      }
+      return next;
+    });
+  };
+
+  const itemClassName = (active: boolean, isCollapsed: boolean, disabled = false) =>
+    cn(
+      "relative flex h-10 items-center rounded-md text-body transition-colors",
+      isCollapsed ? "justify-center px-2" : "gap-2.5 px-2.5",
+      disabled
+        ? "cursor-not-allowed bg-interactive-disabled text-fg-disabled"
+        : active
+          ? "bg-interactive-selected font-semibold text-sidebar-accent-foreground before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-primary"
+          : "text-fg-secondary hover:bg-interactive-hover hover:text-fg-primary active:bg-interactive-active",
+    );
+
+  const renderShellItem = (
+    item: ShellNavigationItem,
+    isCollapsed: boolean,
+    onNavigate?: () => void,
+  ) => {
+    const Icon = item.icon;
+    const label = t(item.labelKey);
+    const active = activeRoute === item.to;
+    const link = (
+      <Link
+        key={item.key}
+        to={item.to as any}
+        aria-current={active ? "page" : undefined}
+        aria-label={isCollapsed ? label : undefined}
+        className={itemClassName(active, isCollapsed)}
+        data-testid={`shell-nav-${item.key}`}
+        onClick={onNavigate}
+      >
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+        <span className={cn("truncate", isCollapsed && "sr-only")}>{label}</span>
+      </Link>
+    );
+
+    if (!isCollapsed) return link;
+
+    return (
+      <Tooltip key={item.key}>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const renderRegistryItem = (
+    module: ModuleRegistryItem,
+    isCollapsed: boolean,
+    onNavigate?: () => void,
+  ) => {
+    const Icon = MODULE_ICONS[module.key] ?? DEFAULT_MODULE_ICON;
+    const label = getModuleLabel(module, t);
+    const readinessLabel = getReadinessLabel(module, t);
+    const showReadiness = module.readiness !== "available";
+    const readinessStatus = getReadinessStatusFamily(module.readiness);
+    const readinessIndicator = READINESS_INDICATOR[readinessStatus];
+    const ReadinessIcon = readinessIndicator.icon;
+    const active = module.route === activeRoute;
+    const accessibleLabel = showReadiness ? `${label} — ${readinessLabel}` : label;
+    const content = (
+      <>
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+        <span
+          className={cn(
+            "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap",
+            isCollapsed && "sr-only",
+          )}
+        >
+          {label}
+        </span>
+        {showReadiness && (
+          <span
+            data-testid={`module-readiness-${module.key}`}
+            className={cn(
+              "grid shrink-0 place-items-center border",
+              isCollapsed ? "absolute end-1 top-1 size-4" : "ms-auto size-5",
+              readinessIndicator.shapeClassName,
+              readinessIndicator.className,
+            )}
+            aria-hidden="true"
+          >
+            <ReadinessIcon className={isCollapsed ? "size-3" : "size-3.5"} />
+          </span>
+        )}
+        {showReadiness && <span className="sr-only">{readinessLabel}</span>}
+      </>
+    );
+
+    const item = module.route === null ? (
+      <div
+        key={module.key}
+        data-testid={`module-nav-${module.key}`}
+        data-readiness-status={readinessStatus}
+        className={itemClassName(false, isCollapsed, true)}
+        aria-disabled="true"
+        aria-label={accessibleLabel}
+      >
+        {content}
+      </div>
+    ) : (
+      <Link
+        key={module.key}
+        data-testid={`module-nav-${module.key}`}
+        data-readiness-status={readinessStatus}
+        to={module.route as any}
+        className={itemClassName(active, isCollapsed)}
+        aria-current={active ? "page" : undefined}
+        aria-label={accessibleLabel}
+        onClick={onNavigate}
+      >
+        {content}
+      </Link>
+    );
+
+    if (!isCollapsed && !showReadiness) return item;
+
+    return (
+      <Tooltip key={module.key}>
+        <TooltipTrigger asChild>{item}</TooltipTrigger>
+        <TooltipContent>{accessibleLabel}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const renderShellGroup = (
+    section: ShellNavigationSection,
+    isCollapsed: boolean,
+    onNavigate?: () => void,
+  ) => {
+    const items = getShellNavigationItems(section).filter(
+      (item) => !item.adminOnly || perms.isAdmin,
+    );
+    if (!items.length || section === "account") return null;
+
+    const title = t(SHELL_SECTION_LABELS[section]);
+    return (
+      <section className="px-3 py-2" key={section}>
+        <h2
+          className={cn(
+            "mb-1.5 px-2 text-label text-fg-muted",
+            isCollapsed && "sr-only",
+          )}
+        >
+          {title}
+        </h2>
+        <nav className="flex flex-col gap-0.5" aria-label={title}>
+          {items.map((item) => renderShellItem(item, isCollapsed, onNavigate))}
+        </nav>
+      </section>
+    );
+  };
+
+  const renderRegistryGroup = (
+    title: string,
+    modules: ModuleRegistryItem[],
+    isCollapsed: boolean,
+    options: RegistryGroupOptions = {},
+    onNavigate?: () => void,
+  ) => {
+    const staticItems = options.staticSection
+      ? getShellNavigationItems(options.staticSection).filter(
+          (item) => !item.adminOnly || perms.isAdmin,
+        )
+      : [];
+    if (!modules.length && !staticItems.length) return null;
+
+    return (
+      <section className="px-3 py-2" key={title}>
+        <h2
+          className={cn(
+            "mb-1.5 px-2 text-label text-fg-muted",
+            isCollapsed && "sr-only",
+          )}
+        >
+          {title}
+        </h2>
+        <nav className="flex flex-col gap-0.5" aria-label={title}>
+          {staticItems.map((item) => renderShellItem(item, isCollapsed, onNavigate))}
+          {perms.loading && options.showWhenLoading ? (
+            <div
+              className={cn("px-2.5 py-2 text-caption text-fg-muted", isCollapsed && "sr-only")}
+              role="status"
+            >
+              {t("mod.loading")}
+            </div>
+          ) : (
+            modules.map((module) => renderRegistryItem(module, isCollapsed, onNavigate))
+          )}
+        </nav>
+      </section>
+    );
+  };
+
+  const renderPanel = (
+    isCollapsed: boolean,
+    options: { mobile?: boolean; onNavigate?: () => void } = {},
+  ) => (
+    <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div
+        className={cn(
+          "flex items-center border-b border-sidebar-border py-4",
+          isCollapsed ? "justify-center px-3" : "gap-3 px-5",
+        )}
+      >
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-sidebar-border bg-primary-foreground p-1.5">
+          <img
+            src="/logo.png"
+            alt={t("shell.brand.logo_alt")}
+            className="size-full object-contain"
+          />
+        </div>
+        {!isCollapsed && (
+          <div className="flex min-w-0 flex-1 flex-col leading-tight">
+            <p className="text-heading-3 tracking-tight text-fg-primary">REDSEA</p>
+            <p className="truncate text-caption uppercase tracking-[0.16em] text-fg-muted">
+              {t("shell.brand.tagline")}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto py-2">
+        {renderShellGroup("workspace", isCollapsed, options.onNavigate)}
+        {renderRegistryGroup(
+          t(SHELL_SECTION_LABELS.modules),
+          workspaceModules,
+          isCollapsed,
+          { staticSection: "modules", showWhenLoading: true },
+          options.onNavigate,
+        )}
+        {renderRegistryGroup(
+          t(SHELL_SECTION_LABELS.admin),
+          adminModules,
+          isCollapsed,
+          { staticSection: "admin" },
+          options.onNavigate,
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "flex min-h-14 items-center border-t border-sidebar-border px-3 py-2 text-caption text-fg-muted",
+          isCollapsed ? "justify-center" : "gap-2",
+        )}
+      >
+        {!isCollapsed && <span className="truncate">{t(SHELL_RELEASE_LABEL_KEY)}</span>}
+        {!options.mobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "shrink-0 text-fg-secondary hover:bg-interactive-hover hover:text-fg-primary",
+              !isCollapsed && "ms-auto",
+            )}
+            onClick={toggleCollapsed}
+            aria-label={
+              isCollapsed ? t("shell.expand_navigation") : t("shell.collapse_navigation")
+            }
+            aria-expanded={!isCollapsed}
+          >
+            {isCollapsed ? (
+              <PanelLeftOpen className="rtl:rotate-180" aria-hidden="true" />
+            ) : (
+              <PanelLeftClose className="rtl:rotate-180" aria-hidden="true" />
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="px-5 py-5 flex items-center gap-3 border-b border-sidebar-border">
-        <div className="size-10 rounded-xl bg-white grid place-items-center p-1.5 shrink-0 shadow-sm border border-border/50">
-          <img src="/logo.png" alt="REDSEA Logo" className="w-full h-full object-contain" />
-        </div>
-        <div className="leading-tight flex flex-col flex-1">
-          <p className="font-bold tracking-tight text-white text-lg">REDSEA</p>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
-            Aviation Toolkit
-          </p>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto py-2">
-        {renderStaticGroup("Workspace", mainNav)}
-        {renderRegistryGroup(t("nav.modules"), workspaceModules, { includeAllModules: true })}
-        {renderRegistryGroup(t("nav.admin"), adminModules, {
-          includeInvitations: perms.isAdmin,
-        })}
-      </div>
-      <div className="px-4 py-3 border-t border-sidebar-border text-[11px] text-sidebar-foreground/50">
-        v0.1 · Phase 1
-      </div>
-    </aside>
+    <TooltipProvider delayDuration={250}>
+      <aside
+        className={cn(
+          "hidden shrink-0 border-e border-sidebar-border md:flex md:flex-col",
+          collapsed ? "w-20" : "w-64",
+        )}
+        aria-label={t("shell.navigation")}
+        data-collapsed={collapsed}
+      >
+        {renderPanel(collapsed)}
+      </aside>
+
+      {isMobile && (
+        <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
+          <SheetContent
+            side={dir === "rtl" ? "right" : "left"}
+            dir={dir}
+            className="w-[min(20rem,90vw)] border-sidebar-border bg-sidebar p-0 text-sidebar-foreground [&>button]:text-fg-primary"
+          >
+            <SheetTitle className="sr-only">{t("shell.navigation")}</SheetTitle>
+            <SheetDescription className="sr-only">
+              {t("shell.navigation_description")}
+            </SheetDescription>
+            {renderPanel(false, {
+              mobile: true,
+              onNavigate: () => onMobileOpenChange?.(false),
+            })}
+          </SheetContent>
+        </Sheet>
+      )}
+    </TooltipProvider>
   );
 }

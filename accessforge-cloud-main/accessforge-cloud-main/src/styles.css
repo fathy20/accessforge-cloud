@@ -5,9 +5,12 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * REDSEA Aviation Design System
- * Deep navy + signature red accent (REDSEA brand) with steel/sky highlights.
- * All colors are oklch and exposed via Tailwind theme tokens.
+ * REDSEA semantic layer order:
+ * 1. Tailwind aliases expose semantic tokens to utilities and shadcn primitives.
+ * 2. :root/.dark define the single dark palette plus type, spacing, and state primitives.
+ * 3. Base rules apply global typography, tabular numerals, and the shared focus ring.
+ * 4. Utilities are reserved for treatments that cannot be represented by one theme alias.
+ * Components consume semantic tokens; they never introduce raw colour literals.
  */
 
 @theme inline {
@@ -19,6 +22,41 @@
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --text-display: var(--type-display-size);
+  --text-display--line-height: var(--type-display-line-height);
+  --text-display--font-weight: var(--type-display-weight);
+  --text-heading-1: var(--type-heading-1-size);
+  --text-heading-1--line-height: var(--type-heading-1-line-height);
+  --text-heading-1--font-weight: var(--type-heading-1-weight);
+  --text-heading-2: var(--type-heading-2-size);
+  --text-heading-2--line-height: var(--type-heading-2-line-height);
+  --text-heading-2--font-weight: var(--type-heading-2-weight);
+  --text-heading-3: var(--type-heading-3-size);
+  --text-heading-3--line-height: var(--type-heading-3-line-height);
+  --text-heading-3--font-weight: var(--type-heading-3-weight);
+  --text-body: var(--type-body-size);
+  --text-body--line-height: var(--type-body-line-height);
+  --text-body--font-weight: var(--type-body-weight);
+  --text-label: var(--type-label-size);
+  --text-label--line-height: var(--type-label-line-height);
+  --text-label--font-weight: var(--type-label-weight);
+  --text-caption: var(--type-caption-size);
+  --text-caption--line-height: var(--type-caption-line-height);
+  --text-caption--font-weight: var(--type-caption-weight);
+  --text-numeric-tabular: var(--type-numeric-size);
+  --text-numeric-tabular--line-height: var(--type-numeric-line-height);
+  --text-numeric-tabular--font-weight: var(--type-numeric-weight);
+
+  --spacing-shell-padding: var(--space-shell-padding);
+  --spacing-page-gutter: var(--space-page-gutter);
+  --spacing-section-rhythm: var(--space-section-rhythm);
+  --spacing-table-compact-x: var(--space-table-compact-x);
+  --spacing-table-compact-y: var(--space-table-compact-y);
+  --container-shell: var(--layout-content-max);
+  --z-index-shell-chrome: 10;
+  --z-index-shell-overlay: 50;
+  --z-index-shell-skip-link: 60;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -60,60 +98,87 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  --color-surface-base: var(--surface-base);
+  --color-surface-base-border: var(--surface-base-border);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-raised-border: var(--surface-raised-border);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-overlay-border: var(--surface-overlay-border);
+
+  --color-fg-primary: var(--fg-primary);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-disabled: var(--fg-disabled);
+
+  --color-status-success-foreground: var(--status-success-foreground);
+  --color-status-success-background: var(--status-success-background);
+  --color-status-success-border: var(--status-success-border);
+  --color-status-warning-foreground: var(--status-warning-foreground);
+  --color-status-warning-background: var(--status-warning-background);
+  --color-status-warning-border: var(--status-warning-border);
+  --color-status-danger-foreground: var(--status-danger-foreground);
+  --color-status-danger-background: var(--status-danger-background);
+  --color-status-danger-border: var(--status-danger-border);
+  --color-status-info-foreground: var(--status-info-foreground);
+  --color-status-info-background: var(--status-info-background);
+  --color-status-info-border: var(--status-info-border);
+  --color-status-neutral-foreground: var(--status-neutral-foreground);
+  --color-status-neutral-background: var(--status-neutral-background);
+  --color-status-neutral-border: var(--status-neutral-border);
+
+  --color-interactive-hover: var(--interactive-hover);
+  --color-interactive-active: var(--interactive-active);
+  --color-interactive-selected: var(--interactive-selected);
+  --color-interactive-focus: var(--interactive-focus);
+  --color-interactive-disabled: var(--interactive-disabled);
+  --color-brand-subtle: var(--brand-subtle);
+
   --shadow-glow: 0 0 0 1px oklch(0.55 0.22 25 / 0.25), 0 8px 32px -8px oklch(0.55 0.22 25 / 0.45);
   --shadow-panel: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px -12px oklch(0 0 0 / 0.5);
+  --shadow-surface-base: var(--surface-base-shadow);
+  --shadow-surface-raised: var(--surface-raised-shadow);
+  --shadow-surface-overlay: var(--surface-overlay-shadow);
 
   --gradient-brand: linear-gradient(135deg, #f45b49 0%, #f0907d 35%, #4baaa9 75%, #175270 100%);
   --gradient-surface: linear-gradient(180deg, oklch(0.21 0.03 250) 0%, oklch(0.17 0.025 250) 100%);
 }
 
-:root {
+:root,
+.dark {
   --radius: 0.625rem;
 
-  /* Light mode */
-  --background: oklch(0.985 0.002 250);
-  --foreground: oklch(0.16 0.03 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.03 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.03 250);
-  --primary: #f45b49;
-  --primary-foreground: #ffffff;
-  --secondary: oklch(0.96 0.01 250);
-  --secondary-foreground: oklch(0.2 0.03 250);
-  --muted: oklch(0.95 0.01 250);
-  --muted-foreground: oklch(0.5 0.02 250);
-  --accent: oklch(0.93 0.04 230);
-  --accent-foreground: oklch(0.2 0.05 250);
-  --destructive: oklch(0.58 0.24 27);
-  --destructive-foreground: oklch(0.99 0.005 250);
-  --success: oklch(0.62 0.16 155);
-  --success-foreground: oklch(0.99 0.005 250);
-  --warning: oklch(0.78 0.16 75);
-  --warning-foreground: oklch(0.2 0.04 60);
-  --info: oklch(0.65 0.14 230);
-  --info-foreground: oklch(0.99 0.005 250);
-  --border: oklch(0.9 0.01 250);
-  --input: oklch(0.9 0.01 250);
-  --ring: #f45b49;
+  --type-display-size: 2rem;
+  --type-display-line-height: 2.5rem;
+  --type-display-weight: 700;
+  --type-heading-1-size: 1.5rem;
+  --type-heading-1-line-height: 2rem;
+  --type-heading-1-weight: 700;
+  --type-heading-2-size: 1.25rem;
+  --type-heading-2-line-height: 1.75rem;
+  --type-heading-2-weight: 600;
+  --type-heading-3-size: 1rem;
+  --type-heading-3-line-height: 1.5rem;
+  --type-heading-3-weight: 600;
+  --type-body-size: 0.875rem;
+  --type-body-line-height: 1.375rem;
+  --type-body-weight: 400;
+  --type-label-size: 0.75rem;
+  --type-label-line-height: 1rem;
+  --type-label-weight: 600;
+  --type-caption-size: 0.6875rem;
+  --type-caption-line-height: 1rem;
+  --type-caption-weight: 500;
+  --type-numeric-size: 0.75rem;
+  --type-numeric-line-height: 1.125rem;
+  --type-numeric-weight: 500;
 
-  --chart-1: #f45b49;
-  --chart-2: #f4d6b4;
-  --chart-3: #3ebab8;
-  --chart-4: #175270;
-  --chart-5: oklch(0.55 0.18 290);
+  --space-shell-padding: clamp(0.75rem, 2vw, 1.5rem);
+  --space-page-gutter: clamp(1rem, 3vw, 2rem);
+  --space-section-rhythm: clamp(1rem, 2vw, 1.5rem);
+  --space-table-compact-x: 0.75rem;
+  --space-table-compact-y: 0.5rem;
+  --layout-content-max: 80rem;
 
-  --sidebar: #0f394e;
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: #f45b49;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #175270;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #144963;
-  --sidebar-ring: #f45b49;
-}
-
-.dark {
   --background: #0a2634;
   --foreground: oklch(0.96 0.01 250);
   --card: #0f394e;
@@ -154,6 +219,48 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #144963;
   --sidebar-ring: #f45b49;
+
+  --surface-base: var(--background);
+  --surface-base-border: var(--border);
+  --surface-raised: var(--card);
+  --surface-raised-border: var(--border);
+  --surface-overlay: var(--secondary);
+  --surface-overlay-border: var(--sidebar-accent);
+  --surface-base-shadow: none;
+  --surface-raised-shadow: none;
+  --surface-overlay-shadow: 0 12px 32px -20px oklch(0 0 0 / 0.7);
+
+  --fg-primary: oklch(0.96 0.01 250);
+  --fg-secondary: oklch(0.82 0.015 250);
+  --fg-muted: oklch(0.7 0.02 250);
+  --fg-disabled: oklch(0.58 0.015 250);
+
+  --status-success-foreground: oklch(0.86 0.12 155);
+  --status-success-background: oklch(0.68 0.16 155 / 0.12);
+  --status-success-border: oklch(0.68 0.16 155 / 0.45);
+  --status-warning-foreground: oklch(0.88 0.14 75);
+  --status-warning-background: oklch(0.78 0.16 75 / 0.12);
+  --status-warning-border: oklch(0.78 0.16 75 / 0.45);
+  --status-danger-foreground: oklch(0.83 0.13 27);
+  --status-danger-background: oklch(0.62 0.22 27 / 0.12);
+  --status-danger-border: oklch(0.62 0.22 27 / 0.45);
+  --status-info-foreground: oklch(0.84 0.09 230);
+  --status-info-background: oklch(0.68 0.14 230 / 0.12);
+  --status-info-border: oklch(0.68 0.14 230 / 0.45);
+  --status-neutral-foreground: var(--fg-secondary);
+  --status-neutral-background: oklch(0.7 0.02 250 / 0.1);
+  --status-neutral-border: oklch(0.7 0.02 250 / 0.35);
+
+  --interactive-hover: oklch(0.96 0.01 250 / 0.08);
+  --interactive-active: oklch(0.96 0.01 250 / 0.13);
+  --interactive-selected: var(--sidebar-accent);
+  --interactive-focus: var(--ring);
+  --interactive-disabled: oklch(0.96 0.01 250 / 0.04);
+  --brand-subtle: color-mix(in oklab, var(--primary) 15%, transparent);
+  --selection-background: oklch(0.62 0.22 25 / 0.35);
+  --focus-ring-color: var(--ring);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 }
 
 @layer base {
@@ -166,8 +273,15 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+  :where(table, [data-tabular-numerals]) {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  :where(a, button, input, textarea, select, summary, [tabindex], [role="button"], [role="link"], [role="menuitem"]):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color) !important;
+    outline-offset: var(--focus-ring-offset) !important;
+  }
   ::selection {
-    background-color: oklch(0.62 0.22 25 / 0.35);
+    background-color: var(--selection-background);
     color: var(--color-foreground);
   }
 }
@@ -183,4 +297,11 @@
 }
 @utility panel-shadow {
   box-shadow: var(--shadow-panel);
+}
+@utility numeric-tabular {
+  font-family: var(--font-mono);
+  font-size: var(--type-numeric-size);
+  font-weight: var(--type-numeric-weight);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: var(--type-numeric-line-height);
 }

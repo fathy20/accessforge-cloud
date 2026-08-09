@@ -12,6 +12,35 @@ export const MODULE_READINESS_VALUES = [
 
 export type ModuleReadiness = (typeof MODULE_READINESS_VALUES)[number];
 
+export const MODULE_READINESS_STATUS_FAMILIES = [
+  "success",
+  "info",
+  "warning",
+  "neutral",
+] as const;
+
+export type ModuleReadinessStatusFamily =
+  (typeof MODULE_READINESS_STATUS_FAMILIES)[number];
+
+export const READINESS_STATUS_FAMILY_BY_VALUE = {
+  available: "success",
+  pilot: "info",
+  under_validation: "info",
+  requires_configuration: "warning",
+  under_development: "warning",
+  not_migrated: "neutral",
+  discovery_required: "neutral",
+} as const satisfies Partial<Record<ModuleReadiness, ModuleReadinessStatusFamily>>;
+
+export function getReadinessStatusFamily(
+  readiness: ModuleReadiness,
+): ModuleReadinessStatusFamily {
+  const statusMap = READINESS_STATUS_FAMILY_BY_VALUE as Partial<
+    Record<ModuleReadiness, ModuleReadinessStatusFamily>
+  >;
+  return statusMap[readiness] ?? "neutral";
+}
+
 export const MODULE_BUSINESS_AREAS = ["crew", "maintenance", "stores", "admin"] as const;
 
 export type ModuleBusinessArea = (typeof MODULE_BUSINESS_AREAS)[number];

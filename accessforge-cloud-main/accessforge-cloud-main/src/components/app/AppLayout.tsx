@@ -1,25 +1,39 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useI18n } from "@/lib/i18n";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
 
 export function AppLayout({ children }: { children: ReactNode }) {
+  const { dir, t } = useI18n();
+  const isMobile = useIsMobile();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMobile) setMobileNavigationOpen(false);
+  }, [isMobile]);
+
   return (
-    <div 
-      className="min-h-screen w-full flex bg-background relative"
-      style={{
-        backgroundImage: "url('/airplane_bg.jpg')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }}
-    >
-      <div className="absolute inset-0 bg-background/95 backdrop-blur-[2px]" />
-      <div className="relative z-10 flex w-full">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <AppTopbar />
-          <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-7xl px-6 py-6">{children}</div>
+    <div className="min-h-screen w-full bg-background text-foreground" dir={dir}>
+      <a
+        href="#main-content"
+        className="sr-only focus:fixed focus:start-page-gutter focus:top-3 focus:z-shell-skip-link focus:not-sr-only focus:rounded-md focus:border focus:border-interactive-focus focus:bg-surface-overlay focus:px-4 focus:py-2 focus:text-label focus:text-fg-primary"
+      >
+        {t("shell.skip_to_main")}
+      </a>
+
+      <div className="flex min-h-screen w-full">
+        <AppSidebar
+          isMobile={isMobile}
+          mobileOpen={mobileNavigationOpen}
+          onMobileOpenChange={setMobileNavigationOpen}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AppTopbar onOpenNavigation={() => setMobileNavigationOpen(true)} />
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-shell px-page-gutter py-section-rhythm">
+              {children}
+            </div>
           </main>
         </div>
       </div>

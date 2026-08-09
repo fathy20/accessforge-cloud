@@ -50,6 +50,7 @@ class TestCheckControlPipeline(unittest.TestCase):
         import backend.database as bd
         from backend.models import Base, User, UserRole, AppRole, Module
         from backend.auth import get_password_hash
+        from backend.tools.sync_registry import sync_registry
         
         cls.test_engine = bd.engine
         Base.metadata.create_all(bind=cls.test_engine)
@@ -63,6 +64,7 @@ class TestCheckControlPipeline(unittest.TestCase):
             db.add(UserRole(user_id=user.id, role=AppRole.super_admin))
             db.add(Module(key="check_control", name="Check Control", enabled=True))
             db.commit()
+            sync_registry(db)
 
     @classmethod
     def tearDownClass(cls):

@@ -35,6 +35,7 @@ from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
 from .rbac.permissions import get_effective_permissions, record_audit
+from .rbac.registry import MODULE_REGISTRY
 from . import storage as storage_backend
 from .tools.sync_registry import sync_registry
 
@@ -355,14 +356,58 @@ def run_job_background(job_id: str):
             handler = REGISTRY.get(module_key)
             if not handler:
                 raise ValueError(f"Module {module_key} not found in registry")
+
+            output_owner = db.query(User).filter(User.id == job.user_id).first()
+            module = db.query(Module).filter(Module.key == module_key).first()
+            if output_owner is None:
+                module_permitted = False
+            else:
+                permissions, disabled_module_ids = _module_visibility_inputs(db, output_owner)
+                module_permitted = _module_is_visible(
+                    module,
+                    permissions,
+                    disabled_module_ids,
+                )
+
+            if not module_permitted:
+                record_audit(
+                    db,
+                    output_owner,
+                    "job_module_denied",
+                    "job",
+                    job.id,
+                    module_key=module_key,
+                )
+                db.commit()
+                raise PermissionError("Module access denied")
                 
             # Get input files
             file_ids = job.input_refs.get("files", [])
             input_files = []
+            rejected_file_count = 0
             for fid in file_ids:
-                upload = db.query(Upload).filter(Upload.id == fid).first()
+                upload = (
+                    db.query(Upload)
+                    .filter(Upload.id == fid, Upload.user_id == job.user_id)
+                    .first()
+                )
                 if upload:
                     input_files.append(upload.storage_path)
+                else:
+                    rejected_file_count += 1
+
+            if rejected_file_count:
+                output_owner = db.query(User).filter(User.id == job.user_id).first()
+                record_audit(
+                    db,
+                    output_owner,
+                    "job_input_rejected",
+                    "job",
+                    job.id,
+                    rejected_count=rejected_file_count,
+                )
+                db.commit()
+                raise ValueError("One or more input files are unavailable to this job")
                     
             if not input_files and job.input_refs.get("data_source") != "db":
                 raise ValueError("No valid input files found for job")
@@ -455,6 +500,43 @@ def create_job(
     from worker.handlers import REGISTRY
     if req.module_key not in REGISTRY:
         raise HTTPException(status_code=422, detail=f"Unknown module: {req.module_key}")
+
+    module = db.query(Module).filter(Module.key == req.module_key).first()
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
+    if not _module_is_visible(module, permissions, disabled_module_ids):
+        record_audit(
+            db,
+            current_user,
+            "job_module_denied",
+            "job",
+            None,
+            module_key=req.module_key,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail="Module access denied")
+
+    file_ids = req.input_refs.get("files", [])
+    rejected_file_count = 0
+    for fid in file_ids:
+        upload = (
+            db.query(Upload)
+            .filter(Upload.id == fid, Upload.user_id == current_user.id)
+            .first()
+        )
+        if upload is None:
+            rejected_file_count += 1
+
+    if rejected_file_count:
+        record_audit(
+            db,
+            current_user,
+            "job_input_rejected",
+            "job",
+            None,
+            rejected_count=rejected_file_count,
+        )
+        db.commit()
+        raise HTTPException(status_code=400, detail="Unknown or inaccessible input file")
 
     job = Job(
         user_id=current_user.id,
@@ -585,13 +667,7 @@ def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Dep
 # ---------------------------------------------
 @app.get("/api/modules")
 def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    permissions = get_effective_permissions(db, current_user)
-    disabled_module_ids = {
-        module_id
-        for (module_id,) in db.query(ModuleAccess.module_id)
-        .filter(ModuleAccess.user_id == current_user.id, ModuleAccess.enabled == False)  # noqa: E712
-        .all()
-    }
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
     modules = db.query(Module).order_by(Module.sort_order, Module.key).all()
     return [
         _module_payload(module, permissions)
@@ -610,13 +686,7 @@ def get_module(
     if module is None:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    permissions = get_effective_permissions(db, current_user)
-    disabled_module_ids = {
-        module_id
-        for (module_id,) in db.query(ModuleAccess.module_id)
-        .filter(ModuleAccess.user_id == current_user.id, ModuleAccess.enabled == False)  # noqa: E712
-        .all()
-    }
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
     if not _module_is_visible(module, permissions, disabled_module_ids):
         raise HTTPException(status_code=403, detail="Module access denied")
     return _module_payload(module, permissions)
@@ -646,17 +716,37 @@ def _module_payload(module: Module, permissions: set[str]) -> dict:
     }
 
 
+def _module_visibility_inputs(db: Session, user: User) -> tuple[set[str], set[str]]:
+    permissions = get_effective_permissions(db, user)
+    disabled_module_ids = {
+        module_id
+        for (module_id,) in db.query(ModuleAccess.module_id)
+        .filter(ModuleAccess.user_id == user.id, ModuleAccess.enabled == False)  # noqa: E712
+        .all()
+    }
+    return permissions, disabled_module_ids
+
+
 def _module_is_visible(
-    module: Module,
+    module: Module | None,
     permissions: set[str],
     disabled_module_ids: set[str],
 ) -> bool:
+    if module is None:
+        return False
+
+    registry_definition = next(
+        (definition for definition in MODULE_REGISTRY if definition.key == module.key),
+        None,
+    )
     return (
-        bool(module.enabled)
+        registry_definition is not None
+        and module.required_view_permission == registry_definition.required_view_permission
+        and bool(module.enabled)
         and module.module_status != ModuleStatus.hidden
         and module.id not in disabled_module_ids
         and bool(module.required_view_permission)
-        and module.required_view_permission in permissions
+        and registry_definition.required_view_permission in permissions
     )
 
 # ---------------------------------------------

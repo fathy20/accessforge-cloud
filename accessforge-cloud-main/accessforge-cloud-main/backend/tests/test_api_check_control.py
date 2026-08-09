@@ -35,6 +35,7 @@ class TestCheckControlApi(unittest.TestCase):
         import backend.main as main
         from backend.auth import get_password_hash
         from backend.models import AppRole, User, UserRole, UserStatus
+        from backend.tools.sync_registry import sync_registry
 
         cls.database = database
         cls.main = main
@@ -49,6 +50,7 @@ class TestCheckControlApi(unittest.TestCase):
             session.flush()
             session.add(UserRole(user_id=user.id, role=AppRole.engineer))
             session.commit()
+            sync_registry(session)
         cls.client = TestClient(main.app)
         auth = cls.client.post(
             "/api/auth/login",
@@ -112,19 +114,23 @@ class TestCheckControlApi(unittest.TestCase):
         checks = pd.read_excel(io.BytesIO(download.content))["CHECK"].astype(str).str.upper().tolist()
         self.assertEqual(set(checks), {"A1", "A2"})
 
-    def test_missing_upload_marks_job_failed_without_output(self):
-        created = self.client.post(
+    def test_missing_upload_is_rejected_without_creating_job(self):
+        from backend.models import Job, User
+
+        with self.database.SessionLocal() as session:
+            user_id = session.query(User.id).filter(User.email == "api-test@example.com").scalar()
+            jobs_before = session.query(Job).filter(Job.user_id == user_id).count()
+
+        response = self.client.post(
             "/api/jobs",
             headers=self.headers,
             json={"module_key": "check_control", "input_refs": {"files": ["missing"], "check": "A2", "data_source": "files"}},
         )
-        created.raise_for_status()
+        self.assertEqual(response.status_code, 400)
 
-        job = self.client.get(f"/api/jobs/{created.json()['id']}", headers=self.headers)
-        job.raise_for_status()
-        self.assertEqual(job.json()["status"], "failed")
-        self.assertTrue(job.json()["error_message"])
-        self.assertFalse((job.json().get("output_refs") or {}).get("files"))
+        with self.database.SessionLocal() as session:
+            jobs_after = session.query(Job).filter(Job.user_id == user_id).count()
+        self.assertEqual(jobs_after, jobs_before)
 
     def test_unknown_module_is_rejected(self):
         before = self.client.get("/api/jobs", headers=self.headers)

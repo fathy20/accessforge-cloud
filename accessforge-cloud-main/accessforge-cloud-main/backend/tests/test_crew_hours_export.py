@@ -26,7 +26,7 @@ for _name in ("LEON_BASE_URL", "LEON_REFRESH_TOKEN", "LEON_MCP_URL", "LEON_TIMEO
     os.environ[_name] = ""
 
 from backend.auth import get_current_user
-from backend.main import app
+from backend.main import CORS_ORIGINS, app
 from backend.statistics.crew_hours.errors import LeonRateLimitError, LeonTimeoutError
 from backend.statistics.crew_hours.schemas import (
     CrewHoursPeriod,
@@ -332,6 +332,82 @@ class TestCrewHoursExport(unittest.TestCase):
         self.assertIsInstance(missing_total.value, str)
         self.assertEqual(missing_total.number_format, "General")
 
+    def test_trn_and_psn_are_textual_or_unavailable_not_numeric_summary_totals(self):
+        report = _report()
+        report.crew_members.extend(
+            [
+                CrewMemberSummary(
+                    crew_id="TRAINING-CREW",
+                    person_code="TRAINING-CODE",
+                    display_name="Training Crew",
+                    full_name="Training Crew",
+                    position_type="Cockpit",
+                    status="TRN",
+                    official_total="TRN",
+                    raw_official_total="TRN",
+                    flight_count=0,
+                    flights=[],
+                ),
+                CrewMemberSummary(
+                    crew_id="PASSENGER-CREW",
+                    person_code="PASSENGER-CODE",
+                    display_name="Passenger Crew",
+                    full_name="Passenger Crew",
+                    position_type="Cockpit",
+                    official_total=None,
+                    flight_count=1,
+                    flights=[
+                        _flight(
+                            "PASSENGER-FLIGHT",
+                            position="PSN",
+                            block_time="02:00",
+                            flight_number="RS-PSN",
+                            journey_log={
+                                "credentials": "CREDENTIAL-SENTINEL",
+                                "jwt": "JWT-SENTINEL",
+                                "raw_payload": "RAW-PAYLOAD-SENTINEL",
+                            },
+                        )
+                    ],
+                ),
+            ]
+        )
+        self.service.result = report
+
+        response = self._export_response()
+        workbook = load_workbook(filename=__import__("io").BytesIO(response.content))
+        self.addCleanup(workbook.close)
+        summary = workbook["Summary"]
+        totals = {
+            summary.cell(row=row, column=1).value: summary.cell(row=row, column=4)
+            for row in range(4, summary.max_row + 1)
+            if summary.cell(row=row, column=1).value is not None
+        }
+
+        self.assertEqual(totals["Training Crew"].value, "TRN")
+        self.assertEqual(totals["Training Crew"].number_format, "General")
+        self.assertEqual(totals["Passenger Crew"].value, "Not available")
+        self.assertEqual(totals["Passenger Crew"].number_format, "General")
+        duration_note = workbook["Report Information"]["B9"].value
+        self.assertIn("not-a-duration", duration_note)
+        self.assertNotIn("TRN", duration_note)
+
+        workbook_text = "\n".join(
+            str(cell.value)
+            for worksheet in workbook.worksheets
+            for row in worksheet.iter_rows()
+            for cell in row
+            if cell.value is not None
+        )
+        for forbidden in (
+            "journey_log",
+            "credentials",
+            "CREDENTIAL-SENTINEL",
+            "JWT-SENTINEL",
+            "RAW-PAYLOAD-SENTINEL",
+        ):
+            self.assertNotIn(forbidden, workbook_text)
+
     def test_formula_injection_is_escaped_and_unparsed_duration_is_reported(self):
         response = self._export_response()
         workbook = load_workbook(filename=__import__("io").BytesIO(response.content))
@@ -357,10 +433,27 @@ class TestCrewHoursExport(unittest.TestCase):
         )
         disposition = response.headers["content-disposition"]
         filename = re.search(r'filename="([^"]+)"', disposition).group(1)
+        self.assertEqual(
+            disposition,
+            'attachment; filename="crew-hours-2026-06-01-to-2026-06-30.xlsx"',
+        )
         self.assertRegex(filename, r"^[A-Za-z0-9._-]+$")
-        self.assertTrue(filename.startswith("crew-hours_2026-06-01_2026-06-30_"))
         self.assertNotIn("secrets", filename)
         self.assertNotIn("calc", filename)
+
+    def test_content_disposition_is_exposed_to_allowed_browser_origin(self):
+        response = self.client.get(
+            "/api/statistics/crew-hours/report/export",
+            params={"from": "2026-06-01", "to": "2026-06-30"},
+            headers={"Origin": CORS_ORIGINS[0]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        exposed_headers = {
+            value.strip().lower()
+            for value in response.headers["access-control-expose-headers"].split(",")
+        }
+        self.assertIn("content-disposition", exposed_headers)
 
     def test_report_information_has_period_timestamp_user_and_source(self):
         response = self._export_response()

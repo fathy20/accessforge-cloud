@@ -1,5 +1,6 @@
 import { CrewDetailTable } from "./CrewDetailTable";
 import { CrewSummaryTable } from "./CrewSummaryTable";
+import { filterCrewMembers } from "./filters";
 import type {
   CrewHoursReport,
   PositionTokenFilter,
@@ -13,9 +14,9 @@ export function CrewReportTabPanel({
   positionTokenFilter,
   hasClientSideDisplayFilter,
   expandedCrew,
-  trnOverrides,
+  crewSearch,
+  selectedPosition,
   onToggleCrew,
-  onToggleTrn,
 }: {
   report: CrewHoursReport;
   tab: ReportTabDefinition;
@@ -23,11 +24,15 @@ export function CrewReportTabPanel({
   positionTokenFilter: PositionTokenFilter;
   hasClientSideDisplayFilter: boolean;
   expandedCrew: Record<string, boolean>;
-  trnOverrides: Record<string, boolean>;
+  crewSearch: string;
+  selectedPosition: string;
   onToggleCrew: (crewId: string) => void;
-  onToggleTrn: (crewId: string) => void;
 }) {
-  const crews = report.crew_members.filter((crew) => crew.position_type === tab.position);
+  const crews = filterCrewMembers(
+    report.crew_members,
+    crewSearch,
+    selectedPosition,
+  ).filter((crew) => crew.position_type === tab.position);
 
   if (tab.summary) {
     return <CrewSummaryTable report={report} crews={crews} position={tab.position} />;
@@ -41,9 +46,7 @@ export function CrewReportTabPanel({
       positionTokenFilter={positionTokenFilter}
       hasClientSideDisplayFilter={hasClientSideDisplayFilter}
       expandedCrew={expandedCrew}
-      trnOverrides={trnOverrides}
       onToggleCrew={onToggleCrew}
-      onToggleTrn={onToggleTrn}
     />
   );
 }

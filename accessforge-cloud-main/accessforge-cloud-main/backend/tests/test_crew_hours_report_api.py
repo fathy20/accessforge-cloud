@@ -185,6 +185,109 @@ class TestCrewHoursReportApi(unittest.TestCase):
         self.assertEqual(data["official_totals_by_position"], {})
         self.assertEqual(fake_client.calls, 1)
 
+    def test_search_and_position_filter_visible_rows_without_changing_official_totals(self):
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {
+                        "ALPHA": "57:35",
+                        "BRAVO": "88:30",
+                        "CABIN": "10:00",
+                    },
+                    [
+                        {
+                            "scope_row_unique_id": "leg-alpha",
+                            "crew_codes": ["ALPHA"],
+                            "crew_names": ["Alice Alpha"],
+                            "crew_position_names": ["CPT"],
+                            "blockTimeJourneyLog": "57:35",
+                        },
+                        {
+                            "scope_row_unique_id": "leg-bravo",
+                            "crew_codes": ["BRAVO"],
+                            "crew_names": ["Bob Bravo"],
+                            "crew_position_names": ["FO"],
+                            "blockTimeJourneyLog": "88:30",
+                        },
+                        {
+                            "scope_row_unique_id": "leg-cabin",
+                            "crew_codes": ["CABIN"],
+                            "crew_names": ["Cabin Member"],
+                            "crew_position_names": ["FA1"],
+                            "blockTimeJourneyLog": "10:00",
+                        },
+                    ],
+                )
+
+        app.dependency_overrides[get_crew_hours_service] = lambda: LiveCrewHoursService(
+            FakeCrewClient()
+        )
+        try:
+            full_response = self.client.get(
+                "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30"
+            )
+            filtered_response = self.client.get(
+                "/api/statistics/crew-hours/report"
+                "?from=2026-06-01&to=2026-06-30&position=Cockpit&crew_member=ALIce"
+            )
+        finally:
+            app.dependency_overrides.pop(get_crew_hours_service, None)
+
+        self.assertEqual(full_response.status_code, 200)
+        self.assertEqual(filtered_response.status_code, 200)
+        full = full_response.json()
+        filtered = filtered_response.json()
+        self.assertEqual(
+            full["official_totals_by_position"],
+            {"Cockpit": "146:05", "Cabin": "10:00"},
+        )
+        self.assertEqual(
+            filtered["official_totals_by_position"],
+            full["official_totals_by_position"],
+        )
+        self.assertEqual(
+            [member["person_code"] for member in filtered["crew_members"]],
+            ["ALPHA"],
+        )
+        self.assertEqual(filtered["crew_members"][0]["official_total"], "57:35")
+
+    def test_explicit_authoritative_trn_is_exact_in_api_and_not_numeric_total(self):
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {"TRAINING": "TRN"},
+                    [
+                        {
+                            "scope_row_unique_id": "trn-row",
+                            "crew_codes": ["TRAINING"],
+                            "crew_names": ["Training Fixture"],
+                            "crew_position_names": ["CPT"],
+                            "blockTimeJourneyLog": "",
+                        }
+                    ],
+                    total_minutes={},
+                )
+
+        app.dependency_overrides[get_crew_hours_service] = lambda: LiveCrewHoursService(
+            FakeCrewClient()
+        )
+        try:
+            response = self.client.get(
+                "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30"
+            )
+        finally:
+            app.dependency_overrides.pop(get_crew_hours_service, None)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        member = data["crew_members"][0]
+        self.assertEqual(member["official_total"], "TRN")
+        self.assertEqual(member["raw_official_total"], "TRN")
+        self.assertEqual(member["status"], "TRN")
+        self.assertTrue(member["flights"][0]["is_trn"])
+        self.assertEqual(member["flights"][0]["flight_training_type"], "TRN")
+        self.assertEqual(data["official_totals_by_position"], {})
+
     def test_invalid_report_dates_are_rejected_before_service_invocation(self):
         cases = (
             (

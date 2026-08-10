@@ -14,6 +14,7 @@ export function CrewSummaryTable({
   position: ReportTabPosition;
 }) {
   const { t } = useI18n();
+  const officialPositionTotal = report.official_totals_by_position?.[position];
 
   return (
     <div className="space-y-3">
@@ -83,7 +84,7 @@ export function CrewSummaryTable({
           {t(position === "Cockpit" ? "crew.server_total.cockpit" : "crew.server_total.cabin")}
         </span>
         <span className="font-mono font-semibold text-foreground">
-          {crews.some((crew) => hasOfficialMcpTotal(report, crew))
+          {typeof officialPositionTotal === "string" && officialPositionTotal.trim().length > 0
             ? displayOfficialHours(report, position)
             : t("crew.unavailable")}
         </span>

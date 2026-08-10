@@ -7,6 +7,7 @@ from typing import Any, Mapping
 import httpx
 
 from .config import LeonConfiguration
+from .domain import buffered_query_dates, normalize_report_row, select_rows_for_period
 from .errors import LeonAuthenticationError, LeonConfigurationError, LeonContractError, LeonResponseError, LeonTimeoutError, LeonTransportError
 from .token_provider import LeonAccessTokenProvider
 from .transport import BearerAccessTokenHeaderBuilder, LeonHttpTransport, LeonRawResponse, LeonRequest
@@ -49,6 +50,7 @@ class OfficialMcpReport(dict[str, str]):
         totals: Mapping[str, str],
         rows: list[Mapping[str, Any]],
         total_minutes: Mapping[str, int] | None = None,
+        records_count: int | None = None,
     ):
         super().__init__(totals)
         self.total_minutes: Mapping[str, int] = dict(
@@ -57,7 +59,7 @@ class OfficialMcpReport(dict[str, str]):
             else _derive_total_minutes(totals)
         )
         self.rows = tuple(dict(row) for row in rows)
-        self.records_count = len(self.rows)
+        self.records_count = len(self.rows) if records_count is None else records_count
 
 def fetch_official_totals(
     configuration: LeonConfiguration,
@@ -78,12 +80,15 @@ def fetch_official_report(
 ) -> OfficialMcpReport:
     """Fetch and validate the official LEON Report Wizard rows and totals."""
     mcp_url = _mcp_url(configuration)
-    date_filter = {
-        "start": f"{_validate_date(from_date)}T00:00:00Z",
-        "end": f"{_validate_date(to_date)}T23:59:59Z",
-    }
-    if date_filter["start"][:10] > date_filter["end"][:10]:
+    validated_from = _validate_date(from_date)
+    validated_to = _validate_date(to_date)
+    if validated_from > validated_to:
         raise LeonContractError("MCP report start date must not be after end date.")
+    buffered_from, buffered_to = buffered_query_dates(validated_from, validated_to)
+    date_filter = {
+        "start": f"{buffered_from}T00:00:00Z",
+        "end": f"{buffered_to}T23:59:59Z",
+    }
 
     arguments = {
         "dateFilter": date_filter,
@@ -134,9 +139,16 @@ def fetch_official_report(
             if attempt == 0:
                 continue
             raise LeonAuthenticationError("LEON MCP authentication failed.")
-        rows = _extract_report_rows(_ensure_rpc_success(response))
+        fetched_rows = _extract_report_rows(_ensure_rpc_success(response))
+        _validate_required_rows(fetched_rows)
+        rows = select_rows_for_period(fetched_rows, validated_from, validated_to)
         formatted_totals, total_minutes = _aggregate_report_rows(rows)
-        return OfficialMcpReport(formatted_totals, rows, total_minutes)
+        return OfficialMcpReport(
+            formatted_totals,
+            rows,
+            total_minutes,
+            records_count=len(fetched_rows),
+        )
 
     raise AssertionError("MCP authentication retry loop exhausted unexpectedly.")
 
@@ -283,7 +295,28 @@ def _decode_embedded_json(value: str) -> Any | None:
 def _aggregate_report_rows(
     rows: list[Mapping[str, Any]],
 ) -> tuple[dict[str, str], dict[str, int]]:
+    _validate_required_rows(rows)
     totals: dict[str, int] = {}
+    for row in rows:
+        codes = row.get("crew_codes")
+        if not isinstance(codes, list) or any(not isinstance(code, str) for code in codes):
+            raise LeonContractError("LEON MCP report row had invalid crew_codes.")
+        normalized_row = normalize_report_row(row)
+        block_time = row.get("blockTimeJourneyLog")
+        if block_time in (None, ""):
+            continue
+        minutes = _parse_block_time(block_time)
+        for crew_slot in normalized_row.crew:
+            if not crew_slot.is_operating:
+                continue
+            totals[crew_slot.code] = totals.get(crew_slot.code, 0) + minutes
+    return (
+        {code: _format_minutes(minutes) for code, minutes in totals.items()},
+        totals,
+    )
+
+
+def _validate_required_rows(rows: list[Mapping[str, Any]]) -> None:
     for row in rows:
         if not isinstance(row, Mapping):
             raise LeonContractError("LEON MCP report row had an invalid shape.")
@@ -292,23 +325,6 @@ def _aggregate_report_rows(
                 raise LeonContractError(
                     f"LEON MCP report row was missing required column '{column}'."
                 )
-        codes = row.get("crew_codes")
-        if not isinstance(codes, list) or any(not isinstance(code, str) for code in codes):
-            raise LeonContractError("LEON MCP report row had invalid crew_codes.")
-        block_time = row.get("blockTimeJourneyLog")
-        if block_time in (None, ""):
-            continue
-        minutes = _parse_block_time(block_time)
-        seen_codes: set[str] = set()
-        for code in codes:
-            normalized_code = code.strip()
-            if normalized_code and normalized_code not in seen_codes:
-                seen_codes.add(normalized_code)
-                totals[normalized_code] = totals.get(normalized_code, 0) + minutes
-    return (
-        {code: _format_minutes(minutes) for code, minutes in totals.items()},
-        totals,
-    )
 
 
 def _derive_total_minutes(totals: Mapping[str, str]) -> dict[str, int]:

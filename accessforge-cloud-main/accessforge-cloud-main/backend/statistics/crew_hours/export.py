@@ -151,6 +151,9 @@ def _write_official_total(cell: Cell, value: str | None, unparsed: list[str]) ->
     if value is None or value == "":
         _write_string(cell, "Not available")
         return
+    if value == "TRN":
+        _write_string(cell, value)
+        return
     _write_duration(cell, value, unparsed)
 
 
@@ -432,14 +435,7 @@ def _safe_filename_component(value: str) -> str:
     return collapsed.strip("-") or "unknown"
 
 
-def build_crew_hours_filename(report: CrewHoursReportResponse, generated_at: datetime) -> str:
-    generated_utc = generated_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    filename = "_".join(
-        (
-            "crew-hours",
-            _safe_filename_component(report.period.from_date),
-            _safe_filename_component(report.period.to_date),
-            _safe_filename_component(generated_utc),
-        )
-    )
-    return _safe_filename_component(filename) + ".xlsx"
+def build_crew_hours_filename(report: CrewHoursReportResponse, _generated_at: datetime) -> str:
+    from_date = _safe_filename_component(report.period.from_date)
+    to_date = _safe_filename_component(report.period.to_date)
+    return f"crew-hours-{from_date}-to-{to_date}.xlsx"

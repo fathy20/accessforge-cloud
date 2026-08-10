@@ -1,10 +1,7 @@
-import logging
 from typing import Mapping, Protocol
 
-logger = logging.getLogger(__name__)
-
 from .config import get_leon_configuration, load_leon_configuration
-from .errors import LeonConfigurationError, LeonContractError
+from .errors import LeonContractError
 from .flight_query import build_flight_list_query, parse_flight_list
 from .graphql import LeonGraphQLExecutor
 from .mcp_report import fetch_official_totals as fetch_official_mcp_totals
@@ -65,72 +62,8 @@ class LiveCrewHoursLeonClient:
             to_date,
         )
 
-class MockCrewHoursLeonClient:
-    def fetch_official_totals(self, from_date: str, to_date: str) -> dict[str, str]:
-        return {}
-
-    def fetch_flights(self, from_date: str, to_date: str) -> list[LeonFlight]:
-        # Demo data when LEON is not configured or in offline mode
-        return [
-            LeonFlight(
-                flight_nid="FL-1001",
-                start_time_utc=f"{from_date}T08:00:00Z",
-                end_time_utc=f"{from_date}T11:30:00Z",
-                flight_tags=[{"label": "SCHEDULED"}],
-                start_airport={"code": {"icao": "HECA", "iata": "CAI"}},
-                end_airport={"code": {"icao": "OEMA", "iata": "MED"}},
-                aircraft={"registration": "SU-RSX", "acftType": {"icao": "B738", "iata": "738"}},
-                crew_list=[
-                    {
-                        "contact": {"name": "Amr", "surname": "Hussien", "personCode": "CP101"},
-                        "position": {"name": "CPT", "posType": "Cockpit"},
-                        "flightTrainingType": None,
-                    },
-                    {
-                        "contact": {"name": "Mohamed", "surname": "Ali", "personCode": "FO202"},
-                        "position": {"name": "F/O", "posType": "Cockpit"},
-                        "flightTrainingType": "TRN",
-                    },
-                ],
-                journey_log={
-                    "landingCount": 1,
-                    "takeoffCrewLogin": {"code": "CP101"},
-                    "landingCrewLogin": {"code": "CP101"},
-                },
-            ),
-            LeonFlight(
-                flight_nid="FL-1002",
-                start_time_utc=f"{from_date}T13:00:00Z",
-                end_time_utc=f"{from_date}T16:15:00Z",
-                flight_tags=[{"label": "SCHEDULED"}],
-                start_airport={"code": {"icao": "OEMA", "iata": "MED"}},
-                end_airport={"code": {"icao": "HECA", "iata": "CAI"}},
-                aircraft={"registration": "SU-RSX", "acftType": {"icao": "B738", "iata": "738"}},
-                crew_list=[
-                    {
-                        "contact": {"name": "Amr", "surname": "Hussien", "personCode": "CP101"},
-                        "position": {"name": "CPT", "posType": "Cockpit"},
-                        "flightTrainingType": None,
-                    },
-                    {
-                        "contact": {"name": "Mohamed", "surname": "Ali", "personCode": "FO202"},
-                        "position": {"name": "F/O", "posType": "Cockpit"},
-                        "flightTrainingType": None,
-                    },
-                ],
-                journey_log={
-                    "landingCount": 1,
-                    "takeoffCrewLogin": {"code": "FO202"},
-                    "landingCrewLogin": {"code": "FO202"},
-                },
-            ),
-        ]
-
 
 def get_crew_hours_leon_client() -> CrewHoursLeonClient:
-    try:
-        config = load_leon_configuration()
-        return LiveCrewHoursLeonClient()
-    except LeonConfigurationError as exc:
-        logger.warning(f"LEON configuration not loaded ({exc}). Using mock client for demonstration.")
-        return MockCrewHoursLeonClient()
+    """Construct lazily; live use still propagates configuration errors without demo data."""
+
+    return LiveCrewHoursLeonClient()

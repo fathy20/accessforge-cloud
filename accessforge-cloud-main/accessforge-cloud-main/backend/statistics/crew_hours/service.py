@@ -4,6 +4,7 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol
 
 from fastapi import Depends
 
+from .domain import is_trn_total, normalize_report_row
 from .errors import (
     CrewHoursCapabilityError,
     LeonAuthenticationError,
@@ -27,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Derived from LEON's own role-slot column labels; see docs/architecture/leon-report-wizard-columns.md.
 # Reconciled against live June 2026 data.
-# Known-unclassified tokens: PAD, PSN, FDP, FDPI, RMP, INSP (pending a business rule).
+# PSN is non-operating for that member's numeric total.  PAD, FDP, FDPI, RMP,
+# and INSP retain the approved existing inclusion semantics.
 LEON_POSITION_GROUPS: Mapping[str, frozenset[str]] = {
     "Cockpit": frozenset(
         {
@@ -152,7 +154,7 @@ def _build_mcp_report_response(
     crew_member: str | None,
 ) -> CrewHoursReportResponse:
     crew_map: Dict[str, Dict[str, Any]] = {}
-    selected_row_count = 0
+    row_crew_codes: list[set[str]] = []
     unclassified_position_tokens: set[str] = set()
     unclassified_crew_codes: set[str] = set()
     position_query = (position or "All").strip().lower()
@@ -175,60 +177,31 @@ def _build_mcp_report_response(
         )
 
     for row in report.rows:
-        if not isinstance(row, Mapping):
-            raise LeonContractError("LEON MCP report row had an invalid shape.")
-        codes = row.get("crew_codes")
-        if not isinstance(codes, list) or any(not isinstance(code, str) for code in codes):
-            raise LeonContractError("LEON MCP report row had invalid crew_codes.")
-        names: list[str | None] | None = None
-        positions: list[str | None] | None = None
-        names_misaligned = False
-        positions_misaligned = False
-        if "crew_names" in row:
-            raw_names = row["crew_names"]
-            if isinstance(raw_names, list) and len(raw_names) == len(codes):
-                names = _string_list(raw_names)
-            else:
-                names_misaligned = True
-        if "crew_position_names" in row:
-            raw_positions = row["crew_position_names"]
-            if isinstance(raw_positions, list) and len(raw_positions) == len(codes):
-                positions = _string_list(raw_positions)
-            else:
-                positions_misaligned = True
-        if names_misaligned or positions_misaligned:
+        normalized_row = normalize_report_row(row)
+        if normalized_row.arrays_misaligned:
             logger.warning(
                 "LEON MCP report crew arrays were misaligned for scope row %s.",
                 row.get("scope_row_unique_id"),
             )
-            names = None
-            positions = None
 
-        row_selected = False
-        code_indices: dict[str, int] = {}
-        for code_index, raw_code in enumerate(codes):
-            code = raw_code.strip()
-            if not code or code in code_indices:
-                continue
-            code_indices[code] = code_index
-
-        for code, code_index in code_indices.items():
-            full_name = _indexed_string(names, code_index)
-            crew_position = _indexed_string(positions, code_index)
+        row_codes: set[str] = set()
+        for crew_slot in normalized_row.crew:
+            code = crew_slot.code
+            row_codes.add(code)
+            # Preserve the established display contract: one misaligned optional
+            # array degrades both display fields for this row.  The domain still
+            # retains any independently aligned position array for PSN aggregation.
+            full_name = None if normalized_row.arrays_misaligned else crew_slot.name
+            crew_position = None if normalized_row.arrays_misaligned else crew_slot.position
+            flight_position = (
+                None if normalized_row.positions_misaligned else crew_slot.position
+            )
             position_type = _position_group(crew_position)
             if position_type is None and crew_position is not None:
                 unclassified_position_tokens.add(crew_position.upper())
                 unclassified_crew_codes.add(code)
-            if position_query != "all" and not _matches_query(position_type, position_query):
-                continue
-            if crew_query and not (
-                _matches_query(code, crew_query)
-                or _matches_query(full_name, crew_query)
-            ):
-                continue
-
-            row_selected = True
             key = code
+            explicit_trn = is_trn_total(report.get(code))
             if key not in crew_map:
                 crew_map[key] = {
                     "crew_id": key,
@@ -236,22 +209,22 @@ def _build_mcp_report_response(
                     "full_name": full_name,
                     "position_name": crew_position,
                     "position_groups": [],
-                    "has_trn": False,
+                    "has_trn": explicit_trn,
                     "flights": [],
                 }
             elif crew_map[key]["full_name"] is None and full_name is not None:
                 crew_map[key]["full_name"] = full_name
+            if crew_map[key]["position_name"] is None and crew_position is not None:
+                crew_map[key]["position_name"] = crew_position
+            if explicit_trn:
+                crew_map[key]["has_trn"] = True
 
             if position_type is not None:
                 crew_map[key]["position_groups"].append(position_type)
 
-            flight = _mcp_flight_item(row, crew_position)
+            flight = _mcp_flight_item(row, flight_position, is_trn=explicit_trn)
             crew_map[key]["flights"].append(flight)
-            if flight.is_trn:
-                crew_map[key]["has_trn"] = True
-
-        if row_selected:
-            selected_row_count += 1
+        row_crew_codes.append(row_codes)
 
     if unclassified_position_tokens:
         logger.info(
@@ -260,11 +233,28 @@ def _build_mcp_report_response(
             sorted(unclassified_position_tokens),
         )
 
-    crew_summaries: List[CrewMemberSummary] = []
     official_totals = dict(report)
+    for raw_code, official_total in official_totals.items():
+        code = raw_code.strip()
+        if not code:
+            continue
+        if code not in crew_map:
+            crew_map[code] = {
+                "crew_id": code,
+                "person_code": code,
+                "full_name": None,
+                "position_name": None,
+                "position_groups": [],
+                "has_trn": is_trn_total(official_total),
+                "flights": [],
+            }
+        elif is_trn_total(official_total):
+            crew_map[code]["has_trn"] = True
+
+    all_crew_summaries: List[CrewMemberSummary] = []
     for code, data in crew_map.items():
         official_total = official_totals.get(code)
-        crew_summaries.append(
+        all_crew_summaries.append(
             CrewMemberSummary(
                 crew_id=data["crew_id"],
                 person_code=data["person_code"],
@@ -282,17 +272,13 @@ def _build_mcp_report_response(
             )
         )
 
-    official_totals_available = sum(
-        1
-        for item in crew_summaries
-        if isinstance(item.official_total, str) and item.official_total.strip()
-    )
     official_totals_by_position_minutes: dict[str, int] = {}
-    for item in crew_summaries:
+    for item in all_crew_summaries:
         if (
             item.person_code is None
             or not isinstance(item.official_total, str)
             or not item.official_total.strip()
+            or is_trn_total(item.official_total)
         ):
             continue
         minutes = report.total_minutes.get(item.person_code)
@@ -306,6 +292,32 @@ def _build_mcp_report_response(
         position_type: _format_minutes(minutes)
         for position_type, minutes in official_totals_by_position_minutes.items()
     }
+
+    crew_summaries = [
+        item
+        for item in all_crew_summaries
+        if (
+            position_query == "all"
+            or _matches_query(item.position_type, position_query)
+        )
+        and (
+            not crew_query
+            or _matches_query(item.person_code, crew_query)
+            or _matches_query(item.full_name, crew_query)
+            or _matches_query(item.display_name, crew_query)
+        )
+    ]
+    selected_codes = {
+        item.person_code for item in crew_summaries if item.person_code is not None
+    }
+    selected_row_count = sum(
+        1 for codes in row_crew_codes if not codes.isdisjoint(selected_codes)
+    )
+    official_totals_available = sum(
+        1
+        for item in crew_summaries
+        if isinstance(item.official_total, str) and item.official_total.strip()
+    )
     crew_summaries.sort(key=lambda item: (item.display_name.casefold(), item.person_code or ""))
     return CrewHoursReportResponse(
         period=CrewHoursPeriod(from_date=from_date, to_date=to_date),
@@ -321,7 +333,12 @@ def _build_mcp_report_response(
     )
 
 
-def _mcp_flight_item(row: Mapping[str, Any], position: str | None) -> FlightItem:
+def _mcp_flight_item(
+    row: Mapping[str, Any],
+    position: str | None,
+    *,
+    is_trn: bool = False,
+) -> FlightItem:
     flight_nid = _optional_string(row.get("scope_row_unique_id"))
     if flight_nid is None:
         raise LeonContractError("LEON MCP report row did not provide scope_row_unique_id.")
@@ -338,23 +355,10 @@ def _mcp_flight_item(row: Mapping[str, Any], position: str | None) -> FlightItem
         flight_date=_optional_string(row.get("date_STD_log_UTC")),
         block_time=_optional_string(row.get("blockTimeJourneyLog")),
         position=position,
-        flight_training_type=None,
-        is_trn=False,
+        flight_training_type="TRN" if is_trn else None,
+        is_trn=is_trn,
         journey_log=None,
     )
-
-
-def _string_list(value: Any) -> list[str | None]:
-    if not isinstance(value, list):
-        return []
-    return [item.strip() if isinstance(item, str) and item.strip() else None for item in value]
-
-
-def _indexed_string(values: list[str | None] | None, index: int) -> str | None:
-    if values is None or index >= len(values):
-        return None
-    value = values[index]
-    return value or None
 
 
 def _optional_string(value: Any) -> str | None:

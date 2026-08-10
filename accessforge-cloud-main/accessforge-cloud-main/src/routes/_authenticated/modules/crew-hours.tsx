@@ -16,7 +16,7 @@ import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { CrewReportTabPanel } from "@/components/crew-hours/CrewReportTabPanel";
 import { displayOfficialHours, formatLastLoadedAt } from "@/components/crew-hours/format";
-import { hasOfficialMcpTotal, isValidReportPeriod, reportTabPosition } from "@/components/crew-hours/filters";
+import { buildCrewHoursReportQuery, hasOfficialMcpTotal, isValidReportPeriod, reportTabPosition } from "@/components/crew-hours/filters";
 import { outsideTabCrewMessage, reportTabLabel } from "@/components/crew-hours/messages";
 import { ACTIVE_POSITION_TOKEN, ALL_AIRCRAFT, ALL_POSITION_TOKENS, OFFICIAL_MCP_SOURCE, POSITIONING_TOKENS, REPORT_TABS } from "@/components/crew-hours/types";
 import type { CrewHoursReport, PositionTokenFilter, ReportTab } from "@/components/crew-hours/types";
@@ -41,11 +41,15 @@ function CrewHoursPage() {
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
   const [exporting, setExporting] = useState(false);
   const requestInFlightRef = useRef(false);
-  const [trnOverrides, setTrnOverrides] = useState<Record<string, boolean>>({});
   const [expandedCrew, setExpandedCrew] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<ReportTab>("cockpit");
   const officialSourceAvailable = report?.hours_source_status === OFFICIAL_MCP_SOURCE;
   const fetchReport = async () => {
+    const query = buildCrewHoursReportQuery(fromDate, toDate);
+    if (query === null) {
+      setError({ kind: "validation", detail: t("crew.error.validation.description") });
+      return;
+    }
     if (requestInFlightRef.current) {
       return;
     }
@@ -53,15 +57,7 @@ function CrewHoursPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        from: fromDate,
-        to: toDate,
-        position: position,
-      });
-      if (crewSearch.trim()) {
-        params.append("crew_member", crewSearch.trim());
-      }
-      const data = await ApiClient.fetch<CrewHoursReport>(`/statistics/crew-hours/report?${params.toString()}`);
+      const data = await ApiClient.fetch<CrewHoursReport>(`/statistics/crew-hours/report?${query}`);
       const loadedAt = new Date();
       setReport(data);
       setLastLoadedAt(loadedAt);
@@ -84,20 +80,13 @@ function CrewHoursPage() {
     }
   };
   const exportReport = async () => {
-    if (exporting || !isValidReportPeriod(report?.period)) {
+    const query = buildCrewHoursReportQuery(fromDate, toDate);
+    if (exporting || report === null || query === null) {
       return;
     }
     setExporting(true);
     try {
-      const params = new URLSearchParams({
-        from: fromDate,
-        to: toDate,
-        position,
-      });
-      if (crewSearch.trim()) {
-        params.append("crew_member", crewSearch.trim());
-      }
-      const { blob, filename } = await ApiClient.fetchBlob(`/statistics/crew-hours/report/export?${params.toString()}`);
+      const { blob, filename } = await ApiClient.fetchBlob(`/statistics/crew-hours/report/export?${query}`);
       if (!filename) {
         throw new Error(t("crew.export.no_filename"));
       }
@@ -120,12 +109,6 @@ function CrewHoursPage() {
   useEffect(() => {
     fetchReport();
   }, []);
-  const toggleTrn = (crewId: string) => {
-    setTrnOverrides((prev) => ({
-      ...prev,
-      [crewId]: !prev[crewId],
-    }));
-  };
   const toggleExpand = (crewId: string) => {
     setExpandedCrew((prev) => ({
       ...prev,
@@ -178,10 +161,10 @@ function CrewHoursPage() {
         <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base font-semibold"><Filter className="h-4 w-4 text-primary" />{t("crew.filters.title")}</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.from")}</Label><div className="relative"><Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
-            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.to")}</Label><div className="relative"><Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
+            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.from")}</Label><div className="relative"><Calendar className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="ps-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
+            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.to")}</Label><div className="relative"><Calendar className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="ps-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
             <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.position")}</Label><Select value={position} onValueChange={setPosition}><SelectTrigger className="text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{t("crew.filters.all_positions")}</SelectItem><SelectItem value="Cockpit">{t("crew.tabs.cockpit")}</SelectItem><SelectItem value="Cabin">{t("crew.tabs.cabin")}</SelectItem></SelectContent></Select></div>
-            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.crew_search")}</Label><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder={t("crew.filters.crew_search_placeholder")} value={crewSearch} onChange={(e) => setCrewSearch(e.target.value)} className="pl-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
+            <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.crew_search")}</Label><div className="relative"><Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder={t("crew.filters.crew_search_placeholder")} value={crewSearch} onChange={(e) => setCrewSearch(e.target.value)} className="ps-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" /></div></div>
             <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.aircraft")}</Label><Select value={aircraftFilter} onValueChange={setAircraftFilter} disabled={!report || loading}><SelectTrigger className="text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_AIRCRAFT}>{t("crew.filters.all_aircraft")}</SelectItem>{aircraftOptions.map((registration) => <SelectItem key={registration} value={registration}>{registration}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label className="text-xs font-medium">{t("crew.filters.position_token")}</Label><Select value={positionTokenFilter} onValueChange={(value) => setPositionTokenFilter(value as PositionTokenFilter)} disabled={!report || loading}><SelectTrigger className="text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_POSITION_TOKENS}>{t("crew.filters.all_tokens")}</SelectItem><SelectItem value={ACTIVE_POSITION_TOKEN}>{t("crew.filters.active")}</SelectItem>{positionTokenOptions.map((token) => <SelectItem key={token} value={token}>{token}</SelectItem>)}</SelectContent></Select></div>
             <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-1"><Button onClick={fetchReport} disabled={loading} aria-busy={loading} className="w-full gap-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />{t("crew.filters.load")}</Button></div>
@@ -323,7 +306,7 @@ function CrewHoursPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold tracking-tight">{t("crew.details.title")}</h2>
-            <Button type="button" variant="outline" size="sm" onClick={exportReport} disabled={exporting || !isValidReportPeriod(report?.period)} aria-busy={exporting} aria-label={t(exporting ? "crew.export.aria_exporting" : "crew.export.aria_export")} className="gap-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <Button type="button" variant="outline" size="sm" onClick={exportReport} disabled={exporting || !isValidReportPeriod(report?.period) || buildCrewHoursReportQuery(fromDate, toDate) === null} aria-busy={exporting} aria-label={t(exporting ? "crew.export.aria_exporting" : "crew.export.aria_export")} className="gap-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
               {t(exporting ? "crew.export.button_exporting" : "crew.export.button_export")}
             </Button>
@@ -344,7 +327,7 @@ function CrewHoursPage() {
               )}
               {REPORT_TABS.map((tab) => (
                 <TabsContent key={tab.value} value={tab.value} className="mt-4 min-w-0">
-                  <CrewReportTabPanel report={report} tab={tab} aircraftFilter={aircraftFilter} positionTokenFilter={positionTokenFilter} hasClientSideDisplayFilter={hasClientSideDisplayFilter} expandedCrew={expandedCrew} trnOverrides={trnOverrides} onToggleCrew={toggleExpand} onToggleTrn={toggleTrn} />
+                  <CrewReportTabPanel report={report} tab={tab} aircraftFilter={aircraftFilter} positionTokenFilter={positionTokenFilter} hasClientSideDisplayFilter={hasClientSideDisplayFilter} expandedCrew={expandedCrew} crewSearch={crewSearch} selectedPosition={position} onToggleCrew={toggleExpand} />
                 </TabsContent>
               ))}
             </Tabs>

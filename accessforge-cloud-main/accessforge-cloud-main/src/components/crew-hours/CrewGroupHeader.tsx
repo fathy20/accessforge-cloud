@@ -2,7 +2,6 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { hasOfficialMcpTotal } from "./filters";
 import { crewInitials, displayValue } from "./format";
@@ -14,10 +13,8 @@ interface CrewGroupHeaderProps {
   crew: CrewMemberSummary;
   visibleFlightCount: number;
   hasClientSideDisplayFilter: boolean;
-  isTrnActive: boolean;
   isExpanded: boolean;
   onToggle: () => void;
-  onToggleTrn: () => void;
 }
 
 export function CrewGroupHeader({
@@ -25,10 +22,8 @@ export function CrewGroupHeader({
   crew,
   visibleFlightCount,
   hasClientSideDisplayFilter,
-  isTrnActive,
   isExpanded,
   onToggle,
-  onToggleTrn,
 }: CrewGroupHeaderProps) {
   const { t } = useI18n();
   const flightCountLabel = hasClientSideDisplayFilter
@@ -73,34 +68,11 @@ export function CrewGroupHeader({
             className="flex shrink-0 items-center gap-3"
             onClick={(event) => event.stopPropagation()}
           >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant={isTrnActive ? "default" : "outline"}
-                  size="sm"
-                  onClick={onToggleTrn}
-                  className={`h-8 gap-1.5 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                    isTrnActive ? "bg-warning text-warning-foreground hover:bg-warning/90" : ""
-                  }`}
-                  aria-pressed={isTrnActive}
-                  aria-label={t(
-                    isTrnActive ? "crew.trn.aria_training" : "crew.trn.aria_normal",
-                  )}
-                >
-                  <Badge
-                    variant={isTrnActive ? "secondary" : "outline"}
-                    className="px-1 py-0 text-[10px]"
-                  >
-                    TRN
-                  </Badge>
-                  {t(isTrnActive ? "crew.trn.button_training" : "crew.trn.button_normal")}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">{t("crew.trn.tooltip")}</p>
-              </TooltipContent>
-            </Tooltip>
+            {(crew.status === "TRN" || crew.official_total === "TRN") && (
+              <Badge variant="secondary" className="font-mono text-xs">
+                TRN
+              </Badge>
+            )}
 
             <div className="flex items-center gap-2 text-end text-xs">
               <div>

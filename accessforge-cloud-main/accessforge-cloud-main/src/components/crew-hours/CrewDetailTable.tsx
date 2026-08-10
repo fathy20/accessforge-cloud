@@ -16,9 +16,7 @@ interface CrewDetailTableProps {
   positionTokenFilter: PositionTokenFilter;
   hasClientSideDisplayFilter: boolean;
   expandedCrew: Record<string, boolean>;
-  trnOverrides: Record<string, boolean>;
   onToggleCrew: (crewId: string) => void;
-  onToggleTrn: (crewId: string) => void;
 }
 
 export function CrewDetailTable({
@@ -28,9 +26,7 @@ export function CrewDetailTable({
   positionTokenFilter,
   hasClientSideDisplayFilter,
   expandedCrew,
-  trnOverrides,
   onToggleCrew,
-  onToggleTrn,
 }: CrewDetailTableProps) {
   const { t } = useI18n();
   const visibleCrews = crews.filter((crew) => {
@@ -94,7 +90,6 @@ export function CrewDetailTable({
             matchesDisplayFilters(flight, aircraftFilter, positionTokenFilter),
           );
           const isExpanded = expandedCrew[crew.crew_id] ?? true;
-          const isTrnActive = trnOverrides[crew.crew_id] ?? false;
 
           return (
             <tbody key={crew.crew_id} className="divide-y divide-border">
@@ -103,10 +98,8 @@ export function CrewDetailTable({
                 crew={crew}
                 visibleFlightCount={visibleFlights.length}
                 hasClientSideDisplayFilter={hasClientSideDisplayFilter}
-                isTrnActive={isTrnActive}
                 isExpanded={isExpanded}
                 onToggle={() => onToggleCrew(crew.crew_id)}
-                onToggleTrn={() => onToggleTrn(crew.crew_id)}
               />
               {isExpanded && (
                 <>

@@ -19,7 +19,7 @@ import sys
 import types
 
 dotenv_stub = types.ModuleType("dotenv")
-dotenv_stub.load_dotenv = lambda: False
+dotenv_stub.load_dotenv = lambda *args, **kwargs: False
 sys.modules["dotenv"] = dotenv_stub
 
 try:

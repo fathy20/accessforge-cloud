@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -12,7 +13,33 @@ from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
 
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+def resolve_environment_files(backend_dir: Path) -> tuple[Path, ...]:
+    """Return the .env files to load, most significant first."""
+
+    candidates = (backend_dir.parent / ".env", backend_dir / ".env")
+    return tuple(path for path in candidates if path.is_file())
+
+
+def load_environment_files(backend_dir: Path) -> tuple[Path, ...]:
+    """Load each resolved .env file without overriding values already set."""
+
+    environment_files = resolve_environment_files(backend_dir)
+    for path in environment_files:
+        load_dotenv(path, override=False)
+
+    if environment_files:
+        logger.info("Loaded environment files: %s", ", ".join(str(path) for path in environment_files))
+    else:
+        logger.info("No environment files found.")
+    return environment_files
+
+
+# Bare load_dotenv() was cwd-dependent and stopped after one file, silently skipping backend/.env.
+_BACKEND_DIR: Final = Path(__file__).resolve().parent
+ENV_FILES_LOADED: Final[tuple[Path, ...]] = load_environment_files(_BACKEND_DIR)
 
 AppEnv = Literal["development", "test", "production"]
 ALLOWED_APP_ENVS: Final[tuple[AppEnv, ...]] = ("development", "test", "production")

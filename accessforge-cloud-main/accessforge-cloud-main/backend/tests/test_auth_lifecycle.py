@@ -15,6 +15,87 @@ class TestAuthLifecycle(unittest.TestCase):
     def tearDown(self):
         self.app.close()
 
+    def test_active_user_login_returns_access_token_contract(self):
+        email = "active-login-contract@example.test"
+        self.app.create_user(email)
+
+        response = self.app.login(email)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsInstance(payload["access_token"], str)
+        self.assertEqual(payload["token_type"], "bearer")
+        self.assertFalse(payload["must_change_password"])
+
+    def test_wrong_password_returns_json_authentication_failure(self):
+        email = "wrong-password-contract@example.test"
+        self.app.create_user(email)
+
+        response = self.app.login(email, password=email)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Incorrect email or password")
+
+    def test_unknown_email_matches_wrong_password_response(self):
+        existing_email = "known-user-contract@example.test"
+        unknown_email = "unknown-user-contract@example.test"
+        self.app.create_user(existing_email)
+
+        wrong_password = self.app.login(existing_email, password=existing_email)
+        unknown_email_response = self.app.login(unknown_email, password=unknown_email)
+
+        self.assertEqual(wrong_password.status_code, 401)
+        self.assertEqual(unknown_email_response.status_code, 401)
+        self.assertEqual(unknown_email_response.json(), wrong_password.json())
+
+    def test_disabled_user_with_correct_password_is_rejected(self):
+        from backend.models import UserStatus
+
+        email = "disabled-login-contract@example.test"
+        self.app.create_user(email, status=UserStatus.disabled)
+
+        response = self.app.login(email)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "Account is not active")
+
+    def test_locked_user_with_correct_password_is_rejected(self):
+        from backend.models import UserStatus
+
+        email = "locked-login-contract@example.test"
+        self.app.create_user(email, status=UserStatus.locked)
+
+        response = self.app.login(email)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "Account is not active")
+
+    def test_login_failure_responses_are_json_with_string_details(self):
+        from backend.models import UserStatus
+
+        active_email = "failure-json-active@example.test"
+        disabled_email = "failure-json-disabled@example.test"
+        locked_email = "failure-json-locked@example.test"
+        rate_limited_email = "failure-json-rate-limited@example.test"
+        self.app.create_user(active_email)
+        self.app.create_user(disabled_email, status=UserStatus.disabled)
+        self.app.create_user(locked_email, status=UserStatus.locked)
+        self.app.create_user(rate_limited_email)
+
+        responses = [
+            self.app.login(active_email, password=active_email),
+            self.app.login("failure-json-unknown@example.test", password="failure-json-unknown@example.test"),
+            self.app.login(disabled_email),
+            self.app.login(locked_email),
+        ]
+        for _ in range(5):
+            self.app.login(rate_limited_email, password=rate_limited_email)
+        responses.append(self.app.login(rate_limited_email, password=rate_limited_email))
+
+        for response in responses:
+            self.assertTrue(response.headers["content-type"].startswith("application/json"))
+            self.assertIsInstance(response.json()["detail"], str)
+
     def test_failed_logins_lock_account_and_admin_unlock_restores_login(self):
         from backend.auth import reset_login_rate_limit
         from backend.models import User, UserStatus

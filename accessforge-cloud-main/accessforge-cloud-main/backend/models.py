@@ -92,6 +92,8 @@ class User(Base):
             name="ck_users_status",
         ),
         default=UserStatus.active,
+        nullable=False,
+        server_default="active",
     )
     failed_login_count = Column(Integer, default=0, nullable=False, server_default="0")
     locked_at = Column(DateTime(timezone=True), nullable=True)

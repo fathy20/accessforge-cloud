@@ -85,7 +85,7 @@ function UploadsPage() {
   };
 
   const download = (id: string, name: string) => {
-    window.open(`http://localhost:8000/api/uploads/${id}/download`, "_blank");
+    window.open(`${ApiClient.API_URL}/uploads/${id}/download`, "_blank");
   };
 
   const filtered = uploads.filter((u: any) =>

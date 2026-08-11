@@ -1,5 +1,6 @@
 from typing import Mapping, Protocol
 
+from .augmented import AugmentedIndex, fetch_augmented_index
 from .config import get_leon_configuration, load_leon_configuration
 from .errors import LeonContractError
 from .flight_query import build_flight_list_query, parse_flight_list
@@ -22,6 +23,9 @@ class CrewHoursLeonClient(Protocol):
         ...
 
     def fetch_official_totals(self, from_date: str, to_date: str) -> dict[str, str]:
+        ...
+
+    def fetch_augmented_index(self, from_date: str, to_date: str) -> AugmentedIndex:
         ...
 
 
@@ -55,6 +59,16 @@ class LiveCrewHoursLeonClient:
     def fetch_official_totals(self, from_date: str, to_date: str) -> dict[str, str]:
         self._ensure_runtime()
         return fetch_official_mcp_totals(
+            self._configuration,
+            self._transport,
+            self._token_provider,
+            from_date,
+            to_date,
+        )
+
+    def fetch_augmented_index(self, from_date: str, to_date: str) -> AugmentedIndex:
+        self._ensure_runtime()
+        return fetch_augmented_index(
             self._configuration,
             self._transport,
             self._token_provider,

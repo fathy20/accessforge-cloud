@@ -37,6 +37,7 @@ const crew: CrewMemberSummary = {
       position: "PAD",
       flight_training_type: null,
       is_trn: false,
+      augmented_heavy: true,
     },
     {
       flight_nid: "psn-leg",
@@ -52,6 +53,7 @@ const crew: CrewMemberSummary = {
       position: "PSN",
       flight_training_type: null,
       is_trn: false,
+      augmented_heavy: false,
     },
   ],
 };
@@ -70,8 +72,8 @@ const report: CrewHoursReport = {
 };
 
 
-function renderI18n(ui: ReactNode) {
-  localStorage.setItem("redsea.lang", "en");
+function renderI18n(ui: ReactNode, lang: "ar" | "en" = "en") {
+  localStorage.setItem("redsea.lang", lang);
   return render(
     <I18nProvider>
       <TooltipProvider>{ui}</TooltipProvider>
@@ -81,6 +83,64 @@ function renderI18n(ui: ReactNode) {
 
 
 describe("Crew Hours detail rendering", () => {
+  it("renders Yes, No, and Unknown from the API response", () => {
+    const statesCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 3,
+      flights: [
+        ...crew.flights,
+        { ...crew.flights[0], flight_nid: "unknown-leg", augmented_heavy: null },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [statesCrew] }}
+        crews={[statesCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Augmented (Heavy)" })).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(screen.getByText("No")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+  });
+
+  it("renders the augmented column and values in Arabic RTL", () => {
+    const statesCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 3,
+      flights: [
+        ...crew.flights,
+        { ...crew.flights[0], flight_nid: "unknown-leg", augmented_heavy: null },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [statesCrew] }}
+        crews={[statesCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+      "ar",
+    );
+
+    expect(screen.getByRole("columnheader", { name: "التعزيز (Heavy)" })).toBeInTheDocument();
+    expect(screen.getByText("نعم")).toBeInTheDocument();
+    expect(screen.getByText("لا")).toBeInTheDocument();
+    expect(screen.getByText("غير معروف")).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("dir", "rtl");
+  });
+
   it("filters visible rows while keeping the authoritative member total", () => {
     renderI18n(
       <CrewDetailTable
@@ -97,6 +157,29 @@ describe("Crew Hours detail rendering", () => {
     expect(screen.getByText("RSX-PSN")).toBeInTheDocument();
     expect(screen.queryByText("RSX-PAD")).not.toBeInTheDocument();
     expect(screen.getAllByText("57:35").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the authoritative total under Block time with the enrichment column", () => {
+    renderI18n(
+      <CrewDetailTable
+        report={report}
+        crews={[crew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const totalLabel = screen.getByText("Total", { selector: "td" });
+    const totalRow = totalLabel.closest("tr");
+    expect(totalRow).not.toBeNull();
+    const totalCells = totalRow?.querySelectorAll("td");
+    expect(totalCells).toHaveLength(3);
+    expect(totalCells?.[0]).toHaveAttribute("colspan", "9");
+    expect(totalCells?.[1]).toHaveTextContent("57:35");
+    expect(totalCells?.[2]?.textContent).toBe("");
   });
 
   it("renders authoritative TRN without a local manual override control", () => {

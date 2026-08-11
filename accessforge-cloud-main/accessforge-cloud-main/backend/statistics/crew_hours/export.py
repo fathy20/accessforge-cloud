@@ -25,6 +25,7 @@ DETAIL_HEADERS = (
     "OFF",
     "ON",
     "Block time",
+    "Augmented (Heavy)",
 )
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -99,6 +100,14 @@ def _write_duration(cell: Cell, value: str | None, unparsed: list[str]) -> None:
         return
     cell.value = parsed
     cell.number_format = "[h]:mm"
+
+
+def _augmented_heavy_display(value: bool | None) -> str:
+    if value is True:
+        return "Yes"
+    if value is False:
+        return "No"
+    return "Unknown"
 
 
 def _style_cell(cell: Cell, *, alignment: Alignment = _CELL_ALIGNMENT) -> None:
@@ -177,7 +186,7 @@ def _configure_detail_sheet(worksheet) -> None:
     worksheet.page_setup.fitToHeight = 0
     worksheet.sheet_properties.pageSetUpPr.fitToPage = True
     worksheet.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5)
-    widths = (16, 24, 14, 18, 16, 12, 12, 22, 22, 14)
+    widths = (16, 24, 14, 18, 16, 12, 12, 22, 22, 14, 20)
     for column, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(column)].width = width
 
@@ -254,9 +263,12 @@ def _add_detail_crew_block(
             cell = worksheet.cell(row=row, column=column)
             _write_string(cell, value)
             _style_cell(cell)
-        duration_cell = worksheet.cell(row=row, column=len(DETAIL_HEADERS))
+        duration_cell = worksheet.cell(row=row, column=len(DETAIL_HEADERS) - 1)
         _write_duration(duration_cell, flight.block_time, unparsed_durations)
         _style_cell(duration_cell)
+        augmented_cell = worksheet.cell(row=row, column=len(DETAIL_HEADERS))
+        _write_string(augmented_cell, _augmented_heavy_display(flight.augmented_heavy))
+        _style_cell(augmented_cell)
         worksheet.row_dimensions[row].height = 22
         row += 1
     return row
@@ -306,7 +318,7 @@ def _build_detail_sheet(
         row = _add_detail_crew_block(worksheet, row, crew, report, unparsed_durations)
 
     last_row = max(row - 1, 4)
-    worksheet.auto_filter.ref = f"A4:J{last_row}"
+    worksheet.auto_filter.ref = f"A4:K{last_row}"
 
 
 def _build_summary_sheet(

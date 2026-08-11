@@ -255,6 +255,7 @@ class TestCrewHoursExport(unittest.TestCase):
                 "OFF",
                 "ON",
                 "Block time",
+                "Augmented (Heavy)",
             ),
         )
         self.assertEqual(
@@ -287,6 +288,26 @@ class TestCrewHoursExport(unittest.TestCase):
         ]
         self.assertEqual(cabin_headers, ["Crew member: Cabin Crew"])
         self.assertEqual(cabin["B8"].value, "Cabin Crew")
+
+    def test_augmented_heavy_is_detail_only_and_renders_all_three_states(self):
+        report = _report()
+        report.crew_members[0].flights[0].augmented_heavy = True
+        report.crew_members[0].flights[1].augmented_heavy = False
+        report.crew_members[1].flights[0].augmented_heavy = None
+        self.service.result = report
+
+        response = self._export_response()
+        workbook = load_workbook(filename=__import__("io").BytesIO(response.content))
+        self.addCleanup(workbook.close)
+
+        cockpit = workbook["Cockpit Detail"]
+        cabin = workbook["Cabin Detail"]
+        summary = workbook["Summary"]
+        self.assertEqual(cockpit["K4"].value, "Augmented (Heavy)")
+        self.assertEqual(cockpit["K8"].value, "Yes")
+        self.assertEqual(cockpit["K9"].value, "No")
+        self.assertEqual(cabin["K8"].value, "Unknown")
+        self.assertNotIn("Augmented (Heavy)", [cell.value for cell in summary[3]])
 
     def test_official_totals_and_missing_totals_are_not_recomputed(self):
         response = self._export_response()

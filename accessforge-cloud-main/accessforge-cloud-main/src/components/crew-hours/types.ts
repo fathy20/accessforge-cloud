@@ -13,6 +13,7 @@ export interface FlightItem {
   flight_training_type: string | null;
   is_trn: boolean;
   journey_log?: unknown;
+  augmented_heavy?: boolean | null;
 }
 
 export interface CrewMemberSummary {

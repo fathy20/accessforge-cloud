@@ -24,6 +24,7 @@ class FlightItem(BaseModel):
     flight_training_type: str | None = None
     is_trn: bool = False
     journey_log: Mapping[str, Any] | None = None
+    augmented_heavy: bool | None = None
 
 
 class CrewMemberSummary(BaseModel):

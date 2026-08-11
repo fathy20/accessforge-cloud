@@ -108,6 +108,7 @@ class TestMcpReport(unittest.TestCase):
             "scope_row_unique_id",
             "crew_codes",
             "blockTimeJourneyLog",
+            "unique_id",
             "crew_names",
             "crew_position_names",
             "date_STD_log_UTC",

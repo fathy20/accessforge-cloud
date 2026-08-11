@@ -157,6 +157,39 @@ class TestCrewHoursReportApi(unittest.TestCase):
         self.assertEqual(by_code["AKA"]["full_name"], "Ahmed Kamel")
         self.assertEqual(by_code["AKA"]["flights"][0]["flight_nid"], "leg-1")
 
+    def test_augmented_source_failure_keeps_report_200_and_values_unknown(self):
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {"AKA": "01:30"},
+                    [{
+                        "scope_row_unique_id": "leg-1",
+                        "unique_id": "101",
+                        "crew_codes": ["AKA"],
+                        "crew_names": ["Fixture Crew"],
+                        "crew_position_names": ["CPT"],
+                        "blockTimeJourneyLog": "01:30",
+                    }],
+                )
+
+            def fetch_augmented_index(self, from_date, to_date):
+                raise LeonTransportError("transport failure sentinel")
+
+        app.dependency_overrides[get_crew_hours_service] = lambda: LiveCrewHoursService(
+            FakeCrewClient()
+        )
+        try:
+            response = self.client.get(
+                "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30"
+            )
+        finally:
+            app.dependency_overrides.pop(get_crew_hours_service, None)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["official_totals_by_position"], {"Cockpit": "1:30"})
+        self.assertIsNone(data["crew_members"][0]["flights"][0]["augmented_heavy"])
+
     def test_empty_official_mcp_report_is_a_valid_200_response(self):
         class FakeCrewClient:
             def __init__(self):

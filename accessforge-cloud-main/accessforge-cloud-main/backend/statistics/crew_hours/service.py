@@ -4,6 +4,7 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol
 
 from fastapi import Depends
 
+from .augmented import AugmentedIndex
 from .domain import is_trn_total, normalize_report_row
 from .errors import (
     CrewHoursCapabilityError,
@@ -137,13 +138,47 @@ class LiveCrewHoursService:
                 raise LeonConfigurationError("LEON official MCP report is not configured.")
             raise LeonContractError("LEON official report did not expose report rows.")
 
+        augmented_index = _fetch_augmented_index_safely(
+            self._leon_client,
+            from_date,
+            to_date,
+        )
         return _build_mcp_report_response(
             official_report,
             from_date=from_date,
             to_date=to_date,
             position=position,
             crew_member=crew_member,
+            augmented_index=augmented_index,
         )
+
+
+def _fetch_augmented_index_safely(
+    leon_client: CrewHoursLeonClient,
+    from_date: str,
+    to_date: str,
+) -> AugmentedIndex:
+    fetcher = getattr(leon_client, "fetch_augmented_index", None)
+    if not callable(fetcher):
+        return AugmentedIndex(False, {}, 0, 0)
+    try:
+        index = fetcher(from_date, to_date)
+        if not isinstance(index, AugmentedIndex):
+            raise LeonContractError("LEON FTL augmented enrichment returned an invalid index.")
+        return index
+    except Exception as exc:
+        logger.warning(
+            "LEON FTL augmented enrichment period=%s..%s duty_rows=%d resolved=%d ambiguous=%d unavailable=%s error_type=%s",
+            from_date,
+            to_date,
+            0,
+            0,
+            0,
+            True,
+            type(exc).__name__,
+        )
+        return AugmentedIndex(False, {}, 0, 0)
+
 
 def _build_mcp_report_response(
     report: OfficialMcpReport,
@@ -152,7 +187,9 @@ def _build_mcp_report_response(
     to_date: str,
     position: str | None,
     crew_member: str | None,
+    augmented_index: AugmentedIndex | None = None,
 ) -> CrewHoursReportResponse:
+    augmented_index = augmented_index or AugmentedIndex(False, {}, 0, 0)
     crew_map: Dict[str, Dict[str, Any]] = {}
     row_crew_codes: list[set[str]] = []
     unclassified_position_tokens: set[str] = set()
@@ -222,7 +259,13 @@ def _build_mcp_report_response(
             if position_type is not None:
                 crew_map[key]["position_groups"].append(position_type)
 
-            flight = _mcp_flight_item(row, flight_position, is_trn=explicit_trn)
+            flight = _mcp_flight_item(
+                row,
+                flight_position,
+                crew_code=code,
+                augmented_index=augmented_index,
+                is_trn=explicit_trn,
+            )
             crew_map[key]["flights"].append(flight)
         row_crew_codes.append(row_codes)
 
@@ -338,6 +381,8 @@ def _mcp_flight_item(
     position: str | None,
     *,
     is_trn: bool = False,
+    crew_code: str | None = None,
+    augmented_index: AugmentedIndex | None = None,
 ) -> FlightItem:
     flight_nid = _optional_string(row.get("scope_row_unique_id"))
     if flight_nid is None:
@@ -358,6 +403,10 @@ def _mcp_flight_item(
         flight_training_type="TRN" if is_trn else None,
         is_trn=is_trn,
         journey_log=None,
+        augmented_heavy=(augmented_index or AugmentedIndex(False, {}, 0, 0)).lookup(
+            crew_code,
+            _optional_string(row.get("unique_id")),
+        ),
     )
 
 

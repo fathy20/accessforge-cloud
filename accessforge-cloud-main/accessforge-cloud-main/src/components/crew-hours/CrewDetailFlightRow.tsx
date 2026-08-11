@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 import { displayAircraft, displayUtcTime, displayValue } from "./format";
 import { PositionTokenBadge } from "./PositionTokenBadge";
 import type { CrewMemberSummary, FlightItem } from "./types";
@@ -10,6 +11,8 @@ export function CrewDetailFlightRow({
   crew: CrewMemberSummary;
   flight: FlightItem;
 }) {
+  const { t } = useI18n();
+
   return (
     <tr className="hover:bg-muted/10">
       <td className="whitespace-nowrap px-4 py-2.5 text-xs">
@@ -49,6 +52,15 @@ export function CrewDetailFlightRow({
       </td>
       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">
         {displayValue(flight.block_time)}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2.5 text-xs">
+        <Badge variant="outline">
+          {flight.augmented_heavy === true
+            ? t("crew.augmented.yes")
+            : flight.augmented_heavy === false
+              ? t("crew.augmented.no")
+              : t("crew.augmented.unknown")}
+        </Badge>
       </td>
     </tr>
   );

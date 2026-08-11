@@ -55,7 +55,7 @@ export function CrewDetailTable({
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm">
       <table
-        className="w-full min-w-[980px] border-collapse text-start text-sm"
+        className="w-full min-w-[1080px] border-collapse text-start text-sm"
         aria-label={t("crew.table.detail_label")}
       >
         <caption className="sr-only">{t("crew.table.detail_label")}</caption>
@@ -82,6 +82,9 @@ export function CrewDetailTable({
             <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">ON</th>
             <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">
               {t("crew.table.block_time")}
+            </th>
+            <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">
+              {t("crew.table.augmented_heavy")}
             </th>
           </tr>
         </thead>
@@ -119,6 +122,7 @@ export function CrewDetailTable({
                         ? displayValue(crew.official_total)
                         : t("crew.unavailable")}
                     </td>
+                    <td />
                   </tr>
                 </>
               )}
@@ -128,7 +132,7 @@ export function CrewDetailTable({
         {crews.length === 0 && (
           <tbody>
             <tr>
-              <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <td colSpan={11} className="px-4 py-10 text-center text-sm text-muted-foreground">
                 {t("crew.empty.tab")}
               </td>
             </tr>

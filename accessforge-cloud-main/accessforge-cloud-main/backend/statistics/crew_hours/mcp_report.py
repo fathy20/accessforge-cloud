@@ -22,6 +22,7 @@ REQUIRED_COLUMNS = (
     "blockTimeJourneyLog",
 )
 OPTIONAL_COLUMNS = (
+    "unique_id",
     "crew_names",
     "crew_position_names",
     "date_STD_log_UTC",

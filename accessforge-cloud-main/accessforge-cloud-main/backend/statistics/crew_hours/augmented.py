@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 import logging
 from typing import Any, Mapping, Sequence
 
@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 AUGMENTED_TRUE = frozenset({"augmented", "doubled", "tripled"})
 AUGMENTED_FALSE = frozenset({"normal"})
+
+# LEON rejects ftl.dutyList intervals longer than this: HTTP 400
+# "Interval length out of bounds". Measured live: 31 accepted, 32 rejected.
+MAX_DUTY_LIST_INTERVAL_DAYS = 31
 
 
 @dataclass(frozen=True)
@@ -113,7 +117,7 @@ def fetch_augmented_index(
     from_date: str,
     to_date: str,
 ) -> AugmentedIndex:
-    """Fetch one bulk FTL duty-list window and build its local index."""
+    """Fetch the buffered FTL duty-list window and build its local index."""
 
     validated_from = _coerce_date(from_date)
     validated_to = _coerce_date(to_date)
@@ -123,20 +127,34 @@ def fetch_augmented_index(
         validated_from.isoformat(),
         validated_to.isoformat(),
     )
-    query = build_duty_list_query(buffered_from, buffered_to)
+    buffered_start = _coerce_date(buffered_from)
+    buffered_end = _coerce_date(buffered_to)
     executor = LeonGraphQLExecutor(
         configuration,
         transport,
         token_provider,
         BearerAccessTokenHeaderBuilder(),
     )
-    payload = executor.execute_query(query)
-    duty_rows = _extract_duty_rows(payload)
+    duty_rows: list[Any] = []
+    chunk_count = 0
+    chunk_start = buffered_start
+    while chunk_start <= buffered_end:
+        chunk_end = min(
+            chunk_start + timedelta(days=MAX_DUTY_LIST_INTERVAL_DAYS - 1),
+            buffered_end,
+        )
+        query = build_duty_list_query(chunk_start, chunk_end)
+        payload = executor.execute_query(query)
+        duty_rows.extend(_extract_duty_rows(payload))
+        chunk_count += 1
+        chunk_start = chunk_end + timedelta(days=1)
+
     index = build_augmented_index(duty_rows)
     logger.info(
-        "LEON FTL augmented enrichment period=%s..%s duty_rows=%d resolved=%d ambiguous=%d unavailable=%s",
+        "LEON FTL augmented enrichment period=%s..%s chunks=%d duty_rows=%d resolved=%d ambiguous=%d unavailable=%s",
         validated_from.isoformat(),
         validated_to.isoformat(),
+        chunk_count,
         len(duty_rows),
         index.resolved_count,
         index.ambiguous_count,

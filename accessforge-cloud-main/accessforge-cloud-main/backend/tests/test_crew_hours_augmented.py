@@ -1,16 +1,23 @@
 import json
+import re
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import httpx
 
 from backend.statistics.crew_hours.augmented import (
     AugmentedIndex,
+    MAX_DUTY_LIST_INTERVAL_DAYS,
     build_augmented_index,
     build_duty_list_query,
     fetch_augmented_index,
 )
 from backend.statistics.crew_hours.config import LeonConfiguration
-from backend.statistics.crew_hours.errors import LeonContractError, LeonTimeoutError, LeonTransportError
+from backend.statistics.crew_hours.errors import (
+    LeonContractError,
+    LeonResponseError,
+    LeonTimeoutError,
+    LeonTransportError,
+)
 from backend.statistics.crew_hours.mcp_report import OfficialMcpReport, _aggregate_report_rows
 from backend.statistics.crew_hours.service import LiveCrewHoursService
 from backend.statistics.crew_hours.token_provider import LeonAccessTokenProvider
@@ -23,6 +30,30 @@ def _duty(code, augmentation, *tr_nids):
         "crewAugmentation": augmentation,
         "sectorList": [{"trNid": tr_nid} for tr_nid in tr_nids],
     }
+
+
+_INTERVAL_PATTERN = re.compile(
+    r'start: "(\d{4}-\d{2}-\d{2})T00:00:00Z", '
+    r'end: "(\d{4}-\d{2}-\d{2})T23:59:59Z"'
+)
+
+
+def _graphql_calls(transport):
+    return [
+        call
+        for call in transport.calls
+        if call.json_body is not None and "query" in call.json_body
+    ]
+
+
+def _query_intervals(transport):
+    intervals = []
+    for call in _graphql_calls(transport):
+        match = _INTERVAL_PATTERN.search(call.json_body["query"])
+        if match is None:
+            raise AssertionError("GraphQL call did not contain a duty-list interval.")
+        intervals.append(tuple(date.fromisoformat(value) for value in match.groups()))
+    return intervals
 
 
 class TestAugmentedIndex(unittest.TestCase):
@@ -148,11 +179,14 @@ class TestAugmentedFetch(unittest.TestCase):
             "refresh-token",
         )
 
-    def test_query_uses_one_buffered_iso_datetime_graphql_call(self):
+    def test_month_buffer_uses_two_safe_graphql_calls(self):
         transport = FakeLeonTransport([
             LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
             LeonRawResponse(200, json.dumps({
                 "data": {"ftl": {"dutyList": [_duty("C1", "NORMAL", 101)]}},
+            })),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": []}},
             })),
         ])
 
@@ -165,13 +199,140 @@ class TestAugmentedFetch(unittest.TestCase):
         )
 
         self.assertIs(index.lookup("C1", "101"), False)
-        self.assertEqual(len(transport.calls), 2)
-        query = transport.calls[1].json_body["query"]
-        self.assertIn('start: "2026-05-30T00:00:00Z"', query)
-        self.assertIn('end: "2026-07-02T23:59:59Z"', query)
-        self.assertIn("crewMember { code loginNid }", query)
-        self.assertIn("crewAugmentation", query)
-        self.assertIn("sectorList { trNid }", query)
+        graphql_calls = _graphql_calls(transport)
+        self.assertEqual(len(graphql_calls), 2)
+        intervals = _query_intervals(transport)
+        self.assertEqual(
+            intervals,
+            [
+                (date(2026, 5, 30), date(2026, 6, 29)),
+                (date(2026, 6, 30), date(2026, 7, 2)),
+            ],
+        )
+        for call in graphql_calls:
+            query = call.json_body["query"]
+            self.assertIn("crewMember { code loginNid }", query)
+            self.assertIn("crewAugmentation", query)
+            self.assertIn("sectorList { trNid }", query)
+            start, end = next(
+                interval for interval in intervals if interval[0].isoformat() in query
+            )
+            self.assertLessEqual(
+                (end - start).days + 1,
+                MAX_DUTY_LIST_INTERVAL_DAYS,
+            )
+
+    def test_thirteen_day_buffer_uses_exactly_one_graphql_call(self):
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [_duty("C1", "AUGMENTED", 101)]}},
+            })),
+        ])
+
+        index = fetch_augmented_index(
+            self.configuration,
+            transport,
+            LeonAccessTokenProvider(self.configuration, transport),
+            "2026-07-01",
+            "2026-07-09",
+        )
+
+        self.assertIs(index.lookup("C1", 101), True)
+        intervals = _query_intervals(transport)
+        self.assertEqual(len(intervals), 1)
+        self.assertEqual(intervals, [(date(2026, 6, 29), date(2026, 7, 11))])
+        self.assertEqual((intervals[0][1] - intervals[0][0]).days + 1, 13)
+
+    def test_chunks_are_contiguous_and_cover_the_buffered_window(self):
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, '{"data":{"ftl":{"dutyList":[]}}}'),
+            LeonRawResponse(200, '{"data":{"ftl":{"dutyList":[]}}}'),
+        ])
+
+        fetch_augmented_index(
+            self.configuration,
+            transport,
+            LeonAccessTokenProvider(self.configuration, transport),
+            "2026-06-01",
+            "2026-06-30",
+        )
+
+        intervals = _query_intervals(transport)
+        self.assertEqual(intervals[0][0], date(2026, 5, 30))
+        self.assertEqual(intervals[-1][1], date(2026, 7, 2))
+        for previous, current in zip(intervals, intervals[1:]):
+            self.assertEqual(current[0], previous[1] + timedelta(days=1))
+
+    def test_rows_from_chunks_merge_and_identical_boundary_values_resolve(self):
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [_duty("C1", "NORMAL", 101)]}},
+            })),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [
+                    _duty("C1", "NORMAL", 101),
+                    _duty("C2", "AUGMENTED", 202),
+                ]}},
+            })),
+        ])
+
+        index = fetch_augmented_index(
+            self.configuration,
+            transport,
+            LeonAccessTokenProvider(self.configuration, transport),
+            "2026-06-01",
+            "2026-06-30",
+        )
+
+        self.assertIs(index.lookup("C1", 101), False)
+        self.assertIs(index.lookup("C2", 202), True)
+        self.assertEqual(index.resolved_count, 2)
+        self.assertEqual(index.ambiguous_count, 0)
+
+    def test_conflicting_boundary_values_are_ambiguous(self):
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [_duty("C1", "NORMAL", 101)]}},
+            })),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [_duty("C1", "DOUBLED", 101)]}},
+            })),
+        ])
+
+        index = fetch_augmented_index(
+            self.configuration,
+            transport,
+            LeonAccessTokenProvider(self.configuration, transport),
+            "2026-06-01",
+            "2026-06-30",
+        )
+
+        self.assertIsNone(index.lookup("C1", 101))
+        self.assertEqual(index.ambiguous_count, 1)
+        self.assertEqual(index.resolved_count, 0)
+
+    def test_duty_list_interval_boundary_is_31_days(self):
+        self.assertEqual(MAX_DUTY_LIST_INTERVAL_DAYS, 31)
+
+    def test_chunk_failure_propagates(self):
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, '{"data":{"ftl":{"dutyList":[]}}}'),
+            LeonRawResponse(400, '{"errors":[{"message":"interval failure"}]}'),
+        ])
+
+        with self.assertRaises(LeonResponseError):
+            fetch_augmented_index(
+                self.configuration,
+                transport,
+                LeonAccessTokenProvider(self.configuration, transport),
+                "2026-06-01",
+                "2026-06-30",
+            )
 
     def test_query_date_validation_rejects_injection_and_datetime_values(self):
         for start, end in (
@@ -195,7 +356,7 @@ class TestAugmentedServiceIntegration(unittest.TestCase):
         rows = [
             {
                 "scope_row_unique_id": "scope-1",
-                    "unique_id": 101,
+                "unique_id": 101,
                 "crew_codes": [" C1 "],
                 "crew_names": ["Fixture One"],
                 "crew_position_names": ["CPT"],
@@ -203,7 +364,7 @@ class TestAugmentedServiceIntegration(unittest.TestCase):
             },
             {
                 "scope_row_unique_id": "scope-2",
-                    "unique_id": 102,
+                "unique_id": 102,
                 "crew_codes": ["C1", "C2"],
                 "crew_names": ["Fixture One", "Fixture Two"],
                 "crew_position_names": ["CPT", "FO"],
@@ -255,6 +416,42 @@ class TestAugmentedServiceIntegration(unittest.TestCase):
         )
 
         self.assertEqual(report.official_totals_by_position, {"Cockpit": "5:00"})
+        self.assertTrue(
+            all(
+                flight.augmented_heavy is None
+                for member in report.crew_members
+                for flight in member.flights
+            )
+        )
+
+    def test_chunk_failure_returns_report_with_all_unknown_values(self):
+        configuration = LeonConfiguration("https://leon.invalid", "refresh-token")
+        transport = FakeLeonTransport([
+            LeonRawResponse(200, '{"access_token":"access","expires_in":1800}'),
+            LeonRawResponse(200, json.dumps({
+                "data": {"ftl": {"dutyList": [_duty("C1", "NORMAL", 101)]}},
+            })),
+            LeonRawResponse(400, '{"errors":[{"message":"interval failure"}]}'),
+        ])
+        token_provider = LeonAccessTokenProvider(configuration, transport)
+
+        class ChunkFailingClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return TestAugmentedServiceIntegration._report()
+
+            def fetch_augmented_index(self, from_date, to_date):
+                return fetch_augmented_index(
+                    configuration,
+                    transport,
+                    token_provider,
+                    from_date,
+                    to_date,
+                )
+
+        report = LiveCrewHoursService(ChunkFailingClient()).get_crew_hours_report(
+            "2026-06-01", "2026-06-30"
+        )
+
         self.assertTrue(
             all(
                 flight.augmented_heavy is None

@@ -405,7 +405,7 @@ def _mcp_flight_item(
         journey_log=None,
         augmented_heavy=(augmented_index or AugmentedIndex(False, {}, 0, 0)).lookup(
             crew_code,
-            _optional_string(row.get("unique_id")),
+            row.get("unique_id"),
         ),
     )
 

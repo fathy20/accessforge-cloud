@@ -164,7 +164,7 @@ class TestCrewHoursReportApi(unittest.TestCase):
                     {"AKA": "01:30"},
                     [{
                         "scope_row_unique_id": "leg-1",
-                        "unique_id": "101",
+                        "unique_id": 101,
                         "crew_codes": ["AKA"],
                         "crew_names": ["Fixture Crew"],
                         "crew_position_names": ["CPT"],

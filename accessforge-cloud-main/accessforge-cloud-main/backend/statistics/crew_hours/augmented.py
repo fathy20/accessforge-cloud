@@ -32,7 +32,7 @@ class AugmentedIndex:
     resolved_count: int
     ambiguous_count: int
 
-    def lookup(self, crew_code: str | None, flight_nid: str | None) -> bool | None:
+    def lookup(self, crew_code: str | None, flight_nid: object | None) -> bool | None:
         if not self.available:
             return None
         normalized_code = _normalize_crew_code(crew_code)

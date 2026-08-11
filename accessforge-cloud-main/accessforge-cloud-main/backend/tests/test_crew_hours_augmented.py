@@ -34,6 +34,16 @@ class TestAugmentedIndex(unittest.TestCase):
         self.assertEqual(index.resolved_count, 1)
         self.assertEqual(index.ambiguous_count, 0)
 
+    def test_integer_and_numeric_string_ids_resolve_identically(self):
+        index = build_augmented_index([_duty("C1", "AUGMENTED", 101)])
+
+        integer_value = index.lookup("C1", 101)
+        string_value = index.lookup("C1", "101")
+
+        self.assertIsNotNone(integer_value)
+        self.assertIs(integer_value, True)
+        self.assertEqual(integer_value, string_value)
+
     def test_normal_maps_to_no(self):
         index = build_augmented_index([_duty("C1", "normal", 101)])
 
@@ -185,7 +195,7 @@ class TestAugmentedServiceIntegration(unittest.TestCase):
         rows = [
             {
                 "scope_row_unique_id": "scope-1",
-                "unique_id": "101",
+                    "unique_id": 101,
                 "crew_codes": [" C1 "],
                 "crew_names": ["Fixture One"],
                 "crew_position_names": ["CPT"],
@@ -193,7 +203,7 @@ class TestAugmentedServiceIntegration(unittest.TestCase):
             },
             {
                 "scope_row_unique_id": "scope-2",
-                "unique_id": "102",
+                    "unique_id": 102,
                 "crew_codes": ["C1", "C2"],
                 "crew_names": ["Fixture One", "Fixture Two"],
                 "crew_position_names": ["CPT", "FO"],

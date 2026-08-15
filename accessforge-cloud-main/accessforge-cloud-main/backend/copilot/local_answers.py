@@ -17,8 +17,16 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Callable, Mapping, Sequence
 
+from ..statistics.crew_hours.crew_context import CrewContextEntry
 from ..statistics.crew_hours.domain import normalize_report_row
+from ..statistics.crew_hours.heavy import (
+    derive_heavy_detail,
+    operating_cabin_count,
+    operating_cockpit_count,
+)
 from ..statistics.crew_hours.mcp_report import OfficialMcpReport
+from ..statistics.crew_hours.positions import CABIN_POS_TYPE, COCKPIT_POS_TYPE
+from ..statistics.crew_hours.service import _position_group
 from .schemas import CopilotAnswer, CopilotCitation, CopilotFact
 
 Intent = str
@@ -93,13 +101,9 @@ def answer_locally(
     intent = detect_intent(question)
     if intent is None:
         return None
-    if intent == INTENT_HEAVY:
-        # Heavy needs the FTL augmentation index and flight-list crew context,
-        # both of which live on LEON's GraphQL endpoint. Refuse plainly rather
-        # than answer Heavy from incomplete data.
-        return None
-
     period = resolve_period(question, today)
+    if intent == INTENT_HEAVY:
+        return _heavy_answer(question, period, fetch_report)
     if period is None:
         return None
 
@@ -107,6 +111,143 @@ def answer_locally(
     if intent == INTENT_ROSTER:
         return _roster_answer(report, period)
     return _hours_answer(report, period, question)
+
+
+_FLIGHT_NUMBER = re.compile(r"\b([A-Z]{2,3}\s?-?\s?\d{1,4})\b")
+
+
+def _heavy_answer(
+    question: str,
+    period: Period | None,
+    fetch_report: Callable[[str, str], OfficialMcpReport],
+) -> CopilotAnswer | None:
+    """Answer Heavy from the MCP report's own crew positions and flight tags.
+
+    This is the local rule only.  LEON's own crewAugmentation value lives on
+    the FTL GraphQL endpoint, and the report carries no flightTrainingType or
+    Work Schedule Function, so LINE_TRAINING/LINE_CHECK and SFA cabin trainees
+    cannot be excluded here.  The answer says so rather than implying parity.
+    """
+
+    match = _FLIGHT_NUMBER.search(question.upper())
+    if match is None or period is None:
+        # Same ask LEON's own assistant makes: it cannot answer cold either.
+        return CopilotAnswer(
+            text=(
+                "Which flight? Give me the flight number and the date "
+                "(for example \"RSX431 on 2026-06-02\") and I will check the "
+                "operating crew on that sector."
+            ),
+        )
+
+    wanted = match.group(1).replace(" ", "").replace("-", "")
+    report = fetch_report(period.start.isoformat(), period.end.isoformat())
+    rows = [
+        row
+        for row in report.rows
+        if (_text(row.get("flightNo")) or "").upper().replace(" ", "").replace("-", "")
+        == wanted
+    ]
+    if not rows:
+        return CopilotAnswer(
+            text=(
+                f"No flight {wanted} on {period.start.isoformat()} in the LEON report. "
+                "Check the number or the date."
+            ),
+            citation=CopilotCitation(
+                tone="unresolved",
+                headline=f"{wanted} — not found",
+                facts=[CopilotFact(label="Date", value=period.start.isoformat(), raw=True)],
+                source=_source(period),
+            ),
+        )
+
+    # A flight number can appear on several report rows and some carry no crew
+    # at all, so take the one that actually lists the operating crew.
+    row = max(rows, key=lambda candidate: len(_entries_from_row(candidate)))
+    entries = _entries_from_row(row)
+    tags = _tags_from_row(row)
+    verdict, reason = derive_heavy_detail(entries, _text(row.get("acftType")), tags)
+    cockpit = operating_cockpit_count(entries)
+    cabin = operating_cabin_count(entries)
+
+    if verdict is None:
+        return CopilotAnswer(
+            text=(
+                f"{wanted} on {period.start.isoformat()}: the LEON report lists no crew "
+                "positions for that sector, so Heavy cannot be determined."
+            ),
+            citation=CopilotCitation(
+                tone="unresolved",
+                headline=f"{wanted} — indeterminate",
+                facts=[CopilotFact(label="Rule", value=reason, raw=True)],
+                source=_source(period),
+            ),
+        )
+
+    unique_id = row.get("unique_id") or row.get("scope_row_unique_id")
+    return CopilotAnswer(
+        text=(
+            f"{wanted} on {period.start.isoformat()}: "
+            f"{'Heavy' if verdict else 'Not Heavy'} by the local rule "
+            f"({reason}). Operating crew {cockpit} cockpit / {cabin} cabin. "
+            "LEON's own augmentation value is not reachable right now, and the "
+            "report carries no training-flight flag, so trainees on a training "
+            "sector are still counted."
+        ),
+        citation=CopilotCitation(
+            tone="heavy" if verdict else "resolved",
+            headline=f"{wanted} — {period.start.isoformat()}",
+            facts=[
+                CopilotFact(label="Rule", value=reason, raw=True),
+                CopilotFact(label="Cockpit", value=str(cockpit), raw=True),
+                CopilotFact(label="Cabin", value=str(cabin), raw=True),
+                CopilotFact(label="Tags", value=", ".join(tags) or "none", raw=True),
+            ],
+            source=(
+                "LEON MCP · get-report-wizard-flight-scope-report · "
+                f"unique_id {unique_id} · {reason}"
+            ),
+        ),
+    )
+
+
+def _entries_from_row(row: Mapping[str, Any]) -> list[CrewContextEntry]:
+    """Rebuild crew context from the report so the audited rule engine runs."""
+
+    entries: list[CrewContextEntry] = []
+    for slot in normalize_report_row(row).crew:
+        group = _position_group(slot.position)
+        if group == "Cockpit":
+            pos_type = COCKPIT_POS_TYPE
+        elif group == "Cabin":
+            pos_type = CABIN_POS_TYPE
+        else:
+            pos_type = group
+        entries.append(
+            CrewContextEntry(
+                pos_type=pos_type,
+                position=slot.position,
+                # Neither flag is exposed by the report; see the docstring above.
+                training_type=None,
+                crew_code=slot.code,
+                crew_name=slot.name,
+                function=None,
+            )
+        )
+    return entries
+
+
+def _tags_from_row(row: Mapping[str, Any]) -> tuple[str, ...]:
+    raw = row.get("flightTags")
+    if not isinstance(raw, list):
+        return ()
+    labels = []
+    for tag in raw:
+        label = tag.get("label") if isinstance(tag, Mapping) else tag
+        if isinstance(label, str) and label.strip():
+            labels.append(label.strip().upper())
+    return tuple(labels)
 
 
 def _source(period: Period) -> str:

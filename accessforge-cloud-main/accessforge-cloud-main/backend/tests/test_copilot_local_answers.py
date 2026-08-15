@@ -93,10 +93,90 @@ class TestLocalAnswers(unittest.TestCase):
         self.assertIn("Hesham Abd ElSamad", answer.text)
         self.assertIn("74:10", answer.text)
 
-    def test_heavy_falls_through_rather_than_guessing(self):
-        self.assertIsNone(
-            answer_locally("Is this flight Augmented (Heavy)?", today=TODAY, fetch_report=_fetch)
+    def test_heavy_without_a_flight_asks_which_one(self):
+        answer = answer_locally(
+            "Is this flight Augmented (Heavy)?", today=TODAY, fetch_report=_fetch
         )
+
+        self.assertIn("Which flight?", answer.text)
+        self.assertIsNone(answer.citation)
+
+
+def _heavy_report(positions, tags=None):
+    codes = [f"C{index}" for index in range(len(positions))]
+    return OfficialMcpReport(
+        {code: "01:00" for code in codes},
+        [
+            {
+                "scope_row_unique_id": "row-9",
+                "unique_id": 660214,
+                "crew_codes": codes,
+                "crew_names": [f"Crew {index}" for index in range(len(positions))],
+                "crew_position_names": list(positions),
+                "flightNo": "RSX431",
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "01:00",
+                "flightTags": [{"label": tag} for tag in (tags or [])],
+            }
+        ],
+    )
+
+
+class TestHeavyFromMcp(unittest.TestCase):
+    def _ask(self, report):
+        return answer_locally(
+            "Is RSX431 on 2026-06-02 Augmented (Heavy)?",
+            today=TODAY,
+            fetch_report=lambda _f, _t: report,
+        )
+
+    def test_five_operating_cockpit_is_heavy(self):
+        answer = self._ask(_heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"]))
+
+        self.assertIn("Heavy", answer.text)
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertEqual(answer.citation.tone, "heavy")
+        self.assertIn("EXTRA_COCKPIT_CREW", answer.citation.source)
+        self.assertIn("unique_id 660214", answer.citation.source)
+
+    def test_standard_crew_is_not_heavy(self):
+        answer = self._ask(_heavy_report(["CPT", "FO", "FA1", "FA2"]))
+
+        self.assertIn("Not Heavy", answer.text)
+        self.assertEqual(answer.citation.tone, "resolved")
+
+    def test_evn_tag_overrides_an_oversized_cockpit(self):
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], tags=["EVN"])
+        )
+
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("EVN_TAG", answer.citation.source)
+
+    def test_svx_tag_forces_heavy_on_a_standard_crew(self):
+        answer = self._ask(_heavy_report(["CPT", "FO"], tags=["SVX"]))
+
+        self.assertIn("Heavy", answer.text)
+        self.assertIn("SVX_TAG", answer.citation.source)
+
+    def test_ops_and_sp_trainees_do_not_push_a_flight_over_the_line(self):
+        # Standard 2 cockpit + 4 cabin, plus two cockpit trainees.
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "OPS", "SP", "FA1", "FA2", "FA3", "FA4"])
+        )
+
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("2 cockpit / 4 cabin", answer.text)
+
+    def test_unknown_flight_number_says_so(self):
+        answer = answer_locally(
+            "Is RSX999 on 2026-06-02 Heavy?",
+            today=TODAY,
+            fetch_report=lambda _f, _t: _heavy_report(["CPT", "FO"]),
+        )
+
+        self.assertIn("No flight RSX999", answer.text)
+        self.assertEqual(answer.citation.tone, "unresolved")
 
     def test_unknown_question_falls_through(self):
         self.assertIsNone(

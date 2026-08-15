@@ -120,6 +120,7 @@ class TestMcpReport(unittest.TestCase):
             "JL_STD_UTC",
             "JL_STA_UTC",
             "positioning_crew",
+            "flightTags",
         ])
         for filter_name in (
             "acftNidList",

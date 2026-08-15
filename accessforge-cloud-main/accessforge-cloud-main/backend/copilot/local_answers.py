@@ -17,10 +17,15 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Callable, Mapping, Sequence
 
+from ..statistics.crew_hours.cabin_heavy import (
+    CabinCrewMember,
+    CabinFlight,
+    classify_cabin_augmented_heavy,
+    classify_cockpit_heavy,
+)
 from ..statistics.crew_hours.crew_context import CrewContextEntry
 from ..statistics.crew_hours.domain import normalize_report_row
 from ..statistics.crew_hours.heavy import (
-    derive_heavy_detail,
     operating_cabin_count,
     operating_cockpit_count,
 )
@@ -166,8 +171,27 @@ def _heavy_answer(
     # at all, so take the one that actually lists the operating crew.
     row = max(rows, key=lambda candidate: len(_entries_from_row(candidate)))
     entries = _entries_from_row(row)
-    tags = _tags_from_row(row)
-    verdict, reason = derive_heavy_detail(entries, _text(row.get("acftType")), tags)
+
+    # Cockpit and cabin are classified independently. Cockpit keeps its existing
+    # rule untouched; cabin uses the corrected one, where SVX/EVN are matched
+    # against the real ADEP/ADES airport codes rather than flightTags (which this
+    # operator never populates, so those overrides had never fired).
+    flight = CabinFlight(
+        adep=_text(row.get("jl_adep_preferred_code")),
+        ades=_text(row.get("jl_ades_preferred_code")),
+        aircraft_registration=_text(row.get("registration")),
+        # The augmented reference dataset lives on the Crew Hours service path,
+        # not here, so the UNKNOWN pairing rule cannot run on this path.
+        is_unknown=False,
+    )
+    cockpit_heavy, cockpit_reason = classify_cockpit_heavy(flight, entries)
+    cabin_heavy, cabin_reason = classify_cabin_augmented_heavy(
+        flight, _cabin_crew_from_row(row)
+    )
+
+    # Same combination as before the split: cockpit is evaluated first and wins.
+    verdict = bool(cockpit_heavy or cabin_heavy) if entries else None
+    reason = cockpit_reason if cockpit_heavy else cabin_reason
     cockpit = operating_cockpit_count(entries)
     cabin = operating_cabin_count(entries)
 
@@ -202,7 +226,12 @@ def _heavy_answer(
                 CopilotFact(label="Rule", value=reason, raw=True),
                 CopilotFact(label="Cockpit", value=str(cockpit), raw=True),
                 CopilotFact(label="Cabin", value=str(cabin), raw=True),
-                CopilotFact(label="Tags", value=", ".join(tags) or "none", raw=True),
+                # Route, not tags: SVX/EVN are matched on ADEP/ADES.
+                CopilotFact(
+                    label="Route",
+                    value=f"{flight.adep or '—'}->{flight.ades or '—'}",
+                    raw=True,
+                ),
             ],
             source=(
                 "LEON MCP · get-report-wizard-flight-scope-report · "
@@ -236,6 +265,21 @@ def _entries_from_row(row: Mapping[str, Any]) -> list[CrewContextEntry]:
             )
         )
     return entries
+
+
+def _cabin_crew_from_row(row: Mapping[str, Any]) -> list[CabinCrewMember]:
+    """Cabin crew only — cockpit is classified from a separate list.
+
+    ``function`` is always None: LEON exposes no Work Schedule Function field,
+    so the TRN exclusion cannot run. The classifier flags that in its reason
+    rather than treating a missing Function as "not a trainee".
+    """
+
+    return [
+        CabinCrewMember(crew_code=slot.code, position=slot.position, function=None)
+        for slot in normalize_report_row(row).crew
+        if _position_group(slot.position) == "Cabin"
+    ]
 
 
 def _tags_from_row(row: Mapping[str, Any]) -> tuple[str, ...]:

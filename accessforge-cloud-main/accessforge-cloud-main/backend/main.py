@@ -1,11 +1,14 @@
 import os
+import logging
 import shutil
 from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import Session
 from typing import Optional
 import tempfile
@@ -14,17 +17,116 @@ from pydantic import BaseModel
 import traceback
 import json
 
+from .config import get_app_env, should_auto_create_schema
 from .database import engine, Base, get_db
-from .models import User, UserRole, AppRole, Upload, Job, JobStatus, UploadKind, Module, Notification
+from .models import (
+    Job,
+    JobStatus,
+    Module,
+    ModuleAccess,
+    ModuleStatus,
+    Notification,
+    Upload,
+    UploadKind,
+    User,
+)
 from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
+from .copilot.router import router as copilot_router
+from .rbac.permissions import get_effective_permissions, record_audit
+from .rbac.registry import MODULE_REGISTRY
+from . import storage as storage_backend
+from .tools.sync_registry import sync_registry
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+APP_ENV = get_app_env()
+
+
+def _create_schema_if_allowed() -> None:
+    if should_auto_create_schema(APP_ENV, engine.dialect.name):
+        Base.metadata.create_all(bind=engine)
+        return
+    if APP_ENV == "production":
+        logger.info("Production schema management: Alembic owns the schema; skipping create_all.")
+    else:
+        logger.info("Automatic schema creation disabled; Alembic owns non-SQLite schemas.")
+
+
+_create_schema_if_allowed()
 
 app = FastAPI(title="Redsea Local Backend")
+
+
+def _database_dialect_only() -> str:
+    dialect = getattr(getattr(engine, "dialect", None), "name", "unknown")
+    return dialect if dialect in {"sqlite", "mssql", "postgresql", "mysql", "oracle"} else "unknown"
+
+
+def _expected_migration_head() -> str | None:
+    """Load the Alembic head from local scripts without touching a database."""
+
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+        config = Config(str(config_path))
+        script_directory = ScriptDirectory.from_config(config)
+        heads = script_directory.get_heads()
+        return heads[0] if len(heads) == 1 else None
+    except Exception:
+        return None
+
+
+def _migration_table_is_missing(exc: Exception) -> bool:
+    if isinstance(exc, NoSuchTableError):
+        return True
+
+    message = str(exc).casefold()
+    if "alembic_version" not in message:
+        return False
+    return any(
+        marker in message
+        for marker in ("no such table", "invalid object name", "does not exist")
+    )
+
+
+def _migration_state(connection) -> str:
+    expected_head = _expected_migration_head()
+    if expected_head is None:
+        return "unavailable"
+
+    try:
+        result = connection.execute(text("SELECT version_num FROM alembic_version"))
+        revisions = [row[0] for row in result.fetchall()]
+    except Exception as exc:
+        return "unmanaged" if _migration_table_is_missing(exc) else "unavailable"
+
+    return "current" if revisions == [expected_head] else "behind"
+
+
+@app.get("/health/live")
+def health_live():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready():
+    dialect = _database_dialect_only()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            migration = _migration_state(connection)
+    except Exception:
+        logger.warning("Database readiness probe failed.")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "dialect": dialect, "migration": "unavailable"},
+        )
+
+    return {"status": "ok", "dialect": dialect, "migration": migration}
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
@@ -33,12 +135,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(project_router)
 app.include_router(statistics_router)
+app.include_router(copilot_router)
 
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -63,10 +167,8 @@ def mark_all_notifications_read(db: Session = Depends(get_db), current_user: Use
     db.commit()
     return {"status": "success"}
 
-UPLOAD_DIR = Path("local_storage/uploads")
-OUTPUT_DIR = Path("local_storage/outputs")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = storage_backend.UPLOAD_DIR
+OUTPUT_DIR = storage_backend.OUTPUT_DIR
 
 # ---------------------------------------------
 # Uploads API
@@ -81,45 +183,62 @@ async def upload_files(
 ):
     results = []
     for file in files:
-        contents = await file.read()
-        if len(contents) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File {file.filename} exceeds 100MB limit")
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext == '.pdf':
-            kind = UploadKind.pdf
-        elif file_ext in ['.xlsx', '.xls']:
-            kind = UploadKind.excel
-        elif file_ext == '.csv':
-            kind = UploadKind.csv
-        elif file_ext in ['.doc', '.docx']:
-            kind = UploadKind.docx
-        elif file_ext in ['.png', '.jpg', '.jpeg']:
-            kind = UploadKind.image
-        else:
-            kind = UploadKind.other
+        try:
+            artifact = await storage_backend.store_upload(
+                file,
+                UPLOAD_DIR,
+                MAX_UPLOAD_SIZE,
+            )
+        except storage_backend.UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except storage_backend.UnsupportedArtifactError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except storage_backend.StorageConflictError:
+            logger.exception("Generated upload storage target already exists.")
+            raise HTTPException(status_code=500, detail="Could not store upload.") from None
+        except OSError:
+            logger.exception("Upload filesystem operation failed.")
+            raise HTTPException(status_code=500, detail="Could not store upload.") from None
 
-        # Save to disk
-        safe_name = f"{current_user.id}_{file.filename}"
-        file_path = UPLOAD_DIR / safe_name
-        
-        with open(file_path, "wb") as buffer:
-            buffer.write(contents)
-            
-        size = file_path.stat().st_size
-        
-        # Create DB record
+        scan_state = storage_backend.scan_artifact(artifact.path)
         upload = Upload(
             user_id=current_user.id,
-            original_name=file.filename,
-            storage_path=str(file_path),
-            kind=kind,
-            mime=file.content_type,
-            size_bytes=size
+            original_name=artifact.original_name,
+            storage_path=str(artifact.path),
+            kind=UploadKind(artifact.kind),
+            mime=artifact.mime,
+            size_bytes=artifact.size_bytes,
+            sha256=artifact.sha256,
+            scan_state=scan_state,
+            retention_expires_at=storage_backend.retention_expires_at(),
         )
-        db.add(upload)
-        db.commit()
-        db.refresh(upload)
-        
+        try:
+            db.add(upload)
+            db.flush()
+            record_audit(
+                db,
+                current_user,
+                "upload",
+                "upload",
+                upload.id,
+                artifact_type="upload",
+                original_name=upload.original_name,
+                size=upload.size_bytes,
+                size_bytes=upload.size_bytes,
+                sha256=upload.sha256,
+                mime=upload.mime,
+                scan_state=upload.scan_state,
+            )
+            db.commit()
+            db.refresh(upload)
+        except Exception:
+            db.rollback()
+            try:
+                storage_backend.delete_artifact_file(UPLOAD_DIR, artifact.path)
+            except Exception:
+                logger.exception("Could not remove upload after database failure.")
+            raise
+
         results.append({
             "id": upload.id,
             "original_name": upload.original_name,
@@ -139,22 +258,71 @@ def delete_upload(upload_id: str, db: Session = Depends(get_db), current_user: U
     upload = db.query(Upload).filter(Upload.id == upload_id, Upload.user_id == current_user.id).first()
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
-    # Try deleting physical file
+
+    filesystem_error = None
     try:
-        if os.path.exists(upload.storage_path):
-            os.remove(upload.storage_path)
-    except Exception:
-        pass
+        storage_backend.delete_artifact_file(UPLOAD_DIR, upload.storage_path)
+    except Exception as exc:
+        filesystem_error = type(exc).__name__
+        logger.warning(
+            "Upload artifact filesystem deletion failed.",
+            extra={"upload_id": str(upload.id), "failure_kind": filesystem_error},
+        )
+
     db.delete(upload)
+    record_audit(
+        db,
+        current_user,
+        "delete",
+        "upload",
+        upload.id,
+        artifact_type="upload",
+        original_name=upload.original_name,
+        size=upload.size_bytes,
+        size_bytes=upload.size_bytes,
+        sha256=upload.sha256,
+        mime=upload.mime,
+        filesystem_status="deleted" if filesystem_error is None else "failed",
+        filesystem_error=filesystem_error,
+    )
     db.commit()
+
+    if filesystem_error is not None:
+        raise HTTPException(
+            status_code=500,
+            detail="Upload metadata was removed but the artifact file could not be removed.",
+        )
     return {"status": "success"}
 
 @app.get("/api/uploads/{upload_id}/download")
 def download_upload(upload_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     upload = db.query(Upload).filter(Upload.id == upload_id, Upload.user_id == current_user.id).first()
-    if not upload or not os.path.exists(upload.storage_path):
+    if not upload:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path=upload.storage_path, filename=upload.original_name)
+    try:
+        file_path = storage_backend.existing_artifact_path(UPLOAD_DIR, upload.storage_path)
+    except (OSError, storage_backend.StorageError):
+        raise HTTPException(status_code=404, detail="File not found") from None
+
+    record_audit(
+        db,
+        current_user,
+        "download",
+        "upload",
+        upload.id,
+        artifact_type="upload",
+        original_name=upload.original_name,
+        size=upload.size_bytes,
+        size_bytes=upload.size_bytes,
+        sha256=upload.sha256,
+        mime=upload.mime,
+    )
+    db.commit()
+    return FileResponse(
+        path=file_path,
+        filename=storage_backend.sanitize_original_name(upload.original_name),
+        media_type=upload.mime,
+    )
 
 # ---------------------------------------------
 # Jobs API
@@ -191,14 +359,58 @@ def run_job_background(job_id: str):
             handler = REGISTRY.get(module_key)
             if not handler:
                 raise ValueError(f"Module {module_key} not found in registry")
+
+            output_owner = db.query(User).filter(User.id == job.user_id).first()
+            module = db.query(Module).filter(Module.key == module_key).first()
+            if output_owner is None:
+                module_permitted = False
+            else:
+                permissions, disabled_module_ids = _module_visibility_inputs(db, output_owner)
+                module_permitted = _module_is_visible(
+                    module,
+                    permissions,
+                    disabled_module_ids,
+                )
+
+            if not module_permitted:
+                record_audit(
+                    db,
+                    output_owner,
+                    "job_module_denied",
+                    "job",
+                    job.id,
+                    module_key=module_key,
+                )
+                db.commit()
+                raise PermissionError("Module access denied")
                 
             # Get input files
             file_ids = job.input_refs.get("files", [])
             input_files = []
+            rejected_file_count = 0
             for fid in file_ids:
-                upload = db.query(Upload).filter(Upload.id == fid).first()
+                upload = (
+                    db.query(Upload)
+                    .filter(Upload.id == fid, Upload.user_id == job.user_id)
+                    .first()
+                )
                 if upload:
                     input_files.append(upload.storage_path)
+                else:
+                    rejected_file_count += 1
+
+            if rejected_file_count:
+                output_owner = db.query(User).filter(User.id == job.user_id).first()
+                record_audit(
+                    db,
+                    output_owner,
+                    "job_input_rejected",
+                    "job",
+                    job.id,
+                    rejected_count=rejected_file_count,
+                )
+                db.commit()
+                raise ValueError("One or more input files are unavailable to this job")
                     
             if not input_files and job.input_refs.get("data_source") != "db":
                 raise ValueError("No valid input files found for job")
@@ -221,26 +433,48 @@ def run_job_background(job_id: str):
             
             # Process outputs
             output_refs = {"files": []}
+            output_artifacts = []
             for path_str in out_paths:
                 path = Path(path_str)
-                if path.exists():
-                    # Move to local storage
-                    final_path = OUTPUT_DIR / f"{job.user_id}_{job.id}_{path.name}"
-                    shutil.copy(path, final_path)
-                    
-                    # We could create an Upload record, but we just need a download URL.
-                    # Let's save it directly in output_refs for now
-                    base_url = os.getenv("BASE_URL", "http://localhost:8000")
-                    output_refs["files"].append({
-                        "name": path.name,
-                        "url": f"{base_url}/api/downloads/{final_path.name}"
-                    })
-            
+                try:
+                    artifact = storage_backend.persist_output_artifact(path, OUTPUT_DIR)
+                except FileNotFoundError:
+                    logger.warning("Generated output was not found.", extra={"job_id": str(job.id)})
+                    continue
+
+                output_artifacts.append(artifact)
+                base_url = os.getenv("BASE_URL", "http://localhost:8000")
+                output_refs["files"].append({
+                    "id": artifact.storage_name,
+                    "name": artifact.original_name,
+                    "original_name": artifact.original_name,
+                    "storage_name": artifact.storage_name,
+                    "size_bytes": artifact.size_bytes,
+                    "sha256": artifact.sha256,
+                    "mime": artifact.mime,
+                    "url": f"{base_url}/api/downloads/{artifact.storage_name}",
+                })
+
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 _j.status = JobStatus.done
                 _j.progress = 100
                 _j.output_refs = output_refs
+                output_owner = _db.query(User).filter(User.id == job.user_id).first()
+                for artifact in output_artifacts:
+                    record_audit(
+                        _db,
+                        output_owner,
+                        "upload",
+                        "output",
+                        artifact.storage_name,
+                        artifact_type="output",
+                        original_name=artifact.original_name,
+                        size=artifact.size_bytes,
+                        size_bytes=artifact.size_bytes,
+                        sha256=artifact.sha256,
+                        mime=artifact.mime,
+                    )
                 _db.commit()
                 
         except Exception as e:
@@ -270,6 +504,43 @@ def create_job(
     if req.module_key not in REGISTRY:
         raise HTTPException(status_code=422, detail=f"Unknown module: {req.module_key}")
 
+    module = db.query(Module).filter(Module.key == req.module_key).first()
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
+    if not _module_is_visible(module, permissions, disabled_module_ids):
+        record_audit(
+            db,
+            current_user,
+            "job_module_denied",
+            "job",
+            None,
+            module_key=req.module_key,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail="Module access denied")
+
+    file_ids = req.input_refs.get("files", [])
+    rejected_file_count = 0
+    for fid in file_ids:
+        upload = (
+            db.query(Upload)
+            .filter(Upload.id == fid, Upload.user_id == current_user.id)
+            .first()
+        )
+        if upload is None:
+            rejected_file_count += 1
+
+    if rejected_file_count:
+        record_audit(
+            db,
+            current_user,
+            "job_input_rejected",
+            "job",
+            None,
+            rejected_count=rejected_file_count,
+        )
+        db.commit()
+        raise HTTPException(status_code=400, detail="Unknown or inaccessible input file")
+
     job = Job(
         user_id=current_user.id,
         module_key=req.module_key,
@@ -284,19 +555,92 @@ def create_job(
     
     return {"id": job.id, "status": job.status}
 
-# Add download endpoint
+def _output_entry_storage_name(job: Job, entry: dict) -> str:
+    for key in ("storage_name", "storage_path", "url"):
+        value = entry.get(key)
+        if value:
+            return storage_backend.storage_basename(str(value).split("?", 1)[0])
+
+    original_name = storage_backend.sanitize_original_name(entry.get("name"))
+    return f"{job.user_id}_{job.id}_{original_name}"
+
+
+def _owned_output_artifact(db: Session, user_id: str, filename: str) -> dict | None:
+    requested_name = storage_backend.storage_basename(filename)
+    jobs = db.query(Job).filter(Job.user_id == user_id).all()
+    for job in jobs:
+        output_refs = job.output_refs or {}
+        for entry in output_refs.get("files", []):
+            if not isinstance(entry, dict):
+                continue
+            storage_name = _output_entry_storage_name(job, entry)
+            if storage_name not in {filename, requested_name}:
+                continue
+            return {
+                "id": str(entry.get("id") or f"{job.id}:{storage_name}"),
+                "storage_name": storage_name,
+                "original_name": storage_backend.sanitize_original_name(
+                    entry.get("original_name") or entry.get("name") or storage_name
+                ),
+                "size_bytes": entry.get("size_bytes"),
+                "sha256": entry.get("sha256"),
+                "mime": entry.get("mime"),
+            }
+    return None
+
 
 @app.get("/api/downloads/{filename}")
-def download_file(filename: str, current_user: User = Depends(get_current_user)):
-    file_path = OUTPUT_DIR / filename
-    if not file_path.exists():
+def download_file(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Authorization is DB-scoped and completes before the filesystem is probed.
+    artifact = _owned_output_artifact(db, current_user.id, filename)
+    if artifact is None:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Optional: Verify ownership if needed, assuming filename format user_id_job_id_name
-    if not filename.startswith(f"{current_user.id}_"):
-        raise HTTPException(status_code=403, detail="Not authorized to download this file")
-        
-    return FileResponse(path=file_path, filename=filename.split("_", 2)[-1])
+
+    try:
+        file_path = storage_backend.existing_artifact_path(
+            OUTPUT_DIR,
+            filename,
+            relative_to_root=True,
+        )
+    except (OSError, storage_backend.StorageError):
+        raise HTTPException(status_code=404, detail="File not found") from None
+
+    if (
+        artifact["size_bytes"] is None
+        or artifact["sha256"] is None
+        or artifact["mime"] is None
+    ):
+        described = storage_backend.describe_artifact(
+            file_path,
+            artifact["original_name"],
+        )
+        artifact["size_bytes"] = described.size_bytes
+        artifact["sha256"] = described.sha256
+        artifact["mime"] = described.mime
+
+    record_audit(
+        db,
+        current_user,
+        "download",
+        "output",
+        artifact["id"],
+        artifact_type="output",
+        original_name=artifact["original_name"],
+        size=artifact["size_bytes"],
+        size_bytes=artifact["size_bytes"],
+        sha256=artifact["sha256"],
+        mime=artifact["mime"],
+    )
+    db.commit()
+    return FileResponse(
+        path=file_path,
+        filename=artifact["original_name"],
+        media_type=artifact["mime"],
+    )
 
 @app.get("/api/jobs")
 def get_jobs(
@@ -326,18 +670,87 @@ def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Dep
 # ---------------------------------------------
 @app.get("/api/modules")
 def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # In a real app we'd fetch from DB. Let's return the hardcoded list for now to unblock UI
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
+    modules = db.query(Module).order_by(Module.sort_order, Module.key).all()
     return [
-        {"key": "task_extractor", "name": "Task Extractor", "enabled": True},
-        {"key": "task_stamping", "name": "Task Stamping", "enabled": True},
-        {"key": "effectivity", "name": "Effectivity / TCM", "enabled": True},
-        {"key": "check_control", "name": "Check Control", "enabled": True},
-        {"key": "utilization", "name": "Utilization", "enabled": True},
-        {"key": "cmp_tcm", "name": "CMP / TCM", "enabled": True},
-        {"key": "cover_merge", "name": "Cover Merge", "enabled": True},
-        {"key": "mail_merge", "name": "Mail Merge", "enabled": True},
-        {"key": "crew_hours", "name": "Crew Hours", "enabled": True},
+        _module_payload(module, permissions)
+        for module in modules
+        if _module_is_visible(module, permissions, disabled_module_ids)
     ]
+
+
+@app.get("/api/modules/{module_key}")
+def get_module(
+    module_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    module = db.query(Module).filter(Module.key == module_key).first()
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    permissions, disabled_module_ids = _module_visibility_inputs(db, current_user)
+    if not _module_is_visible(module, permissions, disabled_module_ids):
+        raise HTTPException(status_code=403, detail="Module access denied")
+    return _module_payload(module, permissions)
+
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else value
+
+
+def _module_payload(module: Module, permissions: set[str]) -> dict:
+    return {
+        "key": module.key,
+        "name": module.name,
+        "description": module.description,
+        "icon": module.icon,
+        "category": module.category,
+        "enabled": bool(module.enabled),
+        "sort_order": module.sort_order,
+        "business_area": _enum_value(module.business_area),
+        "route": module.route,
+        "module_status": _enum_value(module.module_status),
+        "readiness": _enum_value(module.readiness),
+        "required_view_permission": module.required_view_permission,
+        "display_name_key": module.display_name_key,
+        "action_permissions": list(module.action_permissions or []),
+        "granted_action_permissions": sorted(set(module.action_permissions or []) & permissions),
+    }
+
+
+def _module_visibility_inputs(db: Session, user: User) -> tuple[set[str], set[str]]:
+    permissions = get_effective_permissions(db, user)
+    disabled_module_ids = {
+        module_id
+        for (module_id,) in db.query(ModuleAccess.module_id)
+        .filter(ModuleAccess.user_id == user.id, ModuleAccess.enabled == False)  # noqa: E712
+        .all()
+    }
+    return permissions, disabled_module_ids
+
+
+def _module_is_visible(
+    module: Module | None,
+    permissions: set[str],
+    disabled_module_ids: set[str],
+) -> bool:
+    if module is None:
+        return False
+
+    registry_definition = next(
+        (definition for definition in MODULE_REGISTRY if definition.key == module.key),
+        None,
+    )
+    return (
+        registry_definition is not None
+        and module.required_view_permission == registry_definition.required_view_permission
+        and bool(module.enabled)
+        and module.module_status != ModuleStatus.hidden
+        and module.id not in disabled_module_ids
+        and bool(module.required_view_permission)
+        and registry_definition.required_view_permission in permissions
+    )
 
 # ---------------------------------------------
 # App Init
@@ -345,32 +758,7 @@ def get_modules(db: Session = Depends(get_db), current_user: User = Depends(get_
 @app.on_event("startup")
 def startup_db_seed():
     db = next(get_db())
-    # Create a default user if none exists
-    if not db.query(User).first():
-        from .auth import get_password_hash
-        admin = User(email="admin@redsea.com", hashed_password=get_password_hash("password"), full_name="Local Admin")
-        db.add(admin)
-        db.commit()
-        db.refresh(admin)
-        role = UserRole(user_id=admin.id, role=AppRole.super_admin)
-        db.add(role)
-        db.commit()
-        print("Created default user: admin@redsea.com / password")
-        
-    # Seed default modules
-    default_modules = [
-        {"key": "task_extractor", "name": "Task Extractor", "category": "PDF Processing", "enabled": True},
-        {"key": "task_stamping", "name": "Task Stamping", "category": "PDF Processing", "enabled": True},
-        {"key": "effectivity", "name": "Effectivity / TCM", "category": "Aviation", "enabled": True},
-        {"key": "check_control", "name": "Check Control", "category": "Quality", "enabled": True},
-        {"key": "utilization", "name": "Utilization", "category": "Analytics", "enabled": True},
-        {"key": "cmp_tcm", "name": "CMP / TCM", "category": "Compliance", "enabled": True},
-        {"key": "cover_merge", "name": "Cover Merge", "category": "Documents", "enabled": True},
-        {"key": "mail_merge", "name": "Mail Merge", "category": "Documents", "enabled": True},
-        {"key": "crew_hours", "name": "Crew Hours", "category": "Statistics", "enabled": True},
-    ]
-    
-    for mod in default_modules:
-        if not db.query(Module).filter(Module.key == mod["key"]).first():
-            db.add(Module(**mod))
-    db.commit()
+    try:
+        sync_registry(db)
+    finally:
+        db.close()

@@ -47,8 +47,17 @@ class TestCrewHoursEndpointCompatibility(unittest.TestCase):
             if name == "backend" or name.startswith("backend."):
                 sys.modules.pop(name, None)
         import backend.main as main
+        from backend.auth import get_current_user
+
         cls.main = main
+        cls.get_current_user = get_current_user
         cls.client = TestClient(main.app)
+
+    def setUp(self):
+        self.main.app.dependency_overrides[type(self).get_current_user] = lambda: object()
+
+    def tearDown(self):
+        self.main.app.dependency_overrides.pop(type(self).get_current_user, None)
 
     @classmethod
     def tearDownClass(cls):
@@ -64,6 +73,12 @@ class TestCrewHoursEndpointCompatibility(unittest.TestCase):
         else:
             os.environ["DATABASE_URL"] = cls.original_db_url
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
+
+    def test_s2_endpoint_requires_authentication(self):
+        self.main.app.dependency_overrides.pop(type(self).get_current_user, None)
+        response = self.client.post("/api/statistics/crew-hours", json={})
+
+        self.assertEqual(response.status_code, 401)
 
     def test_s2_endpoint_remains_exact_501(self):
         response = self.client.post("/api/statistics/crew-hours", json={})

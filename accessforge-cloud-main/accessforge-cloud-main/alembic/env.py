@@ -26,7 +26,14 @@ resolved_database_url = explicit_database_url or DATABASE_URL
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", resolved_database_url)
+
+def _escape_configparser_percent(value: str) -> str:
+    """Escape percent signs for ConfigParser's BasicInterpolation."""
+
+    return value.replace("%", "%%")
+
+
+config.set_main_option("sqlalchemy.url", _escape_configparser_percent(resolved_database_url))
 target_metadata = Base.metadata
 
 

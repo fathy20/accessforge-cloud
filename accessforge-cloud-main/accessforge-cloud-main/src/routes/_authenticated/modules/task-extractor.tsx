@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useI18n } from "@/lib/i18n";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -52,7 +53,7 @@ function TaskExtractorPage() {
         titleAr="استخراج المهام"
         description="Pick PDFs to extract maintenance task codes from (RegEx + OCR) via the Python worker."
         descriptionAr="اختر ملفات PDF لاستخراج رموز المهام منها (RegEx + OCR) عبر Python worker."
-        icon={FileSearch}
+        icon={MODULE_ICONS.task_extractor}
         acceptedKinds={["pdf"]}
         minFiles={1}
         extraInput={{ task_code: taskCode }}

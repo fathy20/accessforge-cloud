@@ -22,7 +22,7 @@ from alembic.config import Config
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_DIRECTORY = PROJECT_ROOT / "alembic"
-BASELINE_REVISION = "a4fcbd8f8388"
+BASELINE_REVISION = "b8c9d0e1f2a3"
 
 EXIT_SUCCESS = 0
 EXIT_REFUSED = 1

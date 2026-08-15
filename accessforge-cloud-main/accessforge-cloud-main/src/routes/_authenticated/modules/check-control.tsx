@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ListChecks } from "lucide-react";
 import { ModuleRunner } from "@/components/app/ModuleRunner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 
 export const Route = createFileRoute("/_authenticated/modules/check-control")({
   head: () => ({ meta: [{ title: "Check Control · REDSEA" }] }),
@@ -59,7 +59,7 @@ function CheckControlPage() {
       titleAr="التحكم في الفحوصات"
       description="Import CSV check definitions and manage check execution data."
       descriptionAr="استيراد تعريفات الفحوصات من CSV وإدارة بيانات تنفيذها."
-      icon={ListChecks}
+      icon={MODULE_ICONS.check_control}
       acceptedKinds={["csv", "excel"]}
       extraControls={extraControls}
       extraInput={{ check: checkCode }}

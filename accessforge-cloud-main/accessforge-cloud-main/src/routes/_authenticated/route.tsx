@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated")({
     }
   },
   component: () => (
-    <div className="dark">
+    <div>
       <AppLayout>
         <Outlet />
       </AppLayout>

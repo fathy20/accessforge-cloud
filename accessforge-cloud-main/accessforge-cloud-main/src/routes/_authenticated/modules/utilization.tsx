@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Gauge } from "lucide-react";
 import { ModuleRunner } from "@/components/app/ModuleRunner";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 
 export const Route = createFileRoute("/_authenticated/modules/utilization")({
   head: () => ({ meta: [{ title: "Utilization · REDSEA" }] }),
@@ -11,10 +11,9 @@ export const Route = createFileRoute("/_authenticated/modules/utilization")({
       titleAr="الاستخدام (Utilization)"
       description="Track aircraft utilization with cryptographic record hashing."
       descriptionAr="تتبع استخدام الطائرة مع تجزئة تشفيرية للسجلات."
-      icon={Gauge}
+      icon={MODULE_ICONS.utilization}
       acceptedKinds={["excel", "csv"]}
       supportsDatabase={true}
-      comingSoon
     />
   ),
 });

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Layers } from "lucide-react";
 import { ModuleRunner } from "@/components/app/ModuleRunner";
+import { MODULE_ICONS } from "@/lib/modules/icons";
 
 export const Route = createFileRoute("/_authenticated/modules/cover-merge")({
   head: () => ({ meta: [{ title: "Cover Merge · REDSEA" }] }),
@@ -11,7 +11,7 @@ export const Route = createFileRoute("/_authenticated/modules/cover-merge")({
       titleAr="دمج الأغلفة"
       description="Merge selected cover PDFs onto task-card PDFs."
       descriptionAr="دمج ملفات أغلفة PDF المختارة على بطاقات المهام."
-      icon={Layers}
+      icon={MODULE_ICONS.cover_merge}
       acceptedKinds={["pdf"]}
       minFiles={2}
     />

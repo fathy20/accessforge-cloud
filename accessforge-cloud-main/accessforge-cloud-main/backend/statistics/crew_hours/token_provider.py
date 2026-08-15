@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import threading
 import time
 from typing import Callable
@@ -51,12 +52,8 @@ class LeonAccessTokenProvider:
 
     def _refresh_locked(self, now: float) -> str:
         response = self._send_refresh_request()
-        payload = self._parse_refresh_response(response)
-        access_token = payload.get("access_token")
-        if not isinstance(access_token, str) or not access_token.strip():
-            raise LeonContractError("LEON refresh response did not contain a usable access_token.")
-        lifetime = self._access_token_lifetime(payload)
-        self._access_token = access_token.strip()
+        access_token, lifetime = self._parse_refresh_response(response)
+        self._access_token = access_token
         self._expires_at = now + lifetime
         return self._access_token
 
@@ -85,14 +82,33 @@ class LeonAccessTokenProvider:
         return response
 
     @staticmethod
-    def _parse_refresh_response(response: LeonRawResponse) -> dict:
-        try:
-            payload = json.loads(response.body)
-        except (TypeError, ValueError) as exc:
-            raise LeonResponseError("LEON refresh response was not valid JSON.") from exc
-        if not isinstance(payload, dict):
-            raise LeonResponseError("LEON refresh response had an invalid shape.")
-        return payload
+    def _parse_refresh_response(response: LeonRawResponse) -> tuple[str, float]:
+        body = (response.body or "").strip()
+        if not body:
+            raise LeonContractError("LEON refresh response was empty.")
+
+        # Check if JSON
+        if body.startswith("{"):
+            try:
+                payload = json.loads(body)
+            except (TypeError, ValueError) as exc:
+                raise LeonResponseError("LEON refresh response was not valid JSON.") from exc
+
+            if not isinstance(payload, dict):
+                raise LeonResponseError("LEON refresh response had an invalid shape.")
+
+            access_token = payload.get("access_token")
+            if not isinstance(access_token, str) or not access_token.strip():
+                raise LeonContractError("LEON refresh response did not contain a usable access_token.")
+
+            lifetime = LeonAccessTokenProvider._access_token_lifetime(payload)
+            return access_token.strip(), lifetime
+
+        # LEON returns plain text token (32+ alphanum/hex chars)
+        if len(body) >= 32 and re.match(r"^[a-zA-Z0-9_\-]+$", body):
+            return body, float(DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS)
+
+        raise LeonResponseError("LEON refresh response was not valid JSON.")
 
     @staticmethod
     def _access_token_lifetime(payload: dict) -> float:

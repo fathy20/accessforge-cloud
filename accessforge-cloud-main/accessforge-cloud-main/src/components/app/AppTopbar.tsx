@@ -78,7 +78,9 @@ export function AppTopbar({ onOpenNavigation }: AppTopbarProps = {}) {
   const roleLabel = topRole.replace("_", " ");
 
   return (
-    <header className="flex min-h-16 items-center gap-2 border-b border-surface-raised-border bg-surface-raised px-shell-padding">
+    // shrink-0 keeps the bar at its natural height when the content column is
+    // constrained; it sits outside the scroll container, so it never moves.
+    <header className="z-shell-chrome flex min-h-16 shrink-0 items-center gap-2 border-b border-surface-raised-border bg-surface-raised px-shell-padding">
       <Button
         type="button"
         variant="ghost"

@@ -107,17 +107,20 @@ export function AppSidebar({
   }, []);
 
   const registryModules = sortModules(perms.modules);
-  const workspaceModules = registryModules.filter(
-    (module) => module.business_area === "maintenance" || module.business_area === "crew",
-  );
+  // Maintenance and crew modules are no longer listed individually: the sidebar
+  // links to the Modules grid instead. Admin modules stay listed because they
+  // have no equivalent grid page.
   const adminModules = registryModules.filter((module) => module.business_area === "admin");
   const activeShellItem = getActiveShellNavigationItem(pathname);
-  const activeRegistryModule = registryModules
+  const activeAdminModule = adminModules
     .filter((module) => module.route && shellRouteMatches(pathname, module.route))
     .sort((a, b) => (b.route?.length ?? 0) - (a.route?.length ?? 0))[0];
+  // Only admin routes can out-specify a shell item now. Leaving every registry
+  // route in this comparison would beat "/modules" on a module page and stop
+  // the Modules link highlighting while you are inside a module.
   const activeRoute =
-    (activeRegistryModule?.route?.length ?? 0) > (activeShellItem?.to.length ?? 0)
-      ? activeRegistryModule?.route
+    (activeAdminModule?.route?.length ?? 0) > (activeShellItem?.to.length ?? 0)
+      ? activeAdminModule?.route
       : activeShellItem?.to;
 
   const toggleCollapsed = () => {
@@ -261,6 +264,7 @@ export function AppSidebar({
     section: ShellNavigationSection,
     isCollapsed: boolean,
     onNavigate?: () => void,
+    options: { hideHeading?: boolean } = {},
   ) => {
     const items = getShellNavigationItems(section).filter(
       (item) => !item.adminOnly || perms.isAdmin,
@@ -270,10 +274,12 @@ export function AppSidebar({
     const title = t(SHELL_SECTION_LABELS[section]);
     return (
       <section className="px-3 py-2" key={section}>
+        {/* The Modules group is a single link whose label already reads
+            "Modules", so a matching heading above it would just repeat it. */}
         <h2
           className={cn(
             "mb-1.5 px-2 text-label text-fg-muted",
-            isCollapsed && "sr-only",
+            (isCollapsed || options.hideHeading) && "sr-only",
           )}
         >
           {title}
@@ -356,13 +362,7 @@ export function AppSidebar({
 
       <div className="flex-1 overflow-y-auto py-2">
         {renderShellGroup("workspace", isCollapsed, options.onNavigate)}
-        {renderRegistryGroup(
-          t(SHELL_SECTION_LABELS.modules),
-          workspaceModules,
-          isCollapsed,
-          { staticSection: "modules", showWhenLoading: true },
-          options.onNavigate,
-        )}
+        {renderShellGroup("modules", isCollapsed, options.onNavigate, { hideHeading: true })}
         {renderRegistryGroup(
           t(SHELL_SECTION_LABELS.admin),
           adminModules,
@@ -409,7 +409,10 @@ export function AppSidebar({
     <TooltipProvider delayDuration={250}>
       <aside
         className={cn(
-          "hidden shrink-0 border-e border-sidebar-border md:flex md:flex-col",
+          // h-full spans the viewport-height shell; the nav list inside owns
+          // the only scrollbar here, so the brand block and collapse control
+          // stay pinned.
+          "hidden h-full shrink-0 border-e border-sidebar-border md:flex md:flex-col",
           collapsed ? "w-20" : "w-64",
         )}
         aria-label={t("shell.navigation")}

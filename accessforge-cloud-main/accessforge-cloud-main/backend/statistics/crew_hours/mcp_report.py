@@ -34,6 +34,10 @@ OPTIONAL_COLUMNS = (
     "JL_STD_UTC",
     "JL_STA_UTC",
     "positioning_crew",
+    # EVN/SVX drive the absolute Heavy rules and are only otherwise reachable
+    # over GraphQL. The report tool rejects unknown columns outright, so this
+    # name is verified against the live tool, not guessed.
+    "flightTags",
 )
 MCP_REPORT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_COLUMNS
 

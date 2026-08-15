@@ -35,41 +35,51 @@ from ..statistics.crew_hours.transport import (
 )
 
 
-# LEON returns unions wrapped in NonNull*Value envelopes; these fragments unwrap
-# both the success payload and the violation list in one round trip.
+# LEON wraps every union branch in a NonNull*Value envelope whose payload field
+# is always literally named "value" -- but with a different type per branch.
+# GraphQL rejects that as a field conflict, so every branch is aliased. Two
+# rules learned from LEON's own validation errors, both easy to trip again:
+#   1. alias each "value" whose sibling branch also selects "value";
+#   2. declare variables non-null (!) -- the arguments are non-null, and a
+#      nullable variable in a non-null position is a validation error.
 _MESSAGE_RESULT_FRAGMENT = """
     ... on NonNullWingmanChatMessageResultUnionValue {
-      value {
+      result: value {
         ... on NonNullWingmanChatMessageResultValue {
-          value { threadId userMessage { messageId message sender status } }
+          messageResult: value {
+            threadId
+            userMessage { messageId message sender status }
+          }
         }
-        ... on NonNullErrorListValue { value { errorList { message category } } }
+        ... on NonNullErrorListValue {
+          errorValue: value { errorList { message category } }
+        }
       }
     }
 """
 
 _START_MUTATION = """
-mutation($messageInput: WingmanChatThreadMessageInput) {
+mutation($messageInput: WingmanChatThreadMessageInput!) {
   wingmanAi { wingmanChat { startNewConversation(messageInput: $messageInput) {
 %s
     ... on WingmanChatSectionMutationTypeStartNewConversationViolationList {
-      value { message category path }
+      violations: value { message category path }
     }
   } } }
 }""" % _MESSAGE_RESULT_FRAGMENT
 
 _CONTINUE_MUTATION = """
-mutation($threadId: WingmanChatThreadId, $messageInput: WingmanChatThreadMessageInput) {
+mutation($threadId: WingmanChatThreadId!, $messageInput: WingmanChatThreadMessageInput!) {
   wingmanAi { wingmanChat { continueConversation(threadId: $threadId, messageInput: $messageInput) {
 %s
     ... on WingmanChatSectionMutationTypeContinueConversationViolationList {
-      value { message category path }
+      violations: value { message category path }
     }
   } } }
 }""" % _MESSAGE_RESULT_FRAGMENT
 
 _MESSAGES_QUERY = """
-query($threadId: WingmanChatThreadId) {
+query($threadId: WingmanChatThreadId!) {
   wingmanAi { wingmanChat { getMessagesForThread(threadId: $threadId) {
     ... on NonNullListOfNonNullWingmanChatMessageTypeValue {
       value { threadId messageId message sender status createdAt }
@@ -79,18 +89,18 @@ query($threadId: WingmanChatThreadId) {
 }"""
 
 _APPROVAL_QUERY = """
-query($threadId: WingmanChatThreadId) {
+query($threadId: WingmanChatThreadId!) {
   wingmanAi { wingmanChat { getThreadApprovalStatus(threadId: $threadId) {
     threadId toolNames
   } } }
 }"""
 
 _APPROVE_MUTATION = """
-mutation($threadId: WingmanChatThreadId, $approvalInput: WingmanChatThreadRequestApprovalInput) {
+mutation($threadId: WingmanChatThreadId!, $approvalInput: WingmanChatThreadRequestApprovalInput!) {
   wingmanAi { wingmanChat { approveMcpRequest(threadId: $threadId, approvalInput: $approvalInput) {
-    ... on NonNullWingmanChatThreadIdValue { value }
+    ... on NonNullWingmanChatThreadIdValue { threadIdValue: value }
     ... on WingmanChatSectionMutationTypeApproveMcpRequestViolationList {
-      value { message category path }
+      violations: value { message category path }
     }
   } } }
 }"""
@@ -252,12 +262,12 @@ class WingmanChatClient:
         if not isinstance(node, Mapping):
             raise LeonResponseError(f"LEON Wingman {field} returned no result.")
         _raise_for_violations(node)
-        inner = node.get("value")
+        # Aliases mirror _MESSAGE_RESULT_FRAGMENT: result -> messageResult/errorValue.
+        inner = node.get("result")
         if isinstance(inner, Mapping):
             _raise_for_error_list(inner)
-            result = inner.get("value")
+            result = inner.get("messageResult")
             if isinstance(result, Mapping):
-                _raise_for_error_list(result)
                 thread_id = _optional_str(result.get("threadId"))
                 if thread_id:
                     return thread_id
@@ -265,16 +275,24 @@ class WingmanChatClient:
 
 
 def _message_input(message: str, local_context: str | None) -> dict[str, Any]:
-    payload: dict[str, Any] = {"message": message}
-    if local_context:
-        payload["localContext"] = local_context
-    return payload
+    """Every field of WingmanChatThreadMessageInput is required.
+
+    LEON declares localContext as String! and fileList as [FileDataInput!]!,
+    so both must be sent even when empty -- omitting them is a 400, not a
+    default.
+    """
+
+    return {
+        "message": message,
+        "localContext": local_context or "",
+        "fileList": [],
+    }
 
 
 def _raise_for_violations(node: Mapping[str, Any]) -> None:
-    """Violation lists carry {message, category, path} entries."""
+    """Violation lists carry {message, category, path} entries under `violations`."""
 
-    values = node.get("value")
+    values = node.get("violations")
     if not isinstance(values, list) or not values:
         return
     messages = [
@@ -289,7 +307,7 @@ def _raise_for_violations(node: Mapping[str, Any]) -> None:
 def _raise_for_error_list(node: Mapping[str, Any]) -> None:
     """LEON's ErrorList wraps its entries in ``errorList``, not ``value``."""
 
-    inner = node.get("value")
+    inner = node.get("errorValue")
     if not isinstance(inner, Mapping):
         return
     errors = inner.get("errorList")

@@ -22,8 +22,9 @@ the module stays inside the existing synchronous HTTP transport.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from ..statistics.crew_hours.config import LeonConfiguration
 from ..statistics.crew_hours.errors import LeonContractError, LeonResponseError
@@ -110,6 +111,34 @@ query { wingmanAi { wingmanChat { isAvailable settings { active } } } }
 """
 
 
+class WingmanIdentityError(LeonResponseError):
+    """The configured LEON credential cannot reach a per-user feature."""
+
+
+@contextmanager
+def _identity_guard() -> Iterator[None]:
+    """Name the identity restriction instead of letting it read as an outage.
+
+    Wingman chat is per-user: threads belong to a logged-in identity. LEON
+    rejects an API-key credential for those resolvers, but only `loggedUser`
+    says so plainly -- the chat resolvers throw a generic error instead. This
+    turns that generic failure into the actionable one.
+    """
+
+    try:
+        yield
+    except LeonResponseError as exc:
+        text = str(exc).lower()
+        if "identity type" in text or "accessrestriction" in text:
+            raise WingmanIdentityError(
+                "LEON refused the configured credential for Wingman chat: it is an "
+                "API key, and Wingman requires a user session, user access token, "
+                "or personal API key. "
+                f"LEON said: {exc}"
+            ) from exc
+        raise
+
+
 @dataclass(frozen=True)
 class WingmanMessage:
     message_id: str | None
@@ -160,10 +189,11 @@ class WingmanChatClient:
         return True
 
     def start_conversation(self, message: str, local_context: str | None = None) -> str:
-        payload = self._executor.execute_query(
-            _START_MUTATION,
-            {"messageInput": _message_input(message, local_context)},
-        )
+        with _identity_guard():
+            payload = self._executor.execute_query(
+                _START_MUTATION,
+                {"messageInput": _message_input(message, local_context)},
+            )
         return self._thread_id(payload, "startNewConversation")
 
     def continue_conversation(
@@ -172,13 +202,14 @@ class WingmanChatClient:
         message: str,
         local_context: str | None = None,
     ) -> str:
-        payload = self._executor.execute_query(
-            _CONTINUE_MUTATION,
-            {
-                "threadId": thread_id,
-                "messageInput": _message_input(message, local_context),
-            },
-        )
+        with _identity_guard():
+            payload = self._executor.execute_query(
+                _CONTINUE_MUTATION,
+                {
+                    "threadId": thread_id,
+                    "messageInput": _message_input(message, local_context),
+                },
+            )
         return self._thread_id(payload, "continueConversation")
 
     def fetch_messages(self, thread_id: str) -> tuple[WingmanMessage, ...]:

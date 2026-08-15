@@ -61,6 +61,37 @@ timestamp is required (`2026-08-02T00:00:00Z`), not a bare date.
 
 Crew position does **not** arrive with `mcp.flightList`; it needs a second call.
 
+## Credential identity class — root cause of the Wingman failure
+
+`loggedUser` returns LEON's only explicit statement of what our credential is:
+
+```json
+{"message": "Identity type API key is not allowed, use one of the following
+             identity types: user session, user access token, personal API key",
+ "path": ["loggedUser"],
+ "extensions": {"category": "accessRestriction"}}
+```
+
+The configured `LEON_REFRESH_TOKEN` resolves to an **API key** identity. That
+splits the schema cleanly:
+
+| Scope | Example | Result |
+|---|---|---|
+| Operator-level | `wingmanAi.wingmanChat.isAvailable` | works — `true` |
+| Operator-level | `flightList`, `mcp.*`, Report Wizard, `ftl.dutyList` | work |
+| **User-scoped** | `loggedUser` | refused, with the message above |
+| **User-scoped** | `wingmanChat.getAllThreads`, `settings`, `startNewConversation` | refused, but as a *generic* error with only a `path` |
+
+Wingman chat is per-user — threads belong to a logged-in identity — so an API key
+cannot use it regardless of query correctness. Only `loggedUser` says so plainly;
+the chat resolvers surface a generic message instead, which is why this took so
+long to isolate.
+
+**To enable Wingman**, the credential must be reissued as a *personal API key*,
+*user access token*, or *user session*. No code change will work around it.
+
+Status: **documented**. Confirmed live, twice, with a control.
+
 ## Rate limiting — operational constraint
 
 `POST /api/graphql/` serves a short burst then returns HTTP 500

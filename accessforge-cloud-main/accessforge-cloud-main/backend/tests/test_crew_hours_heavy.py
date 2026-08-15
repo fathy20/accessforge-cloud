@@ -68,12 +68,28 @@ class TestHeavyDecision(unittest.TestCase):
                 self.assertEqual(decision.heavy_reason, reason)
                 self.assertIs(decision.heavy_conflict, conflict)
 
-    def test_cockpit_threshold_is_strictly_greater_than_four(self):
-        four = [_entry()] * HEAVY_COCKPIT_THRESHOLD
-        self.assertIs(derive_heavy(four, "B738 - 737-800"), False)
-        self.assertIs(derive_heavy([*four, _entry()], "B738 - 737-800"), True)
+    def test_thresholds_match_the_operator_standard_complement(self):
+        # June 2026 Report Wizard, 304 flights carrying crew: cockpit was 2 on
+        # 289 and never above 3; cabin was 4 on 236. Heavy means "more than
+        # standard", so a standard 2+4 flight must not be Heavy. The originally
+        # agreed pair (cockpit 4 / cabin 2) was inverted and flagged 92% Heavy.
+        self.assertEqual((HEAVY_COCKPIT_THRESHOLD, HEAVY_CABIN_THRESHOLD), (2, 4))
 
-    def test_cabin_threshold_is_strictly_greater_than_two(self):
+        standard = [_entry()] * 2 + [_entry(pos_type="CABIN", position="FA1")] * 4
+        self.assertIs(derive_heavy(standard, "B738 - 737-800"), False)
+
+        extra_cockpit = [*standard, _entry()]
+        self.assertIs(derive_heavy(extra_cockpit, "B738 - 737-800"), True)
+
+        extra_cabin = [*standard, _entry(pos_type="CABIN", position="FA5")]
+        self.assertIs(derive_heavy(extra_cabin, "B738 - 737-800"), True)
+
+    def test_cockpit_threshold_is_strictly_greater(self):
+        standard = [_entry()] * HEAVY_COCKPIT_THRESHOLD
+        self.assertIs(derive_heavy(standard, "B738 - 737-800"), False)
+        self.assertIs(derive_heavy([*standard, _entry()], "B738 - 737-800"), True)
+
+    def test_cabin_threshold_is_strictly_greater(self):
         def cabin(count: int) -> list[CrewContextEntry]:
             return [_entry(pos_type="CABIN", position="FA1")] * count
 
@@ -81,12 +97,17 @@ class TestHeavyDecision(unittest.TestCase):
         self.assertIs(derive_heavy(cabin(HEAVY_CABIN_THRESHOLD + 1), "B738"), True)
 
     def test_cockpit_trainees_ops_and_sp_never_count(self):
-        entries = [_entry()] * 4 + [_entry(position=" ops "), _entry(position="SP")]
+        # A standard cockpit plus two trainees must stay at the standard count,
+        # otherwise the trainees alone would tip the flight into Heavy.
+        entries = [_entry()] * HEAVY_COCKPIT_THRESHOLD + [
+            _entry(position=" ops "),
+            _entry(position="SP"),
+        ]
 
         self.assertTrue(is_training_position("OPS"))
         self.assertTrue(is_training_position(" sp "))
         self.assertFalse(is_training_position("FO"))
-        self.assertEqual(operating_cockpit_count(entries), 4)
+        self.assertEqual(operating_cockpit_count(entries), HEAVY_COCKPIT_THRESHOLD)
         self.assertIs(derive_heavy(entries, "B738"), False)
 
     def test_cabin_trainees_are_excluded_by_work_schedule_function(self):
@@ -100,7 +121,7 @@ class TestHeavyDecision(unittest.TestCase):
         self.assertIs(derive_heavy(entries, "B738"), False)
 
     def test_training_types_and_non_operating_positions_are_excluded(self):
-        entries = [_entry()] * 4 + [
+        entries = [_entry()] * HEAVY_COCKPIT_THRESHOLD + [
             _entry(training_type=" LINE_TRAINING "),
             _entry(training_type="line_check"),
             _entry(position=" OBS "),
@@ -108,17 +129,17 @@ class TestHeavyDecision(unittest.TestCase):
             _entry(position=" STB "),
         ]
 
-        self.assertEqual(operating_cockpit_count(entries), 4)
+        self.assertEqual(operating_cockpit_count(entries), HEAVY_COCKPIT_THRESHOLD)
         self.assertIs(derive_heavy(entries, "B738"), False)
 
     def test_non_cockpit_position_types_are_excluded(self):
-        entries = [_entry()] * 4 + [
+        entries = [_entry()] * HEAVY_COCKPIT_THRESHOLD + [
             _entry(pos_type="NOT-ACTIVE"),
             _entry(pos_type="MAINTENANCE"),
             _entry(pos_type="GROUND"),
         ]
 
-        self.assertEqual(operating_cockpit_count(entries), 4)
+        self.assertEqual(operating_cockpit_count(entries), HEAVY_COCKPIT_THRESHOLD)
         self.assertIs(derive_heavy(entries, "B738"), False)
 
     def test_evn_is_never_heavy_and_wins_over_every_other_rule(self):

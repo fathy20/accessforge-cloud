@@ -160,10 +160,13 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("SVX_TAG", answer.citation.source)
 
     def test_ops_and_sp_trainees_do_not_push_a_flight_over_the_line(self):
-        answer = self._ask(_heavy_report(["CPT", "FO", "FO2", "FO3", "OPS", "SP"]))
+        # Standard 2 cockpit + 4 cabin, plus two cockpit trainees.
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "OPS", "SP", "FA1", "FA2", "FA3", "FA4"])
+        )
 
         self.assertIn("Not Heavy", answer.text)
-        self.assertIn("4 cockpit", answer.text)
+        self.assertIn("2 cockpit / 4 cabin", answer.text)
 
     def test_unknown_flight_number_says_so(self):
         answer = answer_locally(

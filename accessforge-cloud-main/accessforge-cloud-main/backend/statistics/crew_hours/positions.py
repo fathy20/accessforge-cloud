@@ -78,8 +78,15 @@ SVX_TAG = "SVX"
 # --- Heavy Thresholds (strictly-greater) ---
 # cockpit_count > HEAVY_COCKPIT_THRESHOLD → Heavy
 # cabin_count   > HEAVY_CABIN_THRESHOLD   → Heavy
-HEAVY_COCKPIT_THRESHOLD = 4
-HEAVY_CABIN_THRESHOLD = 2
+#
+# Set to the operator's standard complement, so Heavy means "more than standard".
+# Evidence, June 2026 Report Wizard, 304 flights carrying crew:
+#   cockpit  2 crew ×289, 3 crew ×15, never more  → standard is 2
+#   cabin    4 crew ×236, 5 ×14, 6 ×24, 7 ×6      → standard is 4
+# The first agreed pair (cockpit 4 / cabin 2) was inverted against this: it
+# marked 280 of 304 flights Heavy and the cockpit rule could never fire.
+HEAVY_COCKPIT_THRESHOLD = 2
+HEAVY_CABIN_THRESHOLD = 4
 
 # --- Minimum operating crew (existing, for reference) ---
 # Evidence: fleet is 100% B738 and cockpit==2 was LEON-Normal in 718/718 flights.

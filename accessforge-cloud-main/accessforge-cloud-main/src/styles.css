@@ -133,7 +133,11 @@
   --color-interactive-disabled: var(--interactive-disabled);
   --color-brand-subtle: var(--brand-subtle);
 
+  --color-copilot-spark: var(--copilot-spark);
+  --color-copilot-resolved: var(--copilot-resolved);
+
   --shadow-glow: 0 0 0 1px oklch(0.55 0.22 25 / 0.25), 0 8px 32px -8px oklch(0.55 0.22 25 / 0.45);
+  --shadow-copilot-panel: var(--copilot-panel-shadow);
   --shadow-panel: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px -12px oklch(0 0 0 / 0.5);
   --shadow-surface-base: var(--surface-base-shadow);
   --shadow-surface-raised: var(--surface-raised-shadow);
@@ -257,6 +261,17 @@
   --interactive-focus: var(--ring);
   --interactive-disabled: oklch(0.96 0.01 250 / 0.04);
   --brand-subtle: color-mix(in oklab, var(--primary) 15%, transparent);
+
+  /*
+   * Copilot-only primitives.  Scoped to the assistant surface by convention:
+   * the spark amber marks "AI" so it never competes with coral (primary action),
+   * and the teal is the logo's middle wave, reused rather than a fifth hue.
+   * The panel is the product's single floating layer, so it carries the only
+   * shadow heavier than --surface-overlay-shadow.
+   */
+  --copilot-spark: #f4c244;
+  --copilot-resolved: var(--chart-3);
+  --copilot-panel-shadow: 0 24px 64px -12px oklch(0 0 0 / 0.75), 0 2px 8px oklch(0 0 0 / 0.4);
   --selection-background: oklch(0.62 0.22 25 / 0.35);
   --focus-ring-color: var(--ring);
   --focus-ring-width: 2px;

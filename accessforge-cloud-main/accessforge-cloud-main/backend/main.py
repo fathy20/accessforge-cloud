@@ -34,6 +34,7 @@ from .auth import router as auth_router, get_current_user
 from .admin_routes import router as admin_router
 from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
+from .copilot.router import router as copilot_router
 from .rbac.permissions import get_effective_permissions, record_audit
 from .rbac.registry import MODULE_REGISTRY
 from . import storage as storage_backend
@@ -141,6 +142,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(project_router)
 app.include_router(statistics_router)
+app.include_router(copilot_router)
 
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

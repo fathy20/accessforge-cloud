@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
+import { RedSeaCopilot, createWingmanTransport } from "@/components/copilot";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
 
@@ -8,6 +9,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { dir, t } = useI18n();
   const isMobile = useIsMobile();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  // Backed by LEON's own Wingman chat via POST /api/copilot/ask.
+  const copilotTransport = useMemo(
+    () =>
+      createWingmanTransport({
+        localContext: () =>
+          typeof window === "undefined" ? undefined : window.location.pathname,
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!isMobile) setMobileNavigationOpen(false);
@@ -37,6 +47,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+
+      <RedSeaCopilot transport={copilotTransport} />
     </div>
   );
 }

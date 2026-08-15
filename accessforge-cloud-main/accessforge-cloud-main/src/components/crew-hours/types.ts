@@ -14,6 +14,17 @@ export interface FlightItem {
   is_trn: boolean;
   journey_log?: unknown;
   augmented_heavy?: boolean | null;
+  leon_heavy?: boolean | null;
+  derived_heavy?: boolean | null;
+  effective_heavy?: boolean | null;
+  heavy_source?: string | null;
+  heavy_reason?: string | null;
+  heavy_conflict?: boolean;
+  leon_augmentation?: string | null;
+  is_training_position?: boolean;
+  is_training_function?: boolean;
+  unknown_resolved?: boolean;
+  unknown_resolution_reason?: string | null;
 }
 
 export interface CrewMemberSummary {

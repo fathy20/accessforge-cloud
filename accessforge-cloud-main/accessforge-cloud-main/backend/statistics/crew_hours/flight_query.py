@@ -8,12 +8,23 @@ from .response_models import LeonFlight
 
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# Cabin trainees are identified by their Work Schedule Function (SFA).  This
+# selection is optional: callers drop it and retry when LEON rejects the field,
+# so only this one line needs editing if the schema names it differently.
+CREW_FUNCTION_SELECTION = "workSchedule { function }"
 
-def build_flight_list_query(start: date | str, end: date | str) -> str:
+
+def build_flight_list_query(
+    start: date | str,
+    end: date | str,
+    *,
+    include_crew_function: bool = True,
+) -> str:
     start_date = _coerce_date(start)
     end_date = _coerce_date(end)
     if start_date > end_date:
         raise LeonContractError("Flight query start date must not be after end date.")
+    crew_function = f"\n      {CREW_FUNCTION_SELECTION}" if include_crew_function else ""
     return f'''query {{
   flightList(
     filter: {{
@@ -32,7 +43,7 @@ def build_flight_list_query(start: date | str, end: date | str) -> str:
     crewList {{
       contact {{ name surname personCode }}
       position {{ name posType }}
-      flightTrainingType
+      flightTrainingType{crew_function}
     }}
     journeyLog {{
       takeoffCrewLogin {{ code }}

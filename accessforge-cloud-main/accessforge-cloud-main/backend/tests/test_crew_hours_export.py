@@ -256,6 +256,12 @@ class TestCrewHoursExport(unittest.TestCase):
                 "ON",
                 "Block time",
                 "Augmented (Heavy)",
+                "Heavy Source",
+                "Heavy Reason",
+                "LEON Heavy",
+                "Derived Heavy",
+                "Training (TRN)",
+                "Unknown Resolution",
             ),
         )
         self.assertEqual(
@@ -308,6 +314,33 @@ class TestCrewHoursExport(unittest.TestCase):
         self.assertEqual(cockpit["K9"].value, "No")
         self.assertEqual(cabin["K8"].value, "Unknown")
         self.assertNotIn("Augmented (Heavy)", [cell.value for cell in summary[3]])
+
+    def test_heavy_provenance_is_detail_only_and_keeps_block_time_column(self):
+        report = _report()
+        flight = report.crew_members[0].flights[0]
+        flight.leon_heavy = False
+        flight.derived_heavy = True
+        flight.effective_heavy = False
+        flight.heavy_source = "LEON"
+        flight.heavy_reason = "EXTRA_COCKPIT_CREW"
+        flight.heavy_conflict = True
+        flight.leon_augmentation = "normal"
+        self.service.result = report
+
+        response = self._export_response()
+        workbook = load_workbook(filename=__import__("io").BytesIO(response.content))
+        self.addCleanup(workbook.close)
+
+        cockpit = workbook["Cockpit Detail"]
+        self.assertEqual(cockpit["J8"].number_format, "[h]:mm")
+        self.assertEqual(cockpit["J8"].value, timedelta(hours=1, minutes=30))
+        self.assertEqual(cockpit["K8"].value, "Unknown")
+        self.assertEqual(cockpit["L8"].value, "LEON")
+        self.assertEqual(cockpit["M8"].value, "EXTRA_COCKPIT_CREW")
+        self.assertEqual(cockpit["N8"].value, "No")
+        self.assertEqual(cockpit["O8"].value, "Yes")
+        self.assertEqual(cockpit.auto_filter.ref, "A4:Q9")
+        self.assertNotIn("Heavy Source", [cell.value for cell in workbook["Summary"][3]])
 
     def test_official_totals_and_missing_totals_are_not_recomputed(self):
         response = self._export_response()

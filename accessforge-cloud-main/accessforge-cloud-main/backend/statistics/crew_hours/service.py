@@ -1,11 +1,12 @@
 import logging
 from datetime import date
-from typing import Annotated, Any, Dict, List, Mapping, Protocol
+from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
 
 from fastapi import Depends
 
 from .augmented import AugmentedIndex
-from .domain import is_trn_total, normalize_report_row
+from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
+from .domain import buffered_query_dates, is_trn_total, normalize_report_row
 from .errors import (
     CrewHoursCapabilityError,
     LeonAuthenticationError,
@@ -15,7 +16,15 @@ from .errors import (
     LeonTransportError,
 )
 from .leon_client import CrewHoursLeonClient, get_crew_hours_leon_client
+from .heavy import (
+    decide_heavy,
+    derive_heavy_detail,
+    is_training_function,
+    is_training_position,
+)
 from .mcp_report import OfficialMcpReport, _format_minutes
+from .positions import LEON_POSITION_GROUPS
+from .unknown_resolver import build_rotation_index, resolve_unknown_heavy
 from .schemas import (
     CrewHoursPeriod,
     CrewHoursReportResponse,
@@ -26,65 +35,6 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Derived from LEON's own role-slot column labels; see docs/architecture/leon-report-wizard-columns.md.
-# Reconciled against live June 2026 data.
-# PSN is non-operating for that member's numeric total.  PAD, FDP, FDPI, RMP,
-# and INSP retain the approved existing inclusion semantics.
-LEON_POSITION_GROUPS: Mapping[str, frozenset[str]] = {
-    "Cockpit": frozenset(
-        {
-            "CPT",
-            "CPT2",
-            "CPT3",
-            "CPT4",
-            "CPT5",
-            "FE",
-            "FO",
-            "FO2",
-            "FO3",
-            "FO4",
-            "INS",
-            "LTC",
-            "LTE",
-            "LTI",
-            "OBS",
-            "OBS2",
-            "SP",
-            "STB",
-            "TRE",
-            "TRI",
-        }
-    ),
-    "Cabin": frozenset(
-        {
-            "EFA",
-            "EFA2",
-            "FA1",
-            "FA2",
-            "FA3",
-            "FA4",
-            "FA5",
-            "FA6",
-            "FA7",
-            "FA8",
-            "FA9",
-            "FA10",
-            "FA11",
-            "FA12",
-            "FA13",
-            "FA14",
-            "FA15",
-            "IFA",
-            "IFA2",
-            "SFA",
-            "SFA2",
-            "SFA3",
-        }
-    ),
-    "Maintenance": frozenset({"ENG1", "ENG2", "ENG3", "ENG4"}),
-}
-
 
 class CrewHoursService(Protocol):
     def get_crew_hours(self, request: CrewHoursRequest) -> CrewHoursResponse:
@@ -143,6 +93,11 @@ class LiveCrewHoursService:
             from_date,
             to_date,
         )
+        crew_context_index = _fetch_crew_context_index_safely(
+            self._leon_client,
+            from_date,
+            to_date,
+        )
         return _build_mcp_report_response(
             official_report,
             from_date=from_date,
@@ -150,6 +105,7 @@ class LiveCrewHoursService:
             position=position,
             crew_member=crew_member,
             augmented_index=augmented_index,
+            crew_context_index=crew_context_index,
         )
 
 
@@ -180,6 +136,50 @@ def _fetch_augmented_index_safely(
         return AugmentedIndex(False, {}, 0, 0)
 
 
+def _fetch_crew_context_index_safely(
+    leon_client: CrewHoursLeonClient,
+    from_date: str,
+    to_date: str,
+) -> CrewContextIndex:
+    fetcher = getattr(leon_client, "fetch_crew_context_index", None)
+    if not callable(fetcher):
+        return CrewContextIndex(False, {})
+    try:
+        index = fetcher(from_date, to_date)
+        if not isinstance(index, CrewContextIndex):
+            raise LeonContractError("LEON flight-list crew context returned an invalid index.")
+        logger.info(
+            "LEON crew context period=%s..%s chunks=%d flights_indexed=%d unavailable=%s",
+            from_date,
+            to_date,
+            _crew_context_chunk_count(from_date, to_date),
+            len(index.by_flight),
+            not index.available,
+        )
+        return index
+    except Exception as exc:
+        logger.warning(
+            "LEON crew context period=%s..%s chunks=%d flights_indexed=0 unavailable=%s error_type=%s",
+            from_date,
+            to_date,
+            _crew_context_chunk_count(from_date, to_date),
+            True,
+            type(exc).__name__,
+        )
+        return CrewContextIndex(False, {})
+
+
+def _crew_context_chunk_count(from_date: str, to_date: str) -> int:
+    try:
+        buffered_from, buffered_to = buffered_query_dates(from_date, to_date)
+        span_days = (
+            date.fromisoformat(buffered_to) - date.fromisoformat(buffered_from)
+        ).days + 1
+        return (span_days + CREW_CONTEXT_CHUNK_DAYS - 1) // CREW_CONTEXT_CHUNK_DAYS
+    except (TypeError, ValueError, LeonContractError):
+        return 0
+
+
 def _build_mcp_report_response(
     report: OfficialMcpReport,
     *,
@@ -188,8 +188,12 @@ def _build_mcp_report_response(
     position: str | None,
     crew_member: str | None,
     augmented_index: AugmentedIndex | None = None,
+    crew_context_index: CrewContextIndex | None = None,
 ) -> CrewHoursReportResponse:
     augmented_index = augmented_index or AugmentedIndex(False, {}, 0, 0)
+    crew_context_index = crew_context_index or CrewContextIndex(False, {})
+    # Built once per report; STEP 4 needs each crew member's flights in time order.
+    rotation_index = build_rotation_index(crew_context_index)
     crew_map: Dict[str, Dict[str, Any]] = {}
     row_crew_codes: list[set[str]] = []
     unclassified_position_tokens: set[str] = set()
@@ -264,6 +268,8 @@ def _build_mcp_report_response(
                 flight_position,
                 crew_code=code,
                 augmented_index=augmented_index,
+                crew_context_index=crew_context_index,
+                rotation_index=rotation_index,
                 is_trn=explicit_trn,
             )
             crew_map[key]["flights"].append(flight)
@@ -383,10 +389,50 @@ def _mcp_flight_item(
     is_trn: bool = False,
     crew_code: str | None = None,
     augmented_index: AugmentedIndex | None = None,
+    crew_context_index: CrewContextIndex | None = None,
+    rotation_index: Mapping[str, tuple[FlightContext, ...]] | None = None,
 ) -> FlightItem:
     flight_nid = _optional_string(row.get("scope_row_unique_id"))
     if flight_nid is None:
         raise LeonContractError("LEON MCP report row did not provide scope_row_unique_id.")
+    augmented_index = augmented_index or AugmentedIndex(False, {}, 0, 0)
+    crew_context_index = crew_context_index or CrewContextIndex(False, {})
+    rotation_index = rotation_index if rotation_index is not None else {}
+    leon_heavy = augmented_index.lookup(crew_code, row.get("unique_id"))
+    leon_augmentation = augmented_index.lookup_raw(crew_code, row.get("unique_id"))
+    unique_id = _optional_int(row.get("unique_id"))
+    entries = (
+        crew_context_index.by_flight.get(unique_id, ())
+        if crew_context_index.available
+        else ()
+    )
+    derived_heavy, derived_reason = derive_heavy_detail(
+        entries,
+        _optional_string(row.get("acftType")),
+        crew_context_index.tags_for(unique_id),
+    )
+    heavy_decision = decide_heavy(leon_heavy, derived_heavy, derived_reason)
+
+    effective_heavy = heavy_decision.effective_heavy
+    heavy_source = heavy_decision.heavy_source
+    unknown_resolved = False
+    unknown_resolution_reason: str | None = None
+    # STEP 4 only runs where LEON genuinely returned no augmentation value.  When
+    # the whole FTL index is unavailable we keep UNKNOWN rather than inventing a No.
+    if effective_heavy is None and augmented_index.available:
+        resolution = resolve_unknown_heavy(
+            crew_context_index,
+            rotation_index,
+            unique_id,
+            crew_code,
+        )
+        effective_heavy = resolution.effective_heavy
+        unknown_resolved = resolution.resolved
+        unknown_resolution_reason = resolution.reason
+        if resolution.resolved:
+            heavy_source = "LOCAL_RULE"
+
+    entry = _crew_entry(entries, crew_code)
     # positioning_crew remains intentionally unused; its alignment and semantics are unverified.
     return FlightItem(
         flight_nid=flight_nid,
@@ -403,15 +449,50 @@ def _mcp_flight_item(
         flight_training_type="TRN" if is_trn else None,
         is_trn=is_trn,
         journey_log=None,
-        augmented_heavy=(augmented_index or AugmentedIndex(False, {}, 0, 0)).lookup(
-            crew_code,
-            row.get("unique_id"),
-        ),
+        # The displayed Yes/No is the effective verdict, including any STEP 4 resolution.
+        augmented_heavy=effective_heavy,
+        leon_heavy=heavy_decision.leon_heavy,
+        derived_heavy=heavy_decision.derived_heavy,
+        effective_heavy=effective_heavy,
+        heavy_source=heavy_source,
+        heavy_reason=heavy_decision.heavy_reason,
+        heavy_conflict=heavy_decision.heavy_conflict,
+        leon_augmentation=leon_augmentation,
+        is_training_position=is_training_position(entry.position if entry else position),
+        is_training_function=is_training_function(entry.function if entry else None),
+        unknown_resolved=unknown_resolved,
+        unknown_resolution_reason=unknown_resolution_reason,
     )
+
+
+def _crew_entry(
+    entries: Sequence[CrewContextEntry],
+    crew_code: str | None,
+) -> CrewContextEntry | None:
+    if not crew_code:
+        return None
+    normalized = crew_code.strip().upper()
+    for entry in entries:
+        if entry.crew_code and entry.crew_code.strip().upper() == normalized:
+            return entry
+    return None
 
 
 def _optional_string(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
 
 
 def _position_group(position: str | None) -> str | None:

@@ -2,6 +2,7 @@ from typing import Mapping, Protocol
 
 from .augmented import AugmentedIndex, fetch_augmented_index
 from .config import get_leon_configuration, load_leon_configuration
+from .crew_context import CrewContextIndex, fetch_crew_context_index
 from .errors import LeonContractError
 from .flight_query import build_flight_list_query, parse_flight_list
 from .graphql import LeonGraphQLExecutor
@@ -26,6 +27,9 @@ class CrewHoursLeonClient(Protocol):
         ...
 
     def fetch_augmented_index(self, from_date: str, to_date: str) -> AugmentedIndex:
+        ...
+
+    def fetch_crew_context_index(self, from_date: str, to_date: str) -> CrewContextIndex:
         ...
 
 
@@ -69,6 +73,16 @@ class LiveCrewHoursLeonClient:
     def fetch_augmented_index(self, from_date: str, to_date: str) -> AugmentedIndex:
         self._ensure_runtime()
         return fetch_augmented_index(
+            self._configuration,
+            self._transport,
+            self._token_provider,
+            from_date,
+            to_date,
+        )
+
+    def fetch_crew_context_index(self, from_date: str, to_date: str) -> CrewContextIndex:
+        self._ensure_runtime()
+        return fetch_crew_context_index(
             self._configuration,
             self._transport,
             self._token_provider,

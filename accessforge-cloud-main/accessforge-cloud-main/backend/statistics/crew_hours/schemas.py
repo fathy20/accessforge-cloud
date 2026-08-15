@@ -25,6 +25,20 @@ class FlightItem(BaseModel):
     is_trn: bool = False
     journey_log: Mapping[str, Any] | None = None
     augmented_heavy: bool | None = None
+    leon_heavy: bool | None = None
+    derived_heavy: bool | None = None
+    effective_heavy: bool | None = None
+    heavy_source: str | None = None
+    heavy_reason: str | None = None
+    heavy_conflict: bool = False
+    leon_augmentation: str | None = None
+    # Trainee provenance: cockpit trainees come from the role slot (OPS/SP),
+    # cabin trainees from the Work Schedule Function (SFA).
+    is_training_position: bool = False
+    is_training_function: bool = False
+    # STEP 4 provenance for flights LEON left without an augmentation value.
+    unknown_resolved: bool = False
+    unknown_resolution_reason: str | None = None
 
 
 class CrewMemberSummary(BaseModel):

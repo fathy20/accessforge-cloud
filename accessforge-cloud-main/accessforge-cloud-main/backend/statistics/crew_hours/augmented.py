@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 import logging
 from typing import Any, Mapping, Sequence
@@ -35,6 +35,7 @@ class AugmentedIndex:
     by_crew_sector: Mapping[tuple[str, int], bool | None]
     resolved_count: int
     ambiguous_count: int
+    raw_by_crew_sector: Mapping[tuple[str, int], str | None] = field(default_factory=dict)
 
     def lookup(self, crew_code: str | None, flight_nid: object | None) -> bool | None:
         if not self.available:
@@ -45,12 +46,22 @@ class AugmentedIndex:
             return None
         return self.by_crew_sector.get((normalized_code, normalized_flight_nid))
 
+    def lookup_raw(self, crew_code: str | None, flight_nid: object | None) -> str | None:
+        if not self.available:
+            return None
+        normalized_code = _normalize_crew_code(crew_code)
+        normalized_flight_nid = _normalize_tr_nid(flight_nid)
+        if normalized_code is None or normalized_flight_nid is None:
+            return None
+        return self.raw_by_crew_sector.get((normalized_code, normalized_flight_nid))
+
 
 def build_augmented_index(rows: Sequence[Mapping[str, Any]] | Mapping[str, Any]) -> AugmentedIndex:
     """Build a deterministic crew-code/sector-id augmentation index."""
 
     duty_rows = _coerce_duty_rows(rows)
     values_by_key: dict[tuple[str, int], set[bool | None]] = {}
+    raw_values_by_key: dict[tuple[str, int], set[str | None]] = {}
     unrecognised_count = 0
 
     for duty in duty_rows:
@@ -58,6 +69,7 @@ def build_augmented_index(rows: Sequence[Mapping[str, Any]] | Mapping[str, Any])
             raise LeonContractError("LEON FTL duty list contained an invalid duty row.")
 
         augmentation, recognized = _map_augmentation(duty.get("crewAugmentation"))
+        raw_augmentation = _map_augmentation_category(duty.get("crewAugmentation"))
         if not recognized:
             unrecognised_count += 1
 
@@ -82,6 +94,7 @@ def build_augmented_index(rows: Sequence[Mapping[str, Any]] | Mapping[str, Any])
                 continue
             key = (normalized_code, normalized_tr_nid)
             values_by_key.setdefault(key, set()).add(augmentation)
+            raw_values_by_key.setdefault(key, set()).add(raw_augmentation)
 
     if unrecognised_count:
         logger.warning(
@@ -102,11 +115,19 @@ def build_augmented_index(rows: Sequence[Mapping[str, Any]] | Mapping[str, Any])
             ambiguous_count += 1
             by_crew_sector[key] = None
 
+    raw_by_crew_sector: dict[tuple[str, int], str | None] = {}
+    for key, values in raw_values_by_key.items():
+        if len(values) == 1:
+            raw_by_crew_sector[key] = next(iter(values))
+        else:
+            raw_by_crew_sector[key] = None
+
     return AugmentedIndex(
         available=True,
         by_crew_sector=by_crew_sector,
         resolved_count=resolved_count,
         ambiguous_count=ambiguous_count,
+        raw_by_crew_sector=raw_by_crew_sector,
     )
 
 
@@ -204,12 +225,19 @@ def _extract_duty_rows(payload: Mapping[str, Any]) -> list[Any]:
 
 
 def _map_augmentation(value: Any) -> tuple[bool | None, bool]:
-    normalized = value.strip().casefold() if isinstance(value, str) else None
+    normalized = _map_augmentation_category(value)
     if normalized in AUGMENTED_TRUE:
         return True, True
     if normalized in AUGMENTED_FALSE:
         return False, True
     return None, False
+
+
+def _map_augmentation_category(value: Any) -> str | None:
+    normalized = value.strip().casefold() if isinstance(value, str) else None
+    if normalized in AUGMENTED_TRUE or normalized in AUGMENTED_FALSE:
+        return normalized
+    return None
 
 
 def _normalize_crew_code(value: Any) -> str | None:

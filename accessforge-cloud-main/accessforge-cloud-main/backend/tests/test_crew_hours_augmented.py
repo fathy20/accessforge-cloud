@@ -80,6 +80,28 @@ class TestAugmentedIndex(unittest.TestCase):
 
         self.assertIs(index.lookup("c1", "101"), False)
 
+    def test_raw_lookup_surfaces_each_lower_cased_category(self):
+        index = build_augmented_index([
+            _duty("C1", "NORMAL", 101),
+            _duty("C1", "AUGMENTED", 102),
+            _duty("C1", "DOUBLED", 103),
+            _duty("C1", "TRIPLED", 104),
+        ])
+
+        self.assertEqual(
+            [index.lookup_raw("C1", flight_nid) for flight_nid in (101, 102, 103, 104)],
+            ["normal", "augmented", "doubled", "tripled"],
+        )
+
+    def test_raw_lookup_is_unknown_for_ambiguous_or_absent_keys(self):
+        index = build_augmented_index([
+            _duty("C1", "AUGMENTED", 101),
+            _duty("C1", "NORMAL", 101),
+        ])
+
+        self.assertIsNone(index.lookup_raw("C1", 101))
+        self.assertIsNone(index.lookup_raw("C1", 999))
+
     def test_unrecognised_enum_is_unknown_and_safe_warning(self):
         with self.assertLogs(
             "backend.statistics.crew_hours.augmented", level="WARNING"

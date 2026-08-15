@@ -172,8 +172,12 @@ class TestCrewHoursReportApi(unittest.TestCase):
                     }],
                 )
 
-            def fetch_augmented_index(self, from_date, to_date):
-                raise LeonTransportError("transport failure sentinel")
+        def fetch_augmented_index(self, from_date, to_date):
+            raise LeonTransportError("transport failure sentinel")
+
+
+        def fetch_crew_context_index(self, from_date, to_date):
+            raise LeonTransportError("crew context transport failure sentinel")
 
         app.dependency_overrides[get_crew_hours_service] = lambda: LiveCrewHoursService(
             FakeCrewClient()
@@ -189,6 +193,7 @@ class TestCrewHoursReportApi(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["official_totals_by_position"], {"Cockpit": "1:30"})
         self.assertIsNone(data["crew_members"][0]["flights"][0]["augmented_heavy"])
+        self.assertIsNone(data["crew_members"][0]["flights"][0]["derived_heavy"])
 
     def test_empty_official_mcp_report_is_a_valid_200_response(self):
         class FakeCrewClient:

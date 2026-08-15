@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { CrewDetailTable } from "../CrewDetailTable";
 import { CrewGroupHeader } from "../CrewGroupHeader";
 import type { CrewHoursReport, CrewMemberSummary } from "../types";
-
 
 const crew: CrewMemberSummary = {
   crew_id: "ALPHA",
@@ -71,7 +70,6 @@ const report: CrewHoursReport = {
   crew_members: [crew],
 };
 
-
 function renderI18n(ui: ReactNode, lang: "ar" | "en" = "en") {
   localStorage.setItem("redsea.lang", lang);
   return render(
@@ -80,7 +78,6 @@ function renderI18n(ui: ReactNode, lang: "ar" | "en" = "en") {
     </I18nProvider>,
   );
 }
-
 
 describe("Crew Hours detail rendering", () => {
   it("renders Yes, No, and Unknown from the API response", () => {
@@ -138,6 +135,71 @@ describe("Crew Hours detail rendering", () => {
     expect(screen.getByText("نعم")).toBeInTheDocument();
     expect(screen.getByText("لا")).toBeInTheDocument();
     expect(screen.getByText("غير معروف")).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("dir", "rtl");
+  });
+
+  it("shows Heavy provenance in the tooltip and marks LEON/local conflicts", async () => {
+    const provenanceCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LEON",
+          heavy_reason: "EXTRA_COCKPIT_CREW",
+          leon_heavy: false,
+          derived_heavy: true,
+          effective_heavy: false,
+          heavy_conflict: true,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [provenanceCrew] }}
+        crews={[provenanceCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const marker = screen.getByRole("img", { name: "Conflict: LEON takes precedence" });
+    expect(marker).toBeInTheDocument();
+    const trigger = marker.closest("[tabindex='0']");
+    expect(trigger).not.toBeNull();
+    fireEvent.focus(trigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Source: LEON").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Reason: EXTRA_COCKPIT_CREW").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("LEON value: No").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Derived value: Yes").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("renders the conflict marker in Arabic RTL", () => {
+    const provenanceCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [{ ...crew.flights[0], heavy_conflict: true }],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [provenanceCrew] }}
+        crews={[provenanceCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+      "ar",
+    );
+
+    expect(screen.getByRole("img", { name: "تعارض: LEON له الأولوية" })).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 

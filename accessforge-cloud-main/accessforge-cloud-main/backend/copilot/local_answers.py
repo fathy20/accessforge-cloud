@@ -47,6 +47,27 @@ _HEAVY_WORDS = ("heavy", "augmented", "هيفي", "معزز")
 
 _ISO_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 
+# A message that is *nothing but* a flight number and a date -- "RSX331 on
+# 2026-06-02" -- is someone answering the "Which flight?" prompt. Without this
+# it matches no keyword, falls out of local routing entirely, and ends up at
+# Wingman, which cannot answer it either.
+#
+# CAVEAT -- READ BEFORE ADDING ANOTHER CLARIFYING QUESTION.
+# This is a heuristic, not slot filling. It is only sound while HEAVY is the
+# SOLE intent that asks a clarifying question, because a bare flight+date can
+# then only be answering that one. The moment a second clarifying question
+# exists (roster or hours asking "which day?", "which crew?", ...), a bare
+# answer becomes ambiguous and this rule will silently misroute it to HEAVY.
+# At that point replace this with a real pending-intent round trip: have the
+# clarifying answer carry the intent it is waiting on (CopilotAnswer ->
+# frontend -> next request), and consult that here instead of guessing.
+# Anchored at both ends on purpose: anything with extra words is left to the
+# keyword rules above, so "hours for RSX331 on 2026-06-02" still reads as HOURS.
+_BARE_FLIGHT = re.compile(
+    r"^\W*([A-Z]{2,3}\s?-?\s?\d{1,4})\W+(?:on\s+)?(\d{4}-\d{2}-\d{2})\W*$",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class Period:
@@ -67,6 +88,9 @@ def detect_intent(question: str) -> Intent | None:
         return INTENT_ROSTER
     if any(word in text for word in _HOURS_WORDS):
         return INTENT_HOURS
+    # Checked last, so an explicit keyword always wins over the bare pattern.
+    if _BARE_FLIGHT.match(question.strip()):
+        return INTENT_HEAVY
     return None
 
 

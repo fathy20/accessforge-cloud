@@ -180,6 +180,40 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Not Heavy", answer.text)
         self.assertIn("2 cockpit / 4 cabin", answer.text)
 
+    def test_bare_flight_and_date_routes_to_heavy(self):
+        # The answer to "Which flight?" carries no keyword at all.
+        for text in ("RSX431 on 2026-06-02", "RSX431 2026-06-02", "rsx431 on 2026-06-02"):
+            with self.subTest(text=text):
+                self.assertEqual(detect_intent(text), INTENT_HEAVY)
+
+    def test_bare_pattern_never_overrides_an_explicit_keyword(self):
+        self.assertEqual(
+            detect_intent("how many hours for RSX431 on 2026-06-02"), INTENT_HOURS
+        )
+        self.assertEqual(
+            detect_intent("who is on the roster on 2026-06-02"), INTENT_ROSTER
+        )
+
+    def test_bare_pattern_does_not_swallow_unrelated_messages(self):
+        for text in ("what is the weather in cairo", "hello", "2026-06-02", "RSX431"):
+            with self.subTest(text=text):
+                self.assertIsNone(detect_intent(text))
+
+    def test_two_turn_flow_resolves_the_follow_up(self):
+        report = _heavy_report(["CPT", "FO", "FA1", "FA2"], ades="SVX")
+        fetch = lambda _f, _t: report
+
+        first = answer_locally(
+            "Is this flight Augmented (Heavy)?", today=TODAY, fetch_report=fetch
+        )
+        self.assertIn("Which flight?", first.text)
+
+        # The follow-up must be answered locally, not fall through to Wingman.
+        second = answer_locally("RSX431 on 2026-06-02", today=TODAY, fetch_report=fetch)
+        self.assertIsNotNone(second)
+        self.assertIn("Heavy", second.text)
+        self.assertIn("SVX override", second.citation.source)
+
     def test_unknown_flight_number_says_so(self):
         answer = answer_locally(
             "Is RSX999 on 2026-06-02 Heavy?",

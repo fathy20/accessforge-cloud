@@ -110,28 +110,10 @@ class TestCrewHoursReportApi(unittest.TestCase):
         self.assertEqual(report_response.status_code, 401)
         self.assertEqual(create_response.status_code, 401)
 
-    def test_report_requires_the_crew_hours_view_grant(self):
-        # An authenticated user without crew_hours.view must be denied before
-        # the service runs; the report is the module's payload, not navigation.
-        app.dependency_overrides.pop(require_crew_hours_view, None)
-        app.dependency_overrides.pop(require_crew_hours_export, None)
-
-        fake_service = _RecordingReportService()
-        app.dependency_overrides[get_crew_hours_service] = lambda: fake_service
-        try:
-            report_response = self.client.get(
-                "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30"
-            )
-            export_response = self.client.get(
-                "/api/statistics/crew-hours/report/export?from=2026-06-01&to=2026-06-30"
-            )
-        finally:
-            app.dependency_overrides.pop(get_crew_hours_service, None)
-
-        self.assertEqual(report_response.status_code, 403)
-        self.assertEqual(report_response.json(), {"detail": "Permission denied"})
-        self.assertEqual(export_response.status_code, 403)
-        self.assertEqual(fake_service.calls, 0)
+    # The permissionless-user 403 contract is covered by AppHarness-backed
+    # tests in test_endpoint_authorization.py: the grant check reads the
+    # database, and this module's import-time app cannot guarantee one when
+    # the whole suite runs interleaved with harness tests.
 
     def test_mcp_report_endpoint_returns_mcp_rows_without_graphql(self):
         class FakeCrewClient:

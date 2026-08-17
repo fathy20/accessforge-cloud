@@ -56,7 +56,7 @@ def _create_schema_if_allowed() -> None:
 _create_schema_if_allowed()
 
 
-def _seed_registry() -> None:
+def startup_db_seed() -> None:
     """Project the code-owned registry into SQL, tolerating a concurrent sync.
 
     With several workers, two processes can run this at once; the loser hits a
@@ -86,7 +86,7 @@ def _seed_registry() -> None:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    _seed_registry()
+    startup_db_seed()
     yield
 
 

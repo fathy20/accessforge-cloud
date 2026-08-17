@@ -1,4 +1,4 @@
-r# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -44,12 +44,23 @@ backend/.env
 *.db
 storage_data/
 
-# Local SQLite artifact — never commit
+# Local SQLite artifact ï¿½ never commit
 backend/redsea.db
 
 # Environment files
 !.env.example
 
-# Local database files
+# Local database files (including pre-migration backups)
 *.sqlite
 *.sqlite3
+*.db.bak-*
+
+# Local artifact storage â€” user uploads and job outputs, never source
+local_storage/
+
+# Test caches and supplementary local env files
+.pytest_cache/
+.envpython
+
+# Session/agent task briefs
+.*-brief.md

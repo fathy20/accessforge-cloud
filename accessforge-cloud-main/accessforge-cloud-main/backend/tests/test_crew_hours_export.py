@@ -203,20 +203,10 @@ class TestCrewHoursExport(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.service.calls, 0)
 
-    def test_endpoint_requires_the_export_grant(self):
-        # Authenticated but permissionless: denied before the service runs.
-        app.dependency_overrides.pop(require_crew_hours_export, None)
-        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-            id="no-grants-user", email="viewer@example.com"
-        )
-        try:
-            response = self._export_response()
-        finally:
-            app.dependency_overrides.pop(get_current_user, None)
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json(), {"detail": "Permission denied"})
-        self.assertEqual(self.service.calls, 0)
+    # The permissionless-user 403 contract is covered by AppHarness-backed
+    # tests in test_endpoint_authorization.py: the grant check reads the
+    # database, and this module's import-time app cannot guarantee one when
+    # the whole suite runs interleaved with harness tests.
 
     def test_query_validation_matches_report_endpoint_and_skips_service(self):
         for query, expected_detail in (

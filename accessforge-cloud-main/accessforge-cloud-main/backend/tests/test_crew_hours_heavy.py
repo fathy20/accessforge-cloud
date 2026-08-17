@@ -10,6 +10,7 @@ from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
 from backend.statistics.crew_hours.heavy import (
     decide_heavy,
     derive_heavy,
+    derive_heavy_detail,
     is_training_function,
     is_training_position,
     operating_cabin_count,
@@ -157,6 +158,446 @@ class TestHeavyDecision(unittest.TestCase):
         self.assertIs(derive_heavy(None, "B738"), None)
         self.assertIs(derive_heavy([], "B738", ()), None)
 
+    def test_cockpit_trainee_exclusion_decides_the_threshold_side(self):
+        # Matrix 4: four cockpit where one is SP → operating 3 → Heavy;
+        # three cockpit where one is SP → operating 2 → falls through to NONE.
+        three_operating_plus_sp = [_entry()] * 3 + [_entry(position="SP")]
+        self.assertEqual(
+            derive_heavy_detail(three_operating_plus_sp, "B738"),
+            (True, "EXTRA_COCKPIT_CREW"),
+        )
+
+        two_operating_plus_sp = [_entry()] * 2 + [_entry(position="SP")]
+        self.assertEqual(
+            derive_heavy_detail(two_operating_plus_sp, "B738"),
+            (False, "NONE"),
+        )
+
+    def test_cabin_trainee_exclusion_decides_the_threshold_side(self):
+        # Matrix 5: five cabin where one has Function SFA → operating 4 → NONE;
+        # five all operating → Heavy.
+        def cabin(function: str | None = None) -> CrewContextEntry:
+            return _entry(pos_type="CABIN", position="FA1", function=function)
+
+        four_operating_plus_sfa = [cabin()] * 4 + [cabin(function="SFA")]
+        self.assertEqual(
+            derive_heavy_detail(four_operating_plus_sfa, "B738"),
+            (False, "NONE"),
+        )
+
+        five_operating = [cabin()] * 5
+        self.assertEqual(
+            derive_heavy_detail(five_operating, "B738"),
+            (True, "EXTRA_CABIN_CREW"),
+        )
+
+
+class TestAirportBasedAbsoluteRules(unittest.TestCase):
+    """EVN/SVX are AIRPORT codes in live data; tags are a secondary signal.
+
+    Live evidence (2026-06 UI review): RSX331/RSX332 SSH↔SVX and RSX121/RSX122
+    SSH↔EVN carry no LEON flight tag — the codes appear in ADEP/ADES only.
+    """
+
+    def test_svx_airport_in_the_route_forces_heavy(self):
+        for route in (("SSH", "SVX"), ("SVX", "SSH"), (" svx ", None)):
+            with self.subTest(route=route):
+                self.assertEqual(
+                    derive_heavy_detail([_entry()] * 2, "B738", None, route_airports=route),
+                    (True, "SVX_AIRPORT"),
+                )
+
+    def test_evn_airport_forces_not_heavy_and_wins_over_svx(self):
+        self.assertEqual(
+            derive_heavy_detail([_entry()] * 10, "B738", None, route_airports=("SSH", "EVN")),
+            (False, "EVN_AIRPORT"),
+        )
+        # EVN wins even when both codes appear in the route.
+        self.assertEqual(
+            derive_heavy_detail([], "B738", None, route_airports=("EVN", "SVX")),
+            (False, "EVN_AIRPORT"),
+        )
+        # ...and even when an SVX tag is present alongside an EVN airport.
+        self.assertEqual(
+            derive_heavy_detail([], "B738", ("SVX",), route_airports=("SSH", "EVN")),
+            (False, "EVN_AIRPORT"),
+        )
+
+    def test_airport_match_is_exact_not_substring(self):
+        standard = [_entry()] * 2
+        self.assertEqual(
+            derive_heavy_detail(standard, "B738", None, route_airports=("SVXX", "EVNA")),
+            (False, "NONE"),
+        )
+
+    def test_airport_reasons_beat_a_conflicting_leon_value(self):
+        svx = decide_heavy(False, True, "SVX_AIRPORT")
+        self.assertIs(svx.effective_heavy, True)
+        self.assertEqual(svx.heavy_source, "LOCAL_RULE")
+        self.assertEqual(svx.heavy_reason, "SVX_AIRPORT")
+        self.assertTrue(svx.heavy_conflict)
+
+        evn = decide_heavy(True, False, "EVN_AIRPORT")
+        self.assertIs(evn.effective_heavy, False)
+        self.assertEqual(evn.heavy_reason, "EVN_AIRPORT")
+        self.assertTrue(evn.heavy_conflict)
+
+    def test_tags_remain_a_secondary_signal(self):
+        # No airports supplied: the old tag path still decides with tag reasons.
+        self.assertEqual(
+            derive_heavy_detail([], "B738", ("SVX",)), (True, "SVX_TAG")
+        )
+        self.assertEqual(
+            derive_heavy_detail([], "B738", ("EVN",), route_airports=("SSH", "HRG")),
+            (False, "EVN_TAG"),
+        )
+
+    def test_positioning_members_never_count_as_operating_crew(self):
+        # A PAD or PSN slot must not tip the operating counts over a threshold.
+        cockpit = [_entry()] * 2 + [_entry(position="PAD"), _entry(position="PSN")]
+        self.assertEqual(operating_cockpit_count(cockpit), 2)
+        self.assertEqual(derive_heavy_detail(cockpit, "B738"), (False, "NONE"))
+
+        cabin = [_entry(pos_type="CABIN", position="FA1")] * 4 + [
+            _entry(pos_type="CABIN", position="PAD"),
+        ]
+        self.assertEqual(operating_cabin_count(cabin), 4)
+        self.assertEqual(derive_heavy_detail(cabin, "B738"), (False, "NONE"))
+
+
+def _screenshot_row(
+    unique_id: int,
+    flight_number: str,
+    adep: str,
+    ades: str,
+    crew_codes: list[str],
+    positions: list[str],
+) -> dict:
+    return {
+        "scope_row_unique_id": f"row-{unique_id}",
+        "unique_id": unique_id,
+        "flightNo": flight_number,
+        "crew_codes": crew_codes,
+        "crew_names": [f"Crew {code}" for code in crew_codes],
+        "crew_position_names": positions,
+        "acftType": "B738 - 737-800",
+        "blockTimeJourneyLog": "01:30",
+        "jl_adep_preferred_code": adep,
+        "jl_ades_preferred_code": ades,
+    }
+
+
+class TestScreenshotEvidence(unittest.TestCase):
+    """Sanitized replicas of the five live UI review cases (2026-06)."""
+
+    def _response(self, rows, contexts):
+        totals = {
+            code: "10:00" for row in rows for code in row["crew_codes"]
+        }
+        return _build_mcp_report_response(
+            OfficialMcpReport(totals, rows),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            # LEON is silent for every case: available FTL index, no values.
+            augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
+            crew_context_index=_unknown_index(*contexts),
+        )
+
+    @staticmethod
+    def _flights_by_leg(response, crew_code):
+        member = next(
+            item for item in response.crew_members if item.person_code == crew_code
+        )
+        return {flight.flight_number: flight for flight in member.flights}
+
+    def _context(self, unique_id, start, end, codes_positions, adep, ades):
+        entries = tuple(
+            _entry(position=position, crew_code=code)
+            for code, position in codes_positions
+        )
+        return FlightContext(
+            flight_nid=unique_id,
+            start_time_utc=start,
+            end_time_utc=end,
+            flight_tags=(),
+            entries=entries,
+            departure_airport=adep,
+            arrival_airport=ades,
+        )
+
+    def test_case_1_svx_rotation_is_yes_on_both_legs_without_badges(self):
+        # 16-06: RSX331 SSH→SVX 17:15–22:35, RSX332 SVX→SSH 23:50–06:00(+1).
+        # No LEON value, no tags. The PAD member's row follows the flight verdict.
+        rows = [
+            _screenshot_row(501, "RSX331", "SSH", "SVX", ["C1", "P1"], ["CPT", "PAD"]),
+            _screenshot_row(502, "RSX332", "SVX", "SSH", ["C1"], ["CPT"]),
+        ]
+        contexts = [
+            self._context(
+                501, "2026-06-16T17:15:00Z", "2026-06-16T22:35:00Z",
+                [("C1", "CPT"), ("P1", "PAD")], "SSH", "SVX",
+            ),
+            self._context(
+                502, "2026-06-16T23:50:00Z", "2026-06-17T06:00:00Z",
+                [("C1", "CPT")], "SVX", "SSH",
+            ),
+        ]
+
+        response = self._response(rows, contexts)
+
+        for code in ("C1",):
+            for flight in self._flights_by_leg(response, code).values():
+                self.assertIs(flight.augmented_heavy, True)
+                self.assertEqual(flight.heavy_reason, "SVX_AIRPORT")
+                self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+                self.assertFalse(flight.unknown_resolved)
+                self.assertFalse(flight.heavy_conflict)
+        # Screenshot 1: the PAD member shows Yes on the SVX leg.
+        pad_flight = self._flights_by_leg(response, "P1")["RSX331"]
+        self.assertIs(pad_flight.augmented_heavy, True)
+        self.assertEqual(pad_flight.heavy_reason, "SVX_AIRPORT")
+        self.assertFalse(pad_flight.unknown_resolved)
+
+    def test_case_2_evn_rotation_is_no_on_both_legs_without_badges(self):
+        # 20/21-06: RSX121 SSH→EVN 22:05–01:00(+1), RSX122 EVN→SSH 02:05–05:30.
+        rows = [
+            _screenshot_row(511, "RSX121", "SSH", "EVN", ["C1"], ["CPT"]),
+            _screenshot_row(512, "RSX122", "EVN", "SSH", ["C1"], ["CPT"]),
+        ]
+        contexts = [
+            self._context(
+                511, "2026-06-20T22:05:00Z", "2026-06-21T01:00:00Z",
+                [("C1", "CPT")], "SSH", "EVN",
+            ),
+            self._context(
+                512, "2026-06-21T02:05:00Z", "2026-06-21T05:30:00Z",
+                [("C1", "CPT")], "EVN", "SSH",
+            ),
+        ]
+
+        response = self._response(rows, contexts)
+
+        for flight in self._flights_by_leg(response, "C1").values():
+            self.assertIs(flight.augmented_heavy, False)
+            self.assertEqual(flight.heavy_reason, "EVN_AIRPORT")
+            self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+            # Deterministic rule, NOT the resolver: no badge fields.
+            self.assertFalse(flight.unknown_resolved)
+
+    def test_case_3_pad_member_does_not_break_the_rotation_yes(self):
+        # 22-06: RSX6081 HRG→OPO 15:00–21:00 (carries a PAD member),
+        # RSX6082 OPO→HRG 22:00–03:50(+1). Break 1:00, same operating crew.
+        rows = [
+            _screenshot_row(601, "RSX6081", "HRG", "OPO", ["C1", "C2", "P1"], ["CPT", "FO", "PAD"]),
+            _screenshot_row(602, "RSX6082", "OPO", "HRG", ["C1", "C2"], ["CPT", "FO"]),
+        ]
+        contexts = [
+            self._context(
+                601, "2026-06-22T15:00:00Z", "2026-06-22T21:00:00Z",
+                [("C1", "CPT"), ("C2", "FO"), ("P1", "PAD")], "HRG", "OPO",
+            ),
+            self._context(
+                602, "2026-06-22T22:00:00Z", "2026-06-23T03:50:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "OPO", "HRG",
+            ),
+        ]
+
+        response = self._response(rows, contexts)
+
+        for code in ("C1", "C2"):
+            flights = self._flights_by_leg(response, code)
+            for leg in ("RSX6081", "RSX6082"):
+                flight = flights[leg]
+                self.assertIs(flight.augmented_heavy, True, f"{code} {leg}")
+                self.assertEqual(
+                    flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW"
+                )
+                # Resolver-decided: the badge shows on BOTH legs.
+                self.assertTrue(flight.unknown_resolved)
+                self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+
+    def test_case_4_unresolvable_chain_is_no_with_badges_on_both_legs(self):
+        # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: next duty day, the
+        # rotation never returns. Both legs entered STEP 4, so both carry the badge.
+        rows = [
+            _screenshot_row(611, "RSX6081", "HRG", "OPO", ["C1", "C2"], ["CPT", "FO"]),
+            _screenshot_row(612, "RSX6084", "OPO", "SSH", ["C1", "C2"], ["CPT", "FO"]),
+        ]
+        contexts = [
+            self._context(
+                611, "2026-06-22T15:00:00Z", "2026-06-22T21:00:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "HRG", "OPO",
+            ),
+            self._context(
+                612, "2026-06-23T08:00:00Z", "2026-06-23T12:00:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "OPO", "SSH",
+            ),
+        ]
+
+        response = self._response(rows, contexts)
+
+        for code in ("C1", "C2"):
+            flights = self._flights_by_leg(response, code)
+            for leg in ("RSX6081", "RSX6084"):
+                flight = flights[leg]
+                self.assertIs(flight.augmented_heavy, False, f"{code} {leg}")
+                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
+                self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+                self.assertEqual(
+                    flight.unknown_resolution_reason, "BREAK_EXCEEDS_LIMIT"
+                )
+
+    def test_step_four_entry_always_flags_unknown_resolved(self):
+        # A leg absent from the crew-context index still entered STEP 4: its No
+        # is resolver-decided and must carry the badge fields.
+        rows = [_screenshot_row(621, "RSX700", "HRG", "SSH", ["C1"], ["CPT"])]
+
+        response = self._response(rows, [])
+
+        flight = self._flights_by_leg(response, "C1")["RSX700"]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertTrue(flight.unknown_resolved)
+        self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+        self.assertEqual(flight.unknown_resolution_reason, "NO_FLIGHT_CONTEXT")
+
+    def test_airport_rule_fires_from_the_report_row_when_context_is_missing(self):
+        # Either airport source counts: here only the report row carries SVX.
+        rows = [_screenshot_row(631, "RSX331", "SSH", "SVX", ["C1"], ["CPT"])]
+
+        response = self._response(rows, [])
+
+        flight = self._flights_by_leg(response, "C1")["RSX331"]
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_reason, "SVX_AIRPORT")
+        self.assertFalse(flight.unknown_resolved)
+
+
+class TestAbsoluteTagPrecedence(unittest.TestCase):
+    """EVN/SVX are absolute: they beat a conflicting LEON crewAugmentation value."""
+
+    def test_evn_tag_beats_a_leon_augmented_value(self):
+        # Matrix 1: EVN + LEON augmented → NO, conflict, tag won.
+        with self.assertLogs("backend.statistics.crew_hours.heavy", level="WARNING") as logs:
+            decision = decide_heavy(True, False, "EVN_TAG")
+
+        self.assertIs(decision.effective_heavy, False)
+        self.assertEqual(decision.heavy_reason, "EVN_TAG")
+        self.assertEqual(decision.heavy_source, "LOCAL_RULE")
+        self.assertTrue(decision.heavy_conflict)
+        self.assertIs(decision.leon_heavy, True)
+        self.assertTrue(any("EVN_TAG" in line for line in logs.output))
+
+    def test_svx_tag_beats_a_leon_normal_value(self):
+        # Matrix 2: SVX + LEON normal → YES, conflict, tag won.
+        with self.assertLogs("backend.statistics.crew_hours.heavy", level="WARNING") as logs:
+            decision = decide_heavy(False, True, "SVX_TAG")
+
+        self.assertIs(decision.effective_heavy, True)
+        self.assertEqual(decision.heavy_reason, "SVX_TAG")
+        self.assertEqual(decision.heavy_source, "LOCAL_RULE")
+        self.assertTrue(decision.heavy_conflict)
+        self.assertTrue(any("SVX_TAG" in line for line in logs.output))
+
+    def test_tag_with_agreeing_or_silent_leon_carries_no_conflict(self):
+        cases = (
+            (False, False, "EVN_TAG", False),
+            (None, False, "EVN_TAG", False),
+            (True, True, "SVX_TAG", True),
+            (None, True, "SVX_TAG", True),
+        )
+        for leon, derived, reason, effective in cases:
+            with self.subTest(leon=leon, reason=reason):
+                decision = decide_heavy(leon, derived, reason)
+                self.assertIs(decision.effective_heavy, effective)
+                self.assertEqual(decision.heavy_source, "LOCAL_RULE")
+                self.assertEqual(decision.heavy_reason, reason)
+                self.assertFalse(decision.heavy_conflict)
+
+    def test_evn_and_svx_together_evn_wins_end_to_end(self):
+        # Matrix 3: the tags never co-fire; EVN wins at derivation and the
+        # decision preserves that verdict even against a LEON YES.
+        detail = derive_heavy_detail([_entry()] * 10, "B738", ("SVX", "EVN"))
+        self.assertEqual(detail, (False, "EVN_TAG"))
+
+        decision = decide_heavy(True, detail[0], detail[1])
+        self.assertIs(decision.effective_heavy, False)
+        self.assertEqual(decision.heavy_reason, "EVN_TAG")
+
+    def test_without_a_tag_the_leon_first_table_is_unchanged(self):
+        decision = decide_heavy(False, True, "EXTRA_COCKPIT_CREW")
+        self.assertIs(decision.effective_heavy, False)
+        self.assertEqual(decision.heavy_source, "LEON")
+        self.assertTrue(decision.heavy_conflict)
+
+        agreeing = decide_heavy(True, True, "EXTRA_CABIN_CREW")
+        self.assertIs(agreeing.effective_heavy, True)
+        self.assertEqual(agreeing.heavy_source, "LEON_AND_LOCAL")
+
+    def _tagged_report_response(self, tag: str, leon_value: bool):
+        report = OfficialMcpReport(
+            {"C1": "01:30"},
+            [
+                {
+                    "scope_row_unique_id": "row-401",
+                    "unique_id": 401,
+                    "crew_codes": ["C1"],
+                    "crew_names": ["Crew One"],
+                    "crew_position_names": ["CPT"],
+                    "acftType": "B738 - 737-800",
+                    "blockTimeJourneyLog": "01:30",
+                }
+            ],
+        )
+        context = FlightContext(
+            flight_nid=401,
+            start_time_utc="2026-06-01T06:00:00Z",
+            end_time_utc="2026-06-01T09:00:00Z",
+            flight_tags=(tag,),
+            entries=(_entry(crew_code="C1"),),
+        )
+        return _build_mcp_report_response(
+            report,
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(
+                available=True,
+                by_crew_sector={("C1", 401): leon_value},
+                resolved_count=1,
+                ambiguous_count=0,
+                raw_by_crew_sector={("C1", 401): "augmented" if leon_value else "normal"},
+            ),
+            crew_context_index=CrewContextIndex(
+                available=True,
+                by_flight={401: context.entries},
+                contexts={401: context},
+            ),
+        )
+
+    def test_evn_tag_overrides_leon_augmented_in_the_report(self):
+        response = self._tagged_report_response("EVN", leon_value=True)
+
+        flight = response.crew_members[0].flights[0]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertIs(flight.effective_heavy, False)
+        self.assertEqual(flight.heavy_reason, "EVN_TAG")
+        self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+        self.assertTrue(flight.heavy_conflict)
+        self.assertIs(flight.leon_heavy, True)
+
+    def test_svx_tag_overrides_leon_normal_in_the_report(self):
+        response = self._tagged_report_response("SVX", leon_value=False)
+
+        flight = response.crew_members[0].flights[0]
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_reason, "SVX_TAG")
+        self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+        self.assertTrue(flight.heavy_conflict)
+        self.assertIs(flight.leon_heavy, False)
+
 
 def _representative_report() -> OfficialMcpReport:
     return OfficialMcpReport(
@@ -201,6 +642,9 @@ def _flight_context(
     end: str,
     crew_codes: tuple[str, ...],
     flight_tags: tuple[str, ...] = (),
+    *,
+    adep: str | None = "HRG",
+    ades: str | None = "XYZ",
 ) -> FlightContext:
     entries = tuple(
         _entry(position="CPT", crew_code=code) for code in crew_codes
@@ -211,6 +655,8 @@ def _flight_context(
         end_time_utc=end,
         flight_tags=flight_tags,
         entries=entries,
+        departure_airport=adep,
+        arrival_airport=ades,
     )
 
 
@@ -325,7 +771,10 @@ class TestUnknownResolution(unittest.TestCase):
     def test_same_day_short_break_and_same_crew_is_yes(self):
         index = _unknown_index(
             _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1", "C2")),
-            _flight_context(202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1", "C2")),
+            _flight_context(
+                202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1", "C2"),
+                adep="XYZ", ades="HRG",
+            ),
         )
 
         resolution = self._resolve(index, 201, "C1")
@@ -337,7 +786,10 @@ class TestUnknownResolution(unittest.TestCase):
     def test_break_longer_than_four_hours_is_no(self):
         index = _unknown_index(
             _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1", "C2")),
-            _flight_context(202, "2026-06-01T14:00:00Z", "2026-06-01T17:00:00Z", ("C1", "C2")),
+            _flight_context(
+                202, "2026-06-01T14:00:00Z", "2026-06-01T17:00:00Z", ("C1", "C2"),
+                adep="XYZ", ades="HRG",
+            ),
         )
 
         resolution = self._resolve(index, 201, "C1")
@@ -345,21 +797,30 @@ class TestUnknownResolution(unittest.TestCase):
         self.assertFalse(resolution.effective_heavy)
         self.assertEqual(resolution.reason, "BREAK_EXCEEDS_LIMIT")
 
-    def test_different_utc_day_is_no_even_with_a_short_break(self):
+    def test_midnight_crossing_rotation_with_short_break_is_yes(self):
+        # The 2026-08-09 parity report: a duty is anchored on its first leg's
+        # UTC date and may roll past midnight; the old calendar-date equality
+        # check wrongly resolved this out-and-back as DIFFERENT_DAY.
         index = _unknown_index(
             _flight_context(201, "2026-06-01T22:00:00Z", "2026-06-01T23:00:00Z", ("C1", "C2")),
-            _flight_context(202, "2026-06-02T01:00:00Z", "2026-06-02T03:00:00Z", ("C1", "C2")),
+            _flight_context(
+                202, "2026-06-02T01:00:00Z", "2026-06-02T03:00:00Z", ("C1", "C2"),
+                adep="XYZ", ades="HRG",
+            ),
         )
 
         resolution = self._resolve(index, 201, "C1")
 
-        self.assertFalse(resolution.effective_heavy)
-        self.assertEqual(resolution.reason, "DIFFERENT_DAY")
+        self.assertTrue(resolution.effective_heavy)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
     def test_changed_crew_set_is_no(self):
         index = _unknown_index(
             _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1", "C2")),
-            _flight_context(202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1", "C3")),
+            _flight_context(
+                202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1", "C3"),
+                adep="XYZ", ades="HRG",
+            ),
         )
 
         resolution = self._resolve(index, 201, "C1")
@@ -459,7 +920,10 @@ class TestUnknownResolution(unittest.TestCase):
             augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
             crew_context_index=_unknown_index(
                 _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1",)),
-                _flight_context(202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1",)),
+                _flight_context(
+                    202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1",),
+                    adep="XYZ", ades="HRG",
+                ),
             ),
         )
 
@@ -511,6 +975,105 @@ class TestUnknownResolution(unittest.TestCase):
         self.assertIs(flight.augmented_heavy, False)
         self.assertEqual(flight.heavy_reason, "EVN_TAG")
         self.assertFalse(flight.unknown_resolved)
+
+
+class TestJoinHealth(unittest.TestCase):
+    """The report must expose, never hide, an ID-mismatch across LEON sources."""
+
+    def test_mismatched_join_keys_flag_degraded_health(self):
+        # Matrix 11: both indices are non-empty but keyed by IDs that never
+        # match the report rows — the "IDs don't match" signature.
+        report = _representative_report()
+        augmented = AugmentedIndex(
+            available=True,
+            by_crew_sector={("C1", 999_101): True, ("C2", 999_101): False},
+            resolved_count=2,
+            ambiguous_count=0,
+            raw_by_crew_sector={("C1", 999_101): "augmented"},
+        )
+        mismatched_context = _unknown_index(
+            _flight_context(888_101, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1", "C2")),
+        )
+
+        with self.assertLogs("backend.statistics.crew_hours.service", level="WARNING") as logs:
+            response = _build_mcp_report_response(
+                report,
+                from_date="2026-06-01",
+                to_date="2026-06-30",
+                position="All",
+                crew_member=None,
+                augmented_index=augmented,
+                crew_context_index=mismatched_context,
+            )
+
+        self.assertEqual(response.join_health, "DEGRADED")
+        self.assertEqual(response.augmented_lookup_attempts, 3)
+        self.assertEqual(response.augmented_lookup_hits, 0)
+        self.assertEqual(response.crew_context_attempts, 3)
+        self.assertEqual(response.crew_context_hits, 0)
+        self.assertTrue(any("join" in line.lower() for line in logs.output))
+
+        # Every row falls to STEP 4 with no context and resolves NO — visible
+        # as a degraded join, never as a silently all-No report.
+        flights = [
+            flight for member in response.crew_members for flight in member.flights
+        ]
+        self.assertTrue(flights)
+        for flight in flights:
+            self.assertIs(flight.augmented_heavy, False)
+
+    def test_matching_join_keys_report_ok(self):
+        response = _build_mcp_report_response(
+            _representative_report(),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(
+                available=True,
+                by_crew_sector={("C1", 101): True, ("C2", 101): False},
+                resolved_count=2,
+                ambiguous_count=0,
+                raw_by_crew_sector={},
+            ),
+            crew_context_index=_representative_context(),
+        )
+
+        self.assertEqual(response.join_health, "OK")
+        self.assertEqual(response.augmented_lookup_attempts, 3)
+        self.assertEqual(response.augmented_lookup_hits, 2)
+        self.assertEqual(response.crew_context_attempts, 3)
+        self.assertEqual(response.crew_context_hits, 3)
+
+    def test_empty_indices_are_not_reported_as_degraded(self):
+        # An empty index is "LEON returned nothing", not an ID mismatch.
+        response = _build_mcp_report_response(
+            _representative_report(),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
+            crew_context_index=CrewContextIndex(True, {}, {}),
+        )
+
+        self.assertEqual(response.join_health, "OK")
+        self.assertEqual(response.augmented_lookup_hits, 0)
+
+    def test_unavailable_indices_do_not_count_attempts(self):
+        response = _build_mcp_report_response(
+            _representative_report(),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(False, {}, 0, 0),
+            crew_context_index=CrewContextIndex(False, {}),
+        )
+
+        self.assertEqual(response.join_health, "OK")
+        self.assertEqual(response.augmented_lookup_attempts, 0)
+        self.assertEqual(response.crew_context_attempts, 0)
 
 
 if __name__ == "__main__":

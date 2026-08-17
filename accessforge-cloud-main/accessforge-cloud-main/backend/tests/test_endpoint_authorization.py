@@ -188,6 +188,36 @@ class TestProjectAuthorization(unittest.TestCase):
         )
         self.assertEqual(allowed.status_code, 200)
 
+    def test_viewer_gets_403_on_create_and_still_200_on_list(self):
+        # M-7 ruling (2026-08-18): creation is engineer+, mirroring the UI
+        # gate. The list path stays open to every authenticated user —
+        # shared visibility is settled and must not regress here.
+        self.app.create_user("proj-engineer@example.test", roles=["engineer"])
+        self.app.create_user("proj-viewer@example.test", roles=["viewer"])
+        project_id = self._create_project("proj-engineer@example.test")
+
+        denied = self.app.client.post(
+            "/api/projects",
+            headers=self.app.headers("proj-viewer@example.test"),
+            json={"name": "Viewer Attempt"},
+        )
+        self.assertEqual(denied.status_code, 403, denied.text)
+
+        listing = self.app.client.get(
+            "/api/projects", headers=self.app.headers("proj-viewer@example.test")
+        )
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual([item["id"] for item in listing.json()], [project_id])
+
+    def test_guest_gets_403_on_create(self):
+        self.app.create_user("proj-guest@example.test", roles=["guest"])
+        denied = self.app.client.post(
+            "/api/projects",
+            headers=self.app.headers("proj-guest@example.test"),
+            json={"name": "Guest Attempt"},
+        )
+        self.assertEqual(denied.status_code, 403, denied.text)
+
     def test_deleting_a_missing_project_is_a_404(self):
         self.app.create_user("proj-404@example.test", roles=["engineer"])
         response = self.app.client.delete(

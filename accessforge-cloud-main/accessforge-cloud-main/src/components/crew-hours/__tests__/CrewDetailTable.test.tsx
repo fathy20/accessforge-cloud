@@ -244,6 +244,205 @@ describe("Crew Hours detail rendering", () => {
     expect(totalCells?.[2]?.textContent).toBe("");
   });
 
+  it("marks locally-resolved rows with a red exclamation badge and reason tooltip", async () => {
+    const locallyResolvedCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [locallyResolvedCrew] }}
+        crews={[locallyResolvedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const badge = screen.getByTestId("local-resolution-marker");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAccessibleName(
+      "Not found in LEON augmented data — resolved by local rotation rule",
+    );
+
+    const trigger = badge.closest("[tabindex='0']");
+    expect(trigger).not.toBeNull();
+    fireEvent.focus(trigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Unknown resolution: SAME_DAY_SHORT_BREAK_SAME_CREW").length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(
+          "Not found in LEON augmented data — resolved by local rotation rule",
+        ).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it("renders no badge on airport-decided EVN/SVX rows", () => {
+    // RSX331/RSX121 evidence: SVX/EVN verdicts are deterministic rules, not
+    // resolver guesses — unknown_resolved is false and no badge may render.
+    const airportCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "svx-leg",
+          flight_number: "RSX331",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "SVX_AIRPORT",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: false,
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "evn-leg",
+          flight_number: "RSX121",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "EVN_AIRPORT",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: false,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [airportCrew] }}
+        crews={[airportCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).not.toBeInTheDocument();
+  });
+
+  it("renders the badge on both legs of a resolver-decided rotation", () => {
+    // RSX6081/RSX6084 evidence: every leg that entered STEP 4 carries the
+    // badge, regardless of its Yes/No outcome.
+    const rotationCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-out",
+          flight_number: "RSX6081",
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-back",
+          flight_number: "RSX6084",
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: true,
+          unknown_resolution_reason: "BREAK_EXCEEDS_LIMIT",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [rotationCrew] }}
+        crews={[rotationCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByTestId("local-resolution-marker")).toHaveLength(2);
+  });
+
+  it("renders no local-resolution badge for LEON-sourced rows", () => {
+    const leonCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LEON",
+          effective_heavy: true,
+          unknown_resolved: false,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [leonCrew] }}
+        crews={[leonCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).not.toBeInTheDocument();
+  });
+
+  it("renders the local-resolution badge label in Arabic", () => {
+    const locallyResolvedCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [locallyResolvedCrew] }}
+        crews={[locallyResolvedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+      "ar",
+    );
+
+    const badge = screen.getByTestId("local-resolution-marker");
+    expect(badge).toHaveAccessibleName(
+      "غير موجود في بيانات LEON للتعزيز — تم الحل بقاعدة الدوران المحلية",
+    );
+  });
+
   it("renders authoritative TRN without a local manual override control", () => {
     const trnCrew = { ...crew, status: "TRN", official_total: "TRN", raw_official_total: "TRN" };
     renderI18n(

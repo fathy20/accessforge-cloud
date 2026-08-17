@@ -185,6 +185,58 @@ class TestConnectedDutyAttribution(unittest.TestCase):
         self.assertEqual([row["flightNo"] for row in june], ["RSX123", "RSX124"])
         self.assertEqual(july, [])
 
+    def test_pad_rider_difference_does_not_split_a_connected_duty(self):
+        # Owner ruling 2026-08-17: ONE crew-set identity for duty grouping and
+        # the STEP-4 rotation comparison — a PAD rider on one leg never makes
+        # the legs "different crews", so this boundary duty is wholly June's.
+        rows = (
+            report_leg(
+                "RSX-PAD-OUT",
+                flight_date="30-06-2026",
+                off="20:00",
+                on="23:00",
+                crew_codes=("A", "B", "RIDER"),
+                positions=("CPT", "FO", "PAD"),
+                block_time="03:00",
+            ),
+            report_leg(
+                "RSX-PAD-BACK",
+                flight_date="01-07-2026",
+                off="00:30",
+                on="04:00",
+                crew_codes=("A", "B"),
+                positions=("CPT", "FO"),
+                block_time="03:30",
+            ),
+        )
+
+        self.assertEqual(len(self._select(rows, "2026-06-01", "2026-06-30")), 2)
+        self.assertEqual(self._select(rows, "2026-07-01", "2026-07-31"), [])
+
+    def test_non_operating_cockpit_slots_do_not_split_a_connected_duty(self):
+        rows = (
+            report_leg(
+                "RSX-OBS-OUT",
+                flight_date="30-06-2026",
+                off="20:00",
+                on="23:00",
+                crew_codes=("A", "B", "WATCHER"),
+                positions=("CPT", "FO", "OBS"),
+                block_time="03:00",
+            ),
+            report_leg(
+                "RSX-OBS-BACK",
+                flight_date="01-07-2026",
+                off="00:30",
+                on="04:00",
+                crew_codes=("A", "B"),
+                positions=("CPT", "FO"),
+                block_time="03:30",
+            ),
+        )
+
+        self.assertEqual(len(self._select(rows, "2026-06-01", "2026-06-30")), 2)
+
     def test_psn_members_are_excluded_from_operating_crew_set_comparison(self):
         rows = (
             report_leg(

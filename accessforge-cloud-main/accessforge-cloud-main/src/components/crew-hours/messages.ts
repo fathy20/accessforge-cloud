@@ -1,7 +1,21 @@
 import type { DictKey } from "@/lib/i18n";
-import type { CrewHoursReport, ReportTabDefinition, ReportTabPosition } from "./types";
+import type { CrewHoursReport, FlightItem, ReportTabDefinition, ReportTabPosition } from "./types";
 
 type Translate = (key: DictKey, params?: Record<string, string | number>) => string;
+
+/**
+ * True when a row's Heavy verdict was not found in LEON's augmented data and
+ * was resolved by the local rotation rule (STEP 4) — the case the red
+ * exclamation badge marks.
+ */
+export function isLocallyResolvedHeavy(flight: FlightItem): boolean {
+  return flight.heavy_source === "LOCAL_RULE" && flight.unknown_resolved === true;
+}
+
+/** EN + AR badge/tooltip message for locally-resolved Heavy verdicts. */
+export function localResolutionMessage(t: Translate): string {
+  return t("crew.heavy.local_resolution_badge");
+}
 
 export function reportTabLabel(tab: ReportTabDefinition, t: Translate): string {
   if (tab.position === "Cockpit") {

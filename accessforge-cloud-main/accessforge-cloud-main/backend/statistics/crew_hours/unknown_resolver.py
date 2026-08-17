@@ -1,9 +1,19 @@
 """STEP 4 — resolve Heavy for flights where LEON's augmentation value is UNKNOWN.
 
-LEON leaves ``crewAugmentation`` empty for some duties.  The approved fallback is:
-a crew member is Heavy on such a flight only when they flew a same-UTC-day
-neighbouring sector with the same crew and a break no longer than four hours.
-Anything we cannot establish resolves to NO, never to UNKNOWN.
+LEON leaves ``crewAugmentation`` empty for some duties.  The approved fallback:
+a crew member is Heavy on such a flight only when they flew an immediately
+neighbouring sector that
+
+- chains airports with the current leg (an out-and-back or chained rotation),
+- follows or precedes it with a break of ``0 <= break < 4h`` (3:59 connects,
+  exactly 4:00 does not), and
+- carries the same *operating* crew (PSN passengers excluded on both legs).
+
+The pair belongs to one duty anchored on the first sector's UTC start date;
+a short break across midnight is the SAME duty, so calendar dates are never
+compared directly.  A member positioned as ``PSN`` on the current leg is No
+immediately and no neighbour search runs.  Anything we cannot establish
+resolves to NO, never to UNKNOWN.
 """
 
 from __future__ import annotations
@@ -13,10 +23,25 @@ from datetime import datetime, timedelta, timezone
 from typing import Mapping, Sequence
 
 from .crew_context import CrewContextEntry, CrewContextIndex, FlightContext
+from .positions import CREW_SET_EXCLUDED_POSITIONS, crew_set_identity
 
 
-# The break ceiling that still counts the two sectors as one augmented rotation.
+# The break ceiling: two sectors count as one augmented rotation only strictly
+# below this. ``break >= UNKNOWN_MAX_BREAK`` rejects, so exactly 4:00 fails.
 UNKNOWN_MAX_BREAK = timedelta(hours=4)
+
+# A neighbour starting further than this from the current leg's start can
+# never share its duty window, whatever the break arithmetic says.
+_DUTY_WINDOW_SPAN = timedelta(hours=24)
+
+_PSN_POSITION = "psn"
+
+# Slots that ride the flight without operating it — the shared exclusion set
+# from positions.py (PSN/PAD positioning plus OBS/OBS2/STB), casefolded for
+# the current-leg position checks below.
+_NON_OPERATING_COMPARISON_POSITIONS = frozenset(
+    value.casefold() for value in CREW_SET_EXCLUDED_POSITIONS
+)
 
 ResolutionReason = str
 
@@ -31,7 +56,12 @@ class UnknownResolution:
 def build_rotation_index(
     index: CrewContextIndex,
 ) -> Mapping[str, tuple[FlightContext, ...]]:
-    """Map every crew code to their flights, ordered by UTC start time."""
+    """Map every crew code to their flights, ordered by UTC start time.
+
+    All members are indexed — including PSN passengers — because a member who
+    rides PSN on one leg may operate the next; only the current-leg PSN check
+    and the crew-set comparison exclude PSN.
+    """
 
     by_crew: dict[str, list[FlightContext]] = {}
     if not index.available:
@@ -64,6 +94,10 @@ def resolve_unknown_heavy(
     # Case A — we do not know what this person was doing on the flight, so NO.
     if entry is None or (entry.position is None and entry.function is None):
         return UnknownResolution(False, True, "UNKNOWN_POSITION")
+    # Case B — a PSN passenger is never augmented crew: NO immediately, and
+    # deliberately without any neighbour search.
+    if _is_psn(entry.position):
+        return UnknownResolution(False, True, "PSN_POSITIONING")
 
     current_start = _parse_utc(current.start_time_utc)
     current_end = _parse_utc(current.end_time_utc)
@@ -74,22 +108,36 @@ def resolve_unknown_heavy(
     if not neighbours:
         return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT")
 
-    current_crew = _crew_codes(current.entries)
+    current_crew = _operating_crew_codes(current.entries)
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
     for neighbour in neighbours:
         neighbour_start = _parse_utc(neighbour.start_time_utc)
         neighbour_end = _parse_utc(neighbour.end_time_utc)
         if neighbour_start is None or neighbour_end is None:
-            reason = "MISSING_FLIGHT_TIMES"
+            reason = _weaker(reason, "MISSING_FLIGHT_TIMES")
             continue
-        # Different UTC day is an immediate NO — no break or crew check needed.
-        if neighbour_start.date() != current_start.date():
-            reason = _weaker(reason, "DIFFERENT_DAY")
+        # Rotation continuity: the neighbour must chain airports with this
+        # leg. Missing airport data cannot establish continuity — fail closed.
+        if not _rotation_chained(current, neighbour):
+            reason = _weaker(reason, "ROTATION_MISMATCH")
             continue
-        if _break_between(current_start, current_end, neighbour_start, neighbour_end) > UNKNOWN_MAX_BREAK:
-            reason = _weaker(reason, "BREAK_EXCEEDS_LIMIT")
+        break_duration = _break_between(
+            current_start, current_end, neighbour_start, neighbour_end
+        )
+        if break_duration >= UNKNOWN_MAX_BREAK:
+            # Midnight-safe duty window: a short break keeps the pair in one
+            # duty regardless of calendar dates, so a failed break inside the
+            # 24h window anchored on the current leg is a break problem.
+            # DIFFERENT_DAY is reserved for genuinely disjoint days.
+            genuinely_disjoint = (
+                neighbour_start.date() != current_start.date()
+                and abs(neighbour_start - current_start) > _DUTY_WINDOW_SPAN
+            )
+            reason = _weaker(
+                reason, "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
+            )
             continue
-        if _crew_codes(neighbour.entries) != current_crew:
+        if _operating_crew_codes(neighbour.entries) != current_crew:
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
         return UnknownResolution(True, True, "SAME_DAY_SHORT_BREAK_SAME_CREW")
@@ -97,7 +145,14 @@ def resolve_unknown_heavy(
 
 
 # Ordered least-to-most informative so the reported reason is the closest near-miss.
-_REASON_RANK = ("NO_NEIGHBOUR_FLIGHT", "MISSING_FLIGHT_TIMES", "DIFFERENT_DAY", "BREAK_EXCEEDS_LIMIT", "CREW_SET_CHANGED")
+_REASON_RANK = (
+    "NO_NEIGHBOUR_FLIGHT",
+    "MISSING_FLIGHT_TIMES",
+    "DIFFERENT_DAY",
+    "ROTATION_MISMATCH",
+    "BREAK_EXCEEDS_LIMIT",
+    "CREW_SET_CHANGED",
+)
 
 
 def _weaker(current: ResolutionReason, candidate: ResolutionReason) -> ResolutionReason:
@@ -105,6 +160,23 @@ def _weaker(current: ResolutionReason, candidate: ResolutionReason) -> Resolutio
         return candidate if _REASON_RANK.index(candidate) > _REASON_RANK.index(current) else current
     except ValueError:
         return candidate
+
+
+def _rotation_chained(current: FlightContext, neighbour: FlightContext) -> bool:
+    """An out-and-back or chained rotation shares an airport at the junction."""
+
+    return (
+        _same_airport(neighbour.departure_airport, current.arrival_airport)
+        or _same_airport(neighbour.arrival_airport, current.departure_airport)
+    )
+
+
+def _same_airport(left: str | None, right: str | None) -> bool:
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    normalized_left = left.strip().casefold()
+    normalized_right = right.strip().casefold()
+    return bool(normalized_left) and normalized_left == normalized_right
 
 
 def _neighbours(
@@ -150,11 +222,39 @@ def _entry_for(
     return None
 
 
+def _is_psn(position: str | None) -> bool:
+    return isinstance(position, str) and position.strip().casefold() == _PSN_POSITION
+
+
 def _crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
     return frozenset(
         entry.crew_code.strip().upper()
         for entry in entries
         if entry.crew_code and entry.crew_code.strip()
+    )
+
+
+def operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
+    """The comparison set: operating members only.
+
+    Shape adapter over positions.crew_set_identity — THE one crew-set
+    definition (owner ruling 2026-08-17), shared with duty grouping in
+    domain.py. Excludes PSN, PAD (live case RSX6081/RSX6082: a PAD rider on
+    one leg must not break the match), and OBS/OBS2/STB. Public: the
+    flight-level facade in heavy.py iterates these members for STEP 4.
+    """
+
+    return crew_set_identity((entry.crew_code, entry.position) for entry in entries)
+
+
+# Backwards-compatible private alias (pre-consolidation name).
+_operating_crew_codes = operating_crew_codes
+
+
+def _is_non_operating(position: str | None) -> bool:
+    return (
+        isinstance(position, str)
+        and position.strip().casefold() in _NON_OPERATING_COMPARISON_POSITIONS
     )
 
 

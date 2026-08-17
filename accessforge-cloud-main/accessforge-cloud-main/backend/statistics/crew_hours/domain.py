@@ -9,6 +9,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from .errors import LeonContractError
+from .positions import crew_set_identity
 
 
 READ_BUFFER_DAYS = 2
@@ -48,7 +49,11 @@ class NormalizedReportRow:
 
     @property
     def operating_crew_set(self) -> frozenset[str]:
-        return frozenset(slot.code.casefold() for slot in self.crew if slot.is_operating)
+        # Duty-grouping identity: THE shared crew-set definition (owner ruling
+        # 2026-08-17). Riders and non-operating cockpit slots never split a
+        # duty. Distinct from ``is_operating`` above, which keeps its settled
+        # PSN-only meaning for per-member numeric totals.
+        return crew_set_identity((slot.code, slot.position) for slot in self.crew)
 
 
 def buffered_query_dates(from_date: str, to_date: str) -> tuple[str, str]:

@@ -17,20 +17,25 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Callable, Mapping, Sequence
 
-from ..statistics.crew_hours.cabin_heavy import (
-    CabinCrewMember,
-    CabinFlight,
-    classify_cabin_augmented_heavy,
-    classify_cockpit_heavy,
+from ..statistics.crew_hours.crew_context import (
+    CrewContextEntry,
+    CrewContextIndex,
+    FlightContext,
 )
-from ..statistics.crew_hours.crew_context import CrewContextEntry
 from ..statistics.crew_hours.domain import normalize_report_row
+from ..statistics.crew_hours.unknown_resolver import build_rotation_index
 from ..statistics.crew_hours.heavy import (
+    classify_flight_heavy,
     operating_cabin_count,
     operating_cockpit_count,
 )
 from ..statistics.crew_hours.mcp_report import OfficialMcpReport
-from ..statistics.crew_hours.positions import CABIN_POS_TYPE, COCKPIT_POS_TYPE
+from ..statistics.crew_hours.positions import (
+    CABIN_POS_TYPE,
+    COCKPIT_POS_TYPE,
+    HEAVY_CABIN_THRESHOLD,
+    HEAVY_COCKPIT_THRESHOLD,
+)
 from ..statistics.crew_hours.service import _position_group
 from .schemas import CopilotAnswer, CopilotCitation, CopilotFact
 
@@ -196,28 +201,25 @@ def _heavy_answer(
     row = max(rows, key=lambda candidate: len(_entries_from_row(candidate)))
     entries = _entries_from_row(row)
 
-    # Cockpit and cabin are classified independently. Cockpit keeps its existing
-    # rule untouched; cabin uses the corrected one, where SVX/EVN are matched
-    # against the real ADEP/ADES airport codes rather than flightTags (which this
-    # operator never populates, so those overrides had never fired).
-    flight = CabinFlight(
-        adep=_text(row.get("jl_adep_preferred_code")),
-        ades=_text(row.get("jl_ades_preferred_code")),
-        aircraft_registration=_text(row.get("registration")),
-        # The augmented reference dataset lives on the Crew Hours service path,
-        # not here, so the UNKNOWN pairing rule cannot run on this path.
-        is_unknown=False,
+    # ONE engine for every surface (owner ruling 2026-08-17): the same facade
+    # the Crew Hours report uses. EVN/SVX are flight-level absolutes — EVN
+    # vetoes even a cockpit-count Yes — and STEP 4 (the rotation rule) runs
+    # here too, over an index built from the same report rows. LEON's FTL
+    # augmentation value is not reachable on this path, so leon_heavy is None.
+    index = _context_index_from_report(report)
+    verdict, reason_code = classify_flight_heavy(
+        index,
+        build_rotation_index(index),
+        _row_flight_nid(row),
+        aircraft_type=_text(row.get("acftType")),
     )
-    cockpit_heavy, cockpit_reason = classify_cockpit_heavy(flight, entries)
-    cabin_heavy, cabin_reason = classify_cabin_augmented_heavy(
-        flight, _cabin_crew_from_row(row)
-    )
-
-    # Same combination as before the split: cockpit is evaluated first and wins.
-    verdict = bool(cockpit_heavy or cabin_heavy) if entries else None
-    reason = cockpit_reason if cockpit_heavy else cabin_reason
     cockpit = operating_cockpit_count(entries)
     cabin = operating_cabin_count(entries)
+    adep = _text(row.get("jl_adep_preferred_code"))
+    ades = _text(row.get("jl_ades_preferred_code"))
+    reason = _describe_reason(
+        reason_code, adep=adep, ades=ades, cockpit=cockpit, cabin=cabin
+    )
 
     if verdict is None:
         return CopilotAnswer(
@@ -253,7 +255,7 @@ def _heavy_answer(
                 # Route, not tags: SVX/EVN are matched on ADEP/ADES.
                 CopilotFact(
                     label="Route",
-                    value=f"{flight.adep or '—'}->{flight.ades or '—'}",
+                    value=f"{adep or '—'}->{ades or '—'}",
                     raw=True,
                 ),
             ],
@@ -291,19 +293,88 @@ def _entries_from_row(row: Mapping[str, Any]) -> list[CrewContextEntry]:
     return entries
 
 
-def _cabin_crew_from_row(row: Mapping[str, Any]) -> list[CabinCrewMember]:
-    """Cabin crew only — cockpit is classified from a separate list.
+def _row_flight_nid(row: Mapping[str, Any]) -> int | None:
+    """The row identifier the engine indexes by; unique_id == flightNid == trNid
+    (confirmed live via tools/id_probe on 2026-06-16/20/22)."""
 
-    ``function`` is always None: LEON exposes no Work Schedule Function field,
-    so the TRN exclusion cannot run. The classifier flags that in its reason
-    rather than treating a missing Function as "not a trainee".
+    return _optional_int(row.get("unique_id")) or _optional_int(
+        row.get("scope_row_unique_id")
+    )
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _context_index_from_report(report: OfficialMcpReport) -> CrewContextIndex:
+    """Build the engine's flight index from the MCP report rows themselves.
+
+    This is what lets STEP 4 (the rotation rule) run on the Copilot path: the
+    same fetch that answers "is this flight Heavy?" carries the member's
+    neighbouring sectors for that UTC day. Rows without a usable identifier
+    are skipped; duplicate identifiers keep the row with the fullest crew.
     """
 
-    return [
-        CabinCrewMember(crew_code=slot.code, position=slot.position, function=None)
-        for slot in normalize_report_row(row).crew
-        if _position_group(slot.position) == "Cabin"
-    ]
+    contexts: dict[int, FlightContext] = {}
+    by_flight: dict[int, tuple[CrewContextEntry, ...]] = {}
+    for row in report.rows:
+        flight_nid = _row_flight_nid(row)
+        if flight_nid is None:
+            continue
+        entries = tuple(_entries_from_row(row))
+        existing = contexts.get(flight_nid)
+        if existing is not None and len(entries) <= len(existing.entries):
+            continue
+        normalized = normalize_report_row(row)
+        contexts[flight_nid] = FlightContext(
+            flight_nid=flight_nid,
+            start_time_utc=normalized.off_utc.isoformat() if normalized.off_utc else None,
+            end_time_utc=normalized.on_utc.isoformat() if normalized.on_utc else None,
+            flight_tags=_tags_from_row(row),
+            entries=entries,
+            departure_airport=_text(row.get("jl_adep_preferred_code")),
+            arrival_airport=_text(row.get("jl_ades_preferred_code")),
+        )
+        by_flight[flight_nid] = entries
+    return CrewContextIndex(available=True, by_flight=by_flight, contexts=contexts)
+
+
+def _describe_reason(
+    reason_code: str,
+    *,
+    adep: str | None,
+    ades: str | None,
+    cockpit: int,
+    cabin: int,
+) -> str:
+    """Human-readable citation text for an engine reason code."""
+
+    route = f"ADEP={adep or '—'}, ADES={ades or '—'}"
+    if reason_code in ("SVX_AIRPORT", "SVX_TAG"):
+        return f"SVX override ({route})"
+    if reason_code in ("EVN_AIRPORT", "EVN_TAG"):
+        return f"EVN override ({route})"
+    if reason_code == "EXTRA_COCKPIT_CREW":
+        return f"effective cockpit count = {cockpit} > {HEAVY_COCKPIT_THRESHOLD}"
+    if reason_code == "EXTRA_CABIN_CREW":
+        return f"effective cabin count = {cabin} > {HEAVY_CABIN_THRESHOLD}"
+    if reason_code == "NONE":
+        return (
+            f"effective cockpit count = {cockpit} <= {HEAVY_COCKPIT_THRESHOLD}; "
+            f"effective cabin count = {cabin} <= {HEAVY_CABIN_THRESHOLD}"
+        )
+    if reason_code == "SAME_DAY_SHORT_BREAK_SAME_CREW":
+        return "rotation rule: paired with an adjacent leg (same operating crew, break < 4h)"
+    return f"rotation rule: {reason_code}"
 
 
 def _tags_from_row(row: Mapping[str, Any]) -> tuple[str, ...]:

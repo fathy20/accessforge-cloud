@@ -68,6 +68,20 @@ class CrewHoursReportResponse(BaseModel):
     official_totals_unavailable: int = 0
     # Server-computed from integer minutes; clients must never recompute or re-sum these values.
     official_totals_by_position: dict[str, str] = {}
+    # Join health across the three LEON sources (Report Wizard unique_id vs the
+    # FTL trNid index and the flight-list flightNid index). "DEGRADED" is the
+    # "IDs don't match" signature: a below-50% hit rate against a non-empty
+    # index. It must be visible in the response, never only in a log.
+    join_health: str = "OK"
+    augmented_lookup_hits: int = 0
+    augmented_lookup_attempts: int = 0
+    crew_context_hits: int = 0
+    crew_context_attempts: int = 0
+    # "active" only when LEON supplied the Work Schedule Function field this
+    # run; "unavailable" means the SFA-Function trainee exclusion did NOT fire
+    # (LEON rejects the selection — known gap, owner ruling 2026-08-17), so
+    # nobody should assume cabin trainees were excluded from operating counts.
+    cabin_trainee_detection: str = "unavailable"
     crew_members: list[CrewMemberSummary] = []
 
 

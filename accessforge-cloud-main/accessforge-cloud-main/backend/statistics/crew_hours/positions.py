@@ -61,6 +61,38 @@ LEON_POSITION_GROUPS: Mapping[str, frozenset[str]] = {
 
 TRAINING_FLIGHT_TYPES = frozenset({"LINE_TRAINING", "LINE_CHECK"})
 NON_OPERATING_COCKPIT_POSITIONS = frozenset({"OBS", "OBS2", "STB"})
+# Positioning slots (live values inside crew_position_names / flight-list
+# position names): the member rides the flight but does not operate it.
+# Excluded from operating counts and from STEP 4 crew-set comparison; their
+# numeric block-time inclusion semantics are governed elsewhere and unchanged.
+POSITIONING_POSITIONS = frozenset({"PSN", "PAD"})
+
+# THE crew-set identity (owner ruling 2026-08-17): the ONE definition of
+# "same crew" for comparisons — used by BOTH connected-duty grouping
+# (domain.select_rows_for_period) and the STEP-4 rotation comparison
+# (unknown_resolver.operating_crew_codes). Do not create a third.
+# Riders (PSN/PAD) and non-operating cockpit slots (OBS/OBS2/STB) never make
+# two legs "different crews".
+# NOTE: this is a SET IDENTITY only. Per-member block-time inclusion in the
+# numeric totals (mcp_report aggregation; PSN-only exclusion, 2026-08-09
+# parity ruling) is a separate settled rule and is untouched by this.
+CREW_SET_EXCLUDED_POSITIONS = frozenset(
+    POSITIONING_POSITIONS | frozenset({"OBS", "OBS2", "STB"})
+)
+
+
+def crew_set_identity(members) -> frozenset[str]:
+    """Build the comparable crew set from (code, position) pairs."""
+
+    codes = set()
+    for code, position in members:
+        if not isinstance(code, str) or not code.strip():
+            continue
+        normalized_position = (position or "").strip().upper()
+        if normalized_position in CREW_SET_EXCLUDED_POSITIONS:
+            continue
+        codes.add(code.strip().upper())
+    return frozenset(codes)
 COCKPIT_POS_TYPE = "COCKPIT"
 CABIN_POS_TYPE = "CABIN"
 

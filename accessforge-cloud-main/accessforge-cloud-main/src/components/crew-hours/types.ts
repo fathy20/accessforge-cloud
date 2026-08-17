@@ -53,6 +53,16 @@ export interface CrewHoursReport {
   official_totals_available: number;
   official_totals_unavailable: number;
   official_totals_by_position: Partial<Record<OfficialPosition, string>>;
+  // Join health across the three LEON identifier spaces; "DEGRADED" means the
+  // report's unique_id values are not matching the FTL/flight-list indices.
+  join_health?: "OK" | "DEGRADED";
+  augmented_lookup_hits?: number;
+  augmented_lookup_attempts?: number;
+  crew_context_hits?: number;
+  crew_context_attempts?: number;
+  // "unavailable" = LEON withheld Work Schedule Function this run, so the
+  // SFA cabin-trainee exclusion did not fire (known gap, ruling 2026-08-17).
+  cabin_trainee_detection?: "active" | "unavailable";
   crew_members: CrewMemberSummary[];
 }
 

@@ -3,8 +3,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..auth import get_current_user
 from ..models import User
+from ..rbac.permissions import require_permissions
 from ..statistics.crew_hours.errors import (
     LeonAuthenticationError,
     LeonConfigurationError,
@@ -22,14 +22,24 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
 
 def get_copilot_service() -> CopilotService:
-    return CopilotService(
-        build_wingman_client(),
-        fetch_report=build_report_fetcher(),
-    )
+    # Construction reads LEON configuration; an unconfigured server must answer
+    # with the same plain 503 as any other LEON failure, not an unhandled 500.
+    try:
+        return CopilotService(
+            build_wingman_client(),
+            fetch_report=build_report_fetcher(),
+        )
+    except Exception as exc:  # noqa: BLE001 - mapped to a plain client-facing status
+        logger.warning("Copilot service construction failed (%s).", type(exc).__name__)
+        raise _handle_leon_failure(exc) from exc
 
+
+# Everything Copilot can reach — the grounded MCP report and the Wingman relay —
+# is LEON crew data, so it is gated by the same grant as the Crew Hours module.
+require_copilot_access = require_permissions("crew_hours.view")
 
 ServiceDependency = Annotated[CopilotService, Depends(get_copilot_service)]
-UserDependency = Annotated[User, Depends(get_current_user)]
+UserDependency = Annotated[User, Depends(require_copilot_access)]
 
 
 def _handle_leon_failure(exc: Exception) -> HTTPException:
@@ -64,8 +74,10 @@ def _handle_leon_failure(exc: Exception) -> HTTPException:
 @router.post("/ask", response_model=CopilotAnswer)
 def ask_copilot(
     payload: CopilotAskRequest,
-    service: ServiceDependency,
+    # Declaration order is resolution order: authorize before constructing
+    # LEON clients, so anonymous requests never touch LEON configuration.
     current_user: UserDependency,
+    service: ServiceDependency,
 ) -> CopilotAnswer:
     question = payload.question.strip()
     if not question:
@@ -80,8 +92,8 @@ def ask_copilot(
 @router.post("/approve", response_model=CopilotAnswer)
 def approve_copilot_tools(
     payload: CopilotApproveRequest,
-    service: ServiceDependency,
     current_user: UserDependency,
+    service: ServiceDependency,
 ) -> CopilotAnswer:
     try:
         return service.approve(

@@ -37,8 +37,15 @@ def has_permission(db: Session, user: User | str, permission_key: str | None) ->
     return permission_key in get_effective_permissions(db, user)
 
 
-def require_permission(permission_key: str) -> Callable[..., User]:
-    """Build a FastAPI dependency that turns a missing explicit grant into 403."""
+def require_permissions(*permission_keys: str) -> Callable[..., User]:
+    """Build a FastAPI dependency that requires every listed grant.
+
+    Every key must be held; a single missing grant is a 403 with the same body
+    as any other denial, so a caller cannot probe which permission it lacks.
+    """
+
+    if not permission_keys:
+        raise ValueError("require_permissions needs at least one permission key")
 
     # Keep auth and RBAC imports acyclic: auth records audit events from this
     # module, while the dependency needs auth only after both modules load.
@@ -48,12 +55,21 @@ def require_permission(permission_key: str) -> Callable[..., User]:
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
-        if not has_permission(db, current_user, permission_key):
+        held = get_effective_permissions(db, current_user)
+        if not all(key and key in held for key in permission_keys):
             raise HTTPException(status_code=403, detail="Permission denied")
         return current_user
 
-    dependency.__name__ = f"require_{permission_key.replace('.', '_')}"
+    dependency.__name__ = "require_" + "_and_".join(
+        key.replace(".", "_") for key in permission_keys
+    )
     return dependency
+
+
+def require_permission(permission_key: str) -> Callable[..., User]:
+    """Build a FastAPI dependency that turns a missing explicit grant into 403."""
+
+    return require_permissions(permission_key)
 
 
 _SENSITIVE_METADATA_PARTS = ("password", "passwd", "hash", "token", "secret")

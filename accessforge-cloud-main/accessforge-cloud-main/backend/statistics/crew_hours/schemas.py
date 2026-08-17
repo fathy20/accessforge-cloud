@@ -77,6 +77,11 @@ class CrewHoursReportResponse(BaseModel):
     augmented_lookup_attempts: int = 0
     crew_context_hits: int = 0
     crew_context_attempts: int = 0
+    # "active" only when LEON supplied the Work Schedule Function field this
+    # run; "unavailable" means the SFA-Function trainee exclusion did NOT fire
+    # (LEON rejects the selection — known gap, owner ruling 2026-08-17), so
+    # nobody should assume cabin trainees were excluded from operating counts.
+    cabin_trainee_detection: str = "unavailable"
     crew_members: list[CrewMemberSummary] = []
 
 

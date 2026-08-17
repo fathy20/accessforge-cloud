@@ -1,5 +1,40 @@
 # Development Decision Log
 
+## 2026-08-17 — Owner rulings: one Heavy engine, trainee definition, consolidation
+
+- **Q1 ruling — cabin trainee = Work Schedule Function == "SFA"** (the
+  `heavy.py` reading). NO Position-only fallback: SFA as a *position* is a
+  normal senior cabin rank; a Position-only rule would exclude operating crew.
+  **Known gap**: LEON currently rejects the `workSchedule { function }`
+  selection (live 2026-06 run: *"LEON rejected the crew Work Schedule Function
+  selection; cabin trainee detection is disabled for this report"*), so the
+  rule does not fire in production. The report now surfaces this as
+  `cabin_trainee_detection: "unavailable"` in the response metadata so nobody
+  assumes trainees were excluded. **Follow-up open**: get the Function field
+  enabled on LEON's side.
+- **Q2 ruling — EVN/SVX are FLIGHT-LEVEL absolutes.** EVN vetoes even a
+  cockpit-count Yes. The Copilot's "cockpit stays frozen, overrides are
+  cabin-only" behavior was wrong and is retired (its pinned test inverted).
+- **Q3 ruling — the `{"SP","OPS"}` cabin exclusion is removed.** OPS/SP are
+  cockpit trainee slots; no approved cabin rule used them. Pinned by
+  `test_no_sp_ops_cabin_exclusion_exists`.
+- **Consolidation executed**: `heavy.classify_flight_heavy` is the single
+  flight-level engine; `copilot/local_answers.py` builds a flight index from
+  the same MCP report rows and calls it (STEP 4 now genuinely runs on the
+  Copilot path — the `is_unknown=False` dead end is gone). `cabin_heavy.py`
+  is a one-release deprecation shim (warns, delegates to the engine), then
+  deleted; its rule tests migrated to the heavy/resolver suites, its citation
+  formats to the copilot suite. `test_heavy_cross_consistency.py` is now a
+  committed, permanently-green gate over the five screenshot cases.
+- **Discovered and resolved during consolidation — rule-4 finalization**: the
+  service allowed STEP 4 to override a count-derived Yes when LEON was silent,
+  contradicting written rule 4 ("count over threshold → YES") and rule 5
+  (resolver runs only on the count rule's UNKNOWN). Both surfaces now finalize
+  a LEON-silent count-Yes as `LOCAL_RULE`/`EXTRA_*` with no resolver badge;
+  `decide_heavy`'s pinned pure-function table is untouched. A LEON-silent,
+  over-complement flight that a non-qualifying rotation previously flipped to
+  No now reads Yes — that is the written rule.
+
 ## 2026-08-17 — Heavy pipeline: live UI review corrections (screenshot evidence)
 
 - **EVN/SVX are airport-based rules; tags kept as secondary signal.** LEON

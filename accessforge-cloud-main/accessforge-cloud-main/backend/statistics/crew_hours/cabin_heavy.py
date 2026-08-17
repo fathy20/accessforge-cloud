@@ -1,52 +1,45 @@
-"""Cabin Augmented (Heavy) classification — separate from cockpit by design.
+"""DEPRECATED — the second Heavy engine, retired by the 2026-08-17 owner ruling.
 
-Cockpit and cabin used to share one function, which made it impossible to change
-one without risking the other.  They are split here:
+Every surface now classifies Heavy through ``heavy.classify_flight_heavy``
+(one engine; see docs/architecture/crew-hours-heavy-precedence-adr-2026-08-17.md
+and MCP_Memory/development/decision-log.md). This module survives for one
+release as thin wrappers so any out-of-tree caller fails loudly with a
+DeprecationWarning instead of an ImportError, then it is deleted.
 
-  * ``classify_cockpit_heavy``  — the existing cockpit rule, frozen verbatim.
-  * ``classify_cabin_augmented_heavy`` — the corrected cabin rule.
+Contract changes versus the retired implementation, per the owner rulings:
 
-The correction that matters: SVX and EVN are **airport codes**, checked against
-ADEP/ADES.  The previous implementation looked for them in ``flightTags``, and
-no flight in the operator's data carries any tag at all — so those two rules had
-never once fired.
-
-Both functions are pure: no network, no clock, no I/O.  Callers supply adjacent
-legs for the UNKNOWN rule rather than the function fetching them.
+  * EVN/SVX are FLIGHT-LEVEL absolutes — EVN now vetoes a cockpit-count Yes
+    (``classify_cockpit_heavy`` previously had no EVN/SVX handling).
+  * Cabin trainee = Work Schedule Function == "SFA" (never Position-only,
+    and never Position SFA AND Function TRN).
+  * PSN/PAD positioning slots never count as operating crew.
+  * The SP/OPS cabin exclusion is removed (no approved cabin rule used it).
+  * ``adjacent_legs``/``is_unknown`` are ignored: the pairing rule runs in
+    the real engine over a full flight index, not over hand-carried legs.
+  * Reasons are the engine's reason codes, not the old prose strings.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+import warnings
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Sequence
 
-from .crew_context import CrewContextEntry
-from .heavy import operating_cockpit_count
-from .positions import HEAVY_CABIN_THRESHOLD, HEAVY_COCKPIT_THRESHOLD
+from .crew_context import CrewContextEntry, CrewContextIndex, FlightContext
+from .heavy import classify_flight_heavy
+from .positions import CABIN_POS_TYPE, COCKPIT_POS_TYPE
+from .unknown_resolver import build_rotation_index
 
-# Airport codes, matched against ADEP/ADES — not flight tags.
+# Airport codes, matched against ADEP/ADES — kept for import compatibility.
 SVX_AIRPORT = "SVX"
 EVN_AIRPORT = "EVN"
-
-# Positions removed from the cabin count before the threshold is applied.
-CABIN_EXCLUDED_POSITIONS = frozenset({"SP", "OPS"})
-
-# The agreed trainee marker, usable only once LEON exposes a Function field:
-# Position == "SFA" AND Function == "TRN".  Position alone is not sufficient.
-TRAINEE_POSITION = "SFA"
-TRAINEE_FUNCTION = "TRN"
-
-UNKNOWN_MAX_BREAK = timedelta(hours=4)
-
-FUNCTION_UNAVAILABLE_NOTE = "Function data unavailable — TRN exclusion not applied"
 
 
 @dataclass(frozen=True)
 class CabinCrewMember:
     crew_code: str | None = None
     position: str | None = None
-    # None means "LEON did not supply it", never "confirmed not a trainee".
     function: str | None = None
 
 
@@ -64,158 +57,74 @@ class CabinFlight:
     start_time_utc: datetime | None = None
     end_time_utc: datetime | None = None
     aircraft_registration: str | None = None
-    # True when LEON's augmented reference dataset has no value for this
-    # flight/crew member, which is what triggers the pairing rule.
     is_unknown: bool = False
     adjacent_legs: tuple[AdjacentLeg, ...] = ()
+
+
+_DEPRECATION = (
+    "backend.statistics.crew_hours.cabin_heavy is deprecated: call "
+    "heavy.classify_flight_heavy instead (single Heavy engine, owner ruling "
+    "2026-08-17). This module will be deleted next release."
+)
+
+
+def _single_flight_index(
+    flight: CabinFlight, entries: tuple[CrewContextEntry, ...]
+) -> CrewContextIndex:
+    context = FlightContext(
+        flight_nid=1,
+        start_time_utc=flight.start_time_utc.isoformat() if flight.start_time_utc else None,
+        end_time_utc=flight.end_time_utc.isoformat() if flight.end_time_utc else None,
+        flight_tags=(),
+        entries=entries,
+        departure_airport=flight.adep,
+        arrival_airport=flight.ades,
+    )
+    return CrewContextIndex(available=True, by_flight={1: entries}, contexts={1: context})
+
+
+def _classify(flight: CabinFlight, entries: tuple[CrewContextEntry, ...]) -> tuple[bool, str]:
+    index = _single_flight_index(flight, entries)
+    verdict, reason = classify_flight_heavy(index, build_rotation_index(index), 1)
+    return bool(verdict), reason
 
 
 def classify_cockpit_heavy(
     flight: CabinFlight,
     cockpit_crew_list: Sequence[CrewContextEntry],
 ) -> tuple[bool, str]:
-    """Cockpit rule, frozen exactly as it behaved before the cabin split.
+    """DEPRECATED wrapper. EVN/SVX now apply (they previously did not here)."""
 
-    Deliberately has no SVX/EVN handling: the tag-based override never fired in
-    practice, so the count threshold alone is what produced today's accepted
-    output. ``flight`` is accepted for signature symmetry and is not read.
-    """
-
-    count = operating_cockpit_count(cockpit_crew_list)
-    if count > HEAVY_COCKPIT_THRESHOLD:
-        return True, f"effective cockpit count = {count} > {HEAVY_COCKPIT_THRESHOLD}"
-    return False, f"effective cockpit count = {count} <= {HEAVY_COCKPIT_THRESHOLD}"
+    warnings.warn(_DEPRECATION, DeprecationWarning, stacklevel=2)
+    entries = tuple(
+        entry if entry.pos_type else CrewContextEntry(
+            pos_type=COCKPIT_POS_TYPE,
+            position=entry.position,
+            training_type=entry.training_type,
+            crew_code=entry.crew_code,
+            crew_name=entry.crew_name,
+            function=entry.function,
+        )
+        for entry in cockpit_crew_list
+    )
+    return _classify(flight, entries)
 
 
 def classify_cabin_augmented_heavy(
     flight: CabinFlight,
     cabin_crew_list: Sequence[CabinCrewMember],
 ) -> tuple[bool, str]:
-    """Return (is_heavy, reason). First matching rule wins."""
+    """DEPRECATED wrapper. Trainee rule is Function == 'SFA'; no SP/OPS rule."""
 
-    # 1 & 2 — airport overrides, before anything is counted.
-    airports = {
-        code.strip().upper()
-        for code in (flight.adep, flight.ades)
-        if isinstance(code, str) and code.strip()
-    }
-    if SVX_AIRPORT in airports:
-        return True, f"SVX override (ADEP={_show(flight.adep)}, ADES={_show(flight.ades)})"
-    if EVN_AIRPORT in airports:
-        return False, f"EVN override (ADEP={_show(flight.adep)}, ADES={_show(flight.ades)})"
-
-    # 3 — exclusions.
-    effective = _effective_cabin(cabin_crew_list)
-    note = _function_gap_note(cabin_crew_list)
-
-    # 4 — threshold.
-    count = len(effective)
-    if count > HEAVY_CABIN_THRESHOLD:
-        return True, _join(f"effective cabin count = {count} > {HEAVY_CABIN_THRESHOLD}", note)
-
-    # 5 — UNKNOWN pairing.
-    if flight.is_unknown:
-        heavy, pairing_reason = _resolve_unknown(flight, effective)
-        return heavy, _join(f"UNKNOWN + {pairing_reason}", note)
-
-    # 6 — otherwise.
-    return False, _join(f"effective cabin count = {count} <= {HEAVY_CABIN_THRESHOLD}", note)
-
-
-def effective_cabin_codes(
-    cabin_crew_list: Sequence[CabinCrewMember],
-) -> frozenset[str]:
-    """The crew-set identity used to compare one leg against another."""
-
-    return frozenset(
-        member.crew_code.strip().upper()
-        for member in _effective_cabin(cabin_crew_list)
-        if member.crew_code and member.crew_code.strip()
-    )
-
-
-def _effective_cabin(
-    cabin_crew_list: Sequence[CabinCrewMember],
-) -> tuple[CabinCrewMember, ...]:
-    return tuple(
-        member
-        for member in cabin_crew_list or ()
-        if not _is_excluded_position(member)
-        and not _is_confirmed_trainee(member)
-    )
-
-
-def _is_excluded_position(member: CabinCrewMember) -> bool:
-    position = (member.position or "").strip().upper()
-    return position in CABIN_EXCLUDED_POSITIONS
-
-
-def _is_confirmed_trainee(member: CabinCrewMember) -> bool:
-    """Only a *confirmed* trainee is excluded: Position SFA AND Function TRN.
-
-    A missing Function is not evidence of anything, so it never excludes.
-    """
-
-    position = (member.position or "").strip().upper()
-    function = (member.function or "").strip().upper() if member.function else None
-    return position == TRAINEE_POSITION and function == TRAINEE_FUNCTION
-
-
-def _function_gap_note(cabin_crew_list: Sequence[CabinCrewMember]) -> str | None:
-    """Surface the blocked TRN exclusion instead of hiding it."""
-
-    for member in cabin_crew_list or ():
-        position = (member.position or "").strip().upper()
-        if position == TRAINEE_POSITION and member.function is None:
-            return FUNCTION_UNAVAILABLE_NOTE
-    return None
-
-
-def _resolve_unknown(
-    flight: CabinFlight,
-    effective: Sequence[CabinCrewMember],
-) -> tuple[bool, str]:
-    current_codes = effective_cabin_codes(effective)
-    if flight.start_time_utc is None or flight.end_time_utc is None:
-        return False, "flight times unavailable"
-    if not flight.adjacent_legs:
-        return False, "no adjacent leg"
-
-    reason = "no qualifying adjacent leg"
-    for leg in flight.adjacent_legs:
-        if leg.start_time_utc is None or leg.end_time_utc is None:
-            continue
-        if leg.start_time_utc.date() != flight.start_time_utc.date():
-            reason = "adjacent leg on a different UTC day"
-            continue
-        if effective_cabin_codes(leg.cabin_crew) != current_codes:
-            reason = "adjacent leg has a different cabin crew set"
-            continue
-        gap = _break_between(flight, leg)
-        if gap > UNKNOWN_MAX_BREAK:
-            reason = f"break {_hours(gap)} > 4h"
-            continue
-        return True, (
-            f"paired with adjacent leg, gap={_hours(gap)}, same crew, same UTC day"
+    warnings.warn(_DEPRECATION, DeprecationWarning, stacklevel=2)
+    entries = tuple(
+        CrewContextEntry(
+            pos_type=CABIN_POS_TYPE,
+            position=member.position,
+            training_type=None,
+            crew_code=member.crew_code,
+            function=member.function,
         )
-    return False, reason
-
-
-def _break_between(flight: CabinFlight, leg: AdjacentLeg) -> timedelta:
-    if leg.start_time_utc >= flight.end_time_utc:
-        return leg.start_time_utc - flight.end_time_utc
-    if leg.end_time_utc <= flight.start_time_utc:
-        return flight.start_time_utc - leg.end_time_utc
-    return timedelta(0)  # overlapping sectors leave no break
-
-
-def _hours(delta: timedelta) -> str:
-    return f"{delta.total_seconds() / 3600:.1f}h"
-
-
-def _show(value: str | None) -> str:
-    return (value or "—").strip().upper() or "—"
-
-
-def _join(reason: str, note: str | None) -> str:
-    return f"{reason}; {note}" if note else reason
+        for member in cabin_crew_list or ()
+    )
+    return _classify(flight, entries)

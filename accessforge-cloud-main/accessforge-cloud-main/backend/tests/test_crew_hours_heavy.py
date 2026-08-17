@@ -977,6 +977,204 @@ class TestUnknownResolution(unittest.TestCase):
         self.assertFalse(flight.unknown_resolved)
 
 
+class TestClassifyFlightHeavy(unittest.TestCase):
+    """The single flight-level engine every surface calls (ruling 2026-08-17)."""
+
+    def _index(self, *contexts):
+        return _unknown_index(*contexts)
+
+    def test_evn_vetoes_a_cockpit_count_yes(self):
+        # Ruling Q2: EVN/SVX are flight-level absolutes.
+        from backend.statistics.crew_hours.heavy import classify_flight_heavy
+        from backend.statistics.crew_hours.unknown_resolver import build_rotation_index
+
+        context = FlightContext(
+            flight_nid=901,
+            start_time_utc="2026-06-20T22:05:00Z",
+            end_time_utc="2026-06-21T01:00:00Z",
+            flight_tags=(),
+            entries=(_entry(crew_code="C1"), _entry(crew_code="C2"), _entry(crew_code="C3")),
+            departure_airport="SSH",
+            arrival_airport="EVN",
+        )
+        index = self._index(context)
+
+        verdict, reason = classify_flight_heavy(index, build_rotation_index(index), 901)
+
+        self.assertIs(verdict, False)
+        self.assertEqual(reason, "EVN_AIRPORT")
+
+    def test_rule_4_count_finalizes_when_leon_is_silent(self):
+        # Rule 4: an over-threshold operating count is final — it never falls
+        # to the resolver (rule 5 covers only the count rule's UNKNOWN).
+        from backend.statistics.crew_hours.heavy import classify_flight_heavy
+        from backend.statistics.crew_hours.unknown_resolver import build_rotation_index
+
+        context = FlightContext(
+            flight_nid=902,
+            start_time_utc=None,  # even without times: count decides, no STEP 4
+            end_time_utc=None,
+            flight_tags=(),
+            entries=(_entry(crew_code="C1"), _entry(crew_code="C2"), _entry(crew_code="C3")),
+            departure_airport="SSH",
+            arrival_airport="HRG",
+        )
+        index = self._index(context)
+
+        verdict, reason = classify_flight_heavy(index, build_rotation_index(index), 902)
+
+        self.assertIs(verdict, True)
+        self.assertEqual(reason, "EXTRA_COCKPIT_CREW")
+
+    def test_step_four_fires_for_any_operating_member(self):
+        from backend.statistics.crew_hours.heavy import classify_flight_heavy
+        from backend.statistics.crew_hours.unknown_resolver import build_rotation_index
+
+        index = self._index(
+            _flight_context(903, "2026-06-22T15:00:00Z", "2026-06-22T21:00:00Z", ("C1", "C2")),
+            _flight_context(
+                904, "2026-06-22T22:00:00Z", "2026-06-23T03:50:00Z", ("C1", "C2"),
+                adep="XYZ", ades="HRG",
+            ),
+        )
+
+        verdict, reason = classify_flight_heavy(index, build_rotation_index(index), 903)
+
+        self.assertIs(verdict, True)
+        self.assertEqual(reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+    def test_no_context_is_indeterminate_and_all_positioning_is_no(self):
+        from backend.statistics.crew_hours.heavy import classify_flight_heavy
+        from backend.statistics.crew_hours.unknown_resolver import build_rotation_index
+
+        empty = self._index()
+        self.assertEqual(
+            classify_flight_heavy(empty, build_rotation_index(empty), 999),
+            (None, "UNKNOWN"),
+        )
+
+        riders_only = FlightContext(
+            flight_nid=905,
+            start_time_utc="2026-06-25T08:00:00Z",
+            end_time_utc="2026-06-25T11:00:00Z",
+            flight_tags=(),
+            entries=(_entry(position="PAD", crew_code="P1"), _entry(position="PSN", crew_code="P2")),
+            departure_airport="HRG",
+            arrival_airport="SSH",
+        )
+        index = self._index(riders_only)
+        self.assertEqual(
+            classify_flight_heavy(index, build_rotation_index(index), 905),
+            (False, "NONE"),
+        )
+
+
+class TestOwnerRulings20260817(unittest.TestCase):
+    """Q1/Q3 pins: trainee = Function=='SFA' only; no SP/OPS cabin rule."""
+
+    def test_missing_function_never_excludes_a_cabin_member(self):
+        # Q1: no Position-only fallback — SFA as a POSITION is a normal senior
+        # cabin rank, so five operating cabin including position-SFA is Heavy.
+        entries = [
+            _entry(pos_type="CABIN", position="FA1"),
+            _entry(pos_type="CABIN", position="FA2"),
+            _entry(pos_type="CABIN", position="FA3"),
+            _entry(pos_type="CABIN", position="FA4"),
+            _entry(pos_type="CABIN", position="SFA", function=None),
+        ]
+        self.assertEqual(operating_cabin_count(entries), 5)
+        self.assertEqual(derive_heavy_detail(entries, "B738"), (True, "EXTRA_CABIN_CREW"))
+
+    def test_sfa_position_with_a_non_sfa_function_still_counts(self):
+        entries = [
+            _entry(pos_type="CABIN", position="SFA", function="CCM"),
+        ] + [_entry(pos_type="CABIN", position=f"FA{i}") for i in range(1, 5)]
+        self.assertEqual(operating_cabin_count(entries), 5)
+
+    def test_no_sp_ops_cabin_exclusion_exists(self):
+        # Q3: OPS/SP are cockpit trainee slots; there is no approved cabin
+        # rule using them — a cabin-typed SP/OPS member counts as operating.
+        entries = [
+            _entry(pos_type="CABIN", position="SP"),
+            _entry(pos_type="CABIN", position="OPS"),
+        ] + [_entry(pos_type="CABIN", position=f"FA{i}") for i in range(1, 4)]
+        self.assertEqual(operating_cabin_count(entries), 5)
+
+
+class TestCabinTraineeDetectionMetadata(unittest.TestCase):
+    """Q1: when LEON withholds Function, the report says so — never implies
+    trainees were excluded when they were not."""
+
+    def _response(self, crew_context_index):
+        return _build_mcp_report_response(
+            _representative_report(),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
+            crew_context_index=crew_context_index,
+        )
+
+    def test_unavailable_when_leon_rejects_the_function_selection(self):
+        index = CrewContextIndex(
+            available=True, by_flight={}, contexts={}, crew_function_available=False
+        )
+        self.assertEqual(self._response(index).cabin_trainee_detection, "unavailable")
+
+    def test_unavailable_when_the_context_index_is_missing_entirely(self):
+        self.assertEqual(
+            self._response(CrewContextIndex(False, {})).cabin_trainee_detection,
+            "unavailable",
+        )
+
+    def test_active_when_function_data_was_supplied(self):
+        self.assertEqual(
+            self._response(_representative_context()).cabin_trainee_detection,
+            "active",
+        )
+
+    def test_rule_4_count_yes_is_final_in_the_report_and_carries_no_badge(self):
+        # LEON silent + over-threshold count: YES via LOCAL_RULE, resolver
+        # never consulted, no unknown_resolved badge fields.
+        report = OfficialMcpReport(
+            {"C1": "01:30"},
+            [{
+                "scope_row_unique_id": "row-902",
+                "unique_id": 902,
+                "crew_codes": ["C1"],
+                "crew_names": ["Crew One"],
+                "crew_position_names": ["CPT"],
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "01:30",
+            }],
+        )
+        context = FlightContext(
+            flight_nid=902,
+            start_time_utc="2026-06-25T08:00:00Z",
+            end_time_utc="2026-06-25T11:00:00Z",
+            flight_tags=(),
+            entries=(_entry(crew_code="C1"), _entry(crew_code="C2"), _entry(crew_code="C3")),
+            departure_airport="SSH",
+            arrival_airport="HRG",
+        )
+        response = _build_mcp_report_response(
+            report,
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
+            crew_context_index=_unknown_index(context),
+        )
+
+        flight = response.crew_members[0].flights[0]
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_source, "LOCAL_RULE")
+        self.assertEqual(flight.heavy_reason, "EXTRA_COCKPIT_CREW")
+        self.assertFalse(flight.unknown_resolved)
+
+
 class TestJoinHealth(unittest.TestCase):
     """The report must expose, never hide, an ID-mismatch across LEON sources."""
 

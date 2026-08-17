@@ -199,6 +199,69 @@ def derive_heavy(
     )[0]
 
 
+def classify_flight_heavy(
+    index,
+    rotation_index,
+    flight_nid: int | None,
+    *,
+    aircraft_type: str | None = None,
+    leon_heavy: bool | None = None,
+) -> tuple[bool | None, str]:
+    """THE flight-level Heavy verdict — the single engine for every surface.
+
+    Composes derive_heavy_detail → decide_heavy → resolve_unknown_heavy
+    exactly as the Crew Hours report wires them, so the Copilot and any other
+    caller can never disagree with the report (owner ruling, 2026-08-17).
+
+    STEP 4 at flight level: the flight is Heavy when any operating member's
+    rotation qualifies (positioning and non-operating slots never decide).
+    Returns (verdict, reason); verdict None means "no crew context at all".
+    """
+
+    from .unknown_resolver import operating_crew_codes, resolve_unknown_heavy
+
+    context = (
+        index.contexts.get(flight_nid)
+        if index.available and flight_nid is not None
+        else None
+    )
+    entries = context.entries if context is not None else ()
+    derived, derived_reason = derive_heavy_detail(
+        entries,
+        aircraft_type,
+        context.flight_tags if context is not None else None,
+        route_airports=(
+            (context.departure_airport, context.arrival_airport)
+            if context is not None
+            else None
+        ),
+    )
+    decision = decide_heavy(leon_heavy, derived, derived_reason)
+    if decision.effective_heavy is not None:
+        return decision.effective_heavy, decision.heavy_reason
+    # Rule 4: with LEON silent, an over-threshold operating count is final —
+    # STEP 4 exists only for the case where the count rule returned UNKNOWN
+    # (rule 5). decide_heavy deliberately leaves this None (its pinned table);
+    # the flight-level finalization happens here.
+    if decision.derived_heavy is True:
+        return True, decision.heavy_reason
+
+    codes = sorted(operating_crew_codes(entries))
+    if not codes:
+        # No crew context at all is indeterminate; crew with no operating
+        # member (all positioning/non-operating) is simply not Heavy.
+        return (None, "UNKNOWN") if not entries else (False, "NONE")
+
+    reason: str = "NO_FLIGHT_CONTEXT"
+    for code in codes:
+        resolution = resolve_unknown_heavy(index, rotation_index, flight_nid, code)
+        if resolution.effective_heavy:
+            return True, resolution.reason
+        if reason == "NO_FLIGHT_CONTEXT":
+            reason = resolution.reason
+    return False, reason
+
+
 def decide_heavy(
     leon_heavy: bool | None,
     derived_heavy: bool | None,

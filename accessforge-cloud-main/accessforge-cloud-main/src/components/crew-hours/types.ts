@@ -60,6 +60,9 @@ export interface CrewHoursReport {
   augmented_lookup_attempts?: number;
   crew_context_hits?: number;
   crew_context_attempts?: number;
+  // "unavailable" = LEON withheld Work Schedule Function this run, so the
+  // SFA cabin-trainee exclusion did not fire (known gap, ruling 2026-08-17).
+  cabin_trainee_detection?: "active" | "unavailable";
   crew_members: CrewMemberSummary[];
 }
 

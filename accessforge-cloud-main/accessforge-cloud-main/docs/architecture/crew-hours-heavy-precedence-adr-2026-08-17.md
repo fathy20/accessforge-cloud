@@ -1,6 +1,7 @@
 # ADR — Heavy Precedence (EVN/SVX above LEON) and the Midnight-Safe Duty Window
 
-- Date: 2026-08-17 (amended same day after the live UI review — see Decision 1a)
+- Date: 2026-08-17 (amended twice same day: live UI review → Decision 1a;
+  owner rulings Q1–Q3 → Decision 5: one engine for every surface)
 - Status: Accepted, implemented, test-pinned
 - Scope: `backend/statistics/crew_hours/heavy.py`, `unknown_resolver.py`,
   `crew_context.py`, `positions.py`, `service.py`, `schemas.py`, the
@@ -144,6 +145,34 @@ LEON's augmented data and its verdict was decided by the local rotation rule.*
 The badge carries an accessible label and the tooltip shows the resolution
 reason plus the message "Not found in LEON augmented data — resolved by local
 rotation rule" (EN + AR). Additive; row layout and interactions unchanged.
+
+## Decision 5 — One engine for every surface (owner rulings Q1–Q3, 2026-08-17)
+
+The Copilot previously classified Heavy through a second engine
+(`cabin_heavy.py`) with contradictory rules; a cross-consistency test proved
+three divergences live. Owner rulings resolved every open question:
+
+- **Cabin trainee = Work Schedule Function == "SFA"** — never Position-only
+  (SFA the *position* is a normal senior cabin rank), never
+  Position-AND-Function-TRN. LEON currently rejects the
+  `workSchedule {{ function }}` selection, so the rule cannot fire; the report
+  says so via `cabin_trainee_detection: "unavailable"` rather than implying
+  exclusion happened. Follow-up: enable the Function field on LEON's side.
+- **EVN/SVX are flight-level absolutes** — EVN vetoes a cockpit-count Yes on
+  every surface.
+- **No SP/OPS cabin exclusion** — removed with the old engine.
+- **Rule-4 finalization** — a LEON-silent over-threshold count is final
+  (`LOCAL_RULE`/`EXTRA_*`, no badge); STEP 4 runs only when the count rule
+  returns UNKNOWN, exactly as rules 4/5 are written. (The service previously
+  let the resolver override a count-derived Yes.)
+
+`heavy.classify_flight_heavy` composes derive → decide → resolve as the one
+flight-level verdict; `copilot/local_answers.py` builds its flight index from
+the same MCP report rows (so STEP 4 genuinely runs there — the hardcoded
+`is_unknown=False` dead end is gone) and maps engine reason codes to its
+citation prose. `cabin_heavy.py` survives one release as a warning shim, then
+is deleted. `backend/tests/test_heavy_cross_consistency.py` pins report ≡
+Copilot on the five screenshot cases permanently.
 
 ## Unchanged, deliberately
 

@@ -462,6 +462,11 @@ def _build_mcp_report_response(
         augmented_lookup_attempts=join_health_counters.augmented_attempts,
         crew_context_hits=join_health_counters.crew_context_hits,
         crew_context_attempts=join_health_counters.crew_context_attempts,
+        cabin_trainee_detection=(
+            "active"
+            if crew_context_index.available and crew_context_index.crew_function_available
+            else "unavailable"
+        ),
         crew_members=crew_summaries,
     )
 
@@ -528,6 +533,12 @@ def _mcp_flight_item(
     heavy_source = heavy_decision.heavy_source
     unknown_resolved = False
     unknown_resolution_reason: str | None = None
+    # Rule 4 (owner rule set): with LEON silent, an over-threshold operating
+    # count is final and never falls to the resolver — STEP 4 exists only for
+    # the count rule's UNKNOWN outcome (rule 5).
+    if effective_heavy is None and heavy_decision.derived_heavy is True:
+        effective_heavy = True
+        heavy_source = "LOCAL_RULE"
     # STEP 4 only runs where LEON genuinely returned no augmentation value.  When
     # the whole FTL index is unavailable we keep UNKNOWN rather than inventing a No.
     if effective_heavy is None and augmented_index.available:

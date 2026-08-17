@@ -156,14 +156,16 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Not Heavy", answer.text)
         self.assertIn("EVN override", answer.citation.source)
 
-    def test_evn_does_not_override_the_cockpit_rule(self):
-        # The overrides are cabin-only: cockpit stays frozen and still fires.
+    def test_evn_vetoes_even_a_cockpit_count_yes(self):
+        # Owner ruling 2026-08-17 (Q2): EVN/SVX are FLIGHT-LEVEL absolutes.
+        # Five operating cockpit would be Heavy on count; EVN must veto it.
+        # (This inverts the retired "overrides are cabin-only" behavior.)
         answer = self._ask(
             _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], ades="EVN")
         )
 
-        self.assertNotIn("Not Heavy", answer.text)
-        self.assertIn("effective cockpit count = 5 > 2", answer.citation.source)
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("EVN override", answer.citation.source)
 
     def test_svx_route_forces_heavy_on_a_standard_crew(self):
         answer = self._ask(_heavy_report(["CPT", "FO", "FA1", "FA2"], ades="SVX"))

@@ -235,12 +235,13 @@ def _crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
     )
 
 
-def _operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
+def operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
     """The comparison set: operating members only.
 
     Excludes every positioning/non-operating slot — PSN, PAD (live case
     RSX6081/RSX6082: a PAD rider on one leg must not break the match), and
-    the non-operating cockpit slots OBS/OBS2/STB.
+    the non-operating cockpit slots OBS/OBS2/STB. Public: the flight-level
+    facade in heavy.py iterates these members for STEP 4.
     """
 
     return frozenset(
@@ -250,6 +251,10 @@ def _operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]
         and entry.crew_code.strip()
         and not _is_non_operating(entry.position)
     )
+
+
+# Backwards-compatible private alias (pre-consolidation name).
+_operating_crew_codes = operating_crew_codes
 
 
 def _is_non_operating(position: str | None) -> bool:

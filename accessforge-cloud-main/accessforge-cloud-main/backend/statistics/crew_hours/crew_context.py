@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 import logging
 from typing import Any, Mapping, Sequence
@@ -53,6 +53,10 @@ class CrewContextIndex:
     available: bool
     by_flight: Mapping[int, tuple[CrewContextEntry, ...]]
     contexts: Mapping[int, FlightContext] = field(default_factory=dict)
+    # False when LEON rejected the workSchedule { function } selection for this
+    # window: the SFA-Function cabin-trainee rule then cannot fire, and the
+    # report must say so instead of implying trainees were excluded.
+    crew_function_available: bool = True
 
     def tags_for(self, flight_nid: int | None) -> tuple[str, ...] | None:
         """Return the flight's tags, or None when this flight was never indexed."""
@@ -201,6 +205,10 @@ def fetch_crew_context_index(
         chunk_start = chunk_end + timedelta(days=1)
 
     index = build_crew_context_index(flights)
+    if not include_crew_function:
+        # Owner ruling 2026-08-17 (Q1): no Position-only fallback — the rule
+        # simply does not fire, and the gap is surfaced, never papered over.
+        index = replace(index, crew_function_available=False)
     # Keep this aggregate log free of crew identifiers and upstream payloads.
     logger.info(
         "LEON crew context period=%s..%s chunks=%d flights_indexed=%d crew_function=%s unavailable=%s",

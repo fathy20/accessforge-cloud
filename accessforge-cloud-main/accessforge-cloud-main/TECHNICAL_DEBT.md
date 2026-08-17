@@ -30,17 +30,31 @@ SYSTEM_AUDIT.md for those.
 - **Problem**: `.env` (JWT secret, `WORKER_HMAC_SECRET`, SQL and Supabase
   credentials) and `redsea.db` are reachable in history before `5be7448`.
   A live `.env` value was additionally treated as compromised on 2026-08-18.
+- **`redsea.db` blob contents (inspected 2026-08-18, both historical
+  versions):** dev-era data only — NO crew names, person codes, or flight
+  records (no such tables exist in it). It holds 4 user accounts (bcrypt
+  password hashes; dev/admin-style emails, one personal address), 2 PDF
+  upload records, 5 completed task_extractor/task_stamping job rows, 8 module
+  definitions; audit_log/projects/notifications empty. Exposure = those
+  account credentials (hashes) + one personal email, all covered by rotation
+  and dev-account password resets. Rewrite priority therefore stays
+  *hygiene*, not data-breach response.
 - **Impact**: anyone with repo access holds every historical credential.
 - **Solution — sequence agreed 2026-08-18, in this order; do NOT reorder:**
   1. **Rotate** all of the above (in progress, owner). Once rotated, the
      history blobs are worthless and the rewrite is hygiene, not an emergency.
   2. **Close PR #5 and PR #6 first.** Never run the rewrite while PRs are
      open — it force-rebases every branch and orphans their heads.
-  3. **Coordinate a window with the frontend teammate**: the rewrite breaks
-     their clone; they re-clone fresh afterwards.
+  3. **Notify the frontend teammate BEFORE the rewrite** and agree the window:
+     a force-pushed rewrite silently corrupts an existing clone (pulls appear
+     to work while history has diverged). They must stop pushing until step 4
+     is done.
   4. **Rewrite history** with `git filter-repo` (drop historical `.env` and
      `redsea.db`), then force-push and re-protect branches.
-- This item stays OPEN until step 4 completes — ".env is gitignored/untracked
+  5. **After the rewrite, the teammate deletes their clone entirely and
+     re-clones fresh** — no pull/rebase of the old clone is acceptable; it
+     would resurrect the pre-rewrite objects.
+- This item stays OPEN until step 5 completes — ".env is gitignored/untracked
   today" is not grounds to close it; the exposure is historical.
 - **Complexity**: S (coordination, not code).
 

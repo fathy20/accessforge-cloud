@@ -172,13 +172,21 @@ class TestAuthLifecycle(unittest.TestCase):
             },
         )
         self.assertEqual(changed.status_code, 200)
-        self.assertEqual(changed.json(), {"status": "success"})
+        changed_body = changed.json()
+        self.assertEqual(changed_body["status"], "success")
+        # The change revokes every prior token and returns a live replacement.
+        self.assertTrue(changed_body["access_token"])
 
         with self.app.database.SessionLocal() as session:
             user = session.query(User).filter(User.email == email).one()
             self.assertEqual(user.status, UserStatus.active)
             self.assertIsNotNone(user.password_changed_at)
             self.assertEqual(user.failed_login_count, 0)
+
+        # The pre-change token is dead; the returned one works.
+        self.assertEqual(self.app.client.get("/api/auth/me", headers=headers).status_code, 401)
+        fresh_headers = {"Authorization": f"Bearer {changed_body['access_token']}"}
+        self.assertEqual(self.app.client.get("/api/auth/me", headers=fresh_headers).status_code, 200)
 
         new_login = self.app.login(email, "A_NEW_PASSWORD_12345")
         self.assertEqual(new_login.status_code, 200)

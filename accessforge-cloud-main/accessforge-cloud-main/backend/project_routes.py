@@ -14,6 +14,24 @@ class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     code: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = Field(default=None, max_length=4000)
+    # The UI has always submitted these; they were silently dropped before the
+    # columns existed.
+    tail_number: Optional[str] = Field(default=None, max_length=64)
+    station: Optional[str] = Field(default=None, max_length=64)
+
+
+def _project_payload(project: Project) -> dict:
+    return {
+        "id": project.id,
+        "owner_id": project.owner_id,
+        "name": project.name,
+        "code": project.code,
+        "tail_number": project.tail_number,
+        "station": project.station,
+        "description": project.description,
+        "status": project.status,
+        "created_at": project.created_at,
+    }
 
 @router.get("")
 def list_projects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -25,15 +43,7 @@ def list_projects(db: Session = Depends(get_db), current_user: User = Depends(ge
         .limit(200)
         .all()
     )
-    return [{
-        "id": p.id,
-        "owner_id": p.owner_id,
-        "name": p.name,
-        "code": p.code,
-        "description": p.description,
-        "status": p.status,
-        "created_at": p.created_at
-    } for p in projects]
+    return [_project_payload(p) for p in projects]
 
 @router.post("")
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -41,20 +51,14 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), curren
         owner_id=current_user.id,
         name=payload.name,
         code=payload.code,
+        tail_number=payload.tail_number,
+        station=payload.station,
         description=payload.description
     )
     db.add(proj)
     db.commit()
     db.refresh(proj)
-    return {
-        "id": proj.id,
-        "owner_id": proj.owner_id,
-        "name": proj.name,
-        "code": proj.code,
-        "description": proj.description,
-        "status": proj.status,
-        "created_at": proj.created_at
-    }
+    return _project_payload(proj)
 
 
 def _is_admin(user: User) -> bool:

@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, String, Unicode, UnicodeText, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, Index, String, Unicode, UnicodeText, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 import uuid
@@ -112,10 +112,16 @@ class User(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
+    __table_args__ = (
+        Index("ix_user_roles_user_id", "user_id"),
+        # One row per (user, role): duplicate assignments would distort the
+        # last-super-admin arithmetic in the admin routes.
+        Index("ix_user_roles_user_id_role", "user_id", "role", unique=True),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     role = Column(Enum(AppRole), default=AppRole.guest)
-    
+
     user = relationship("User", back_populates="roles")
 
 class Module(Base):
@@ -226,6 +232,7 @@ class Upload(Base):
             "scan_state IN ('not_scanned', 'pending', 'clean', 'infected')",
             name="ck_uploads_scan_state",
         ),
+        Index("ix_uploads_user_id", "user_id"),
     )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
@@ -249,6 +256,7 @@ class Upload(Base):
     
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (Index("ix_jobs_user_id", "user_id"),)
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     module_key = Column(String(128), ForeignKey("modules.key"))
@@ -269,10 +277,13 @@ class Job(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (Index("ix_projects_owner_id", "owner_id"),)
     id = Column(String(36), primary_key=True, default=gen_uuid)
     owner_id = Column(String(36), ForeignKey("users.id"))
     name = Column(Unicode(255))
     code = Column(String(64), nullable=True)
+    tail_number = Column(String(64), nullable=True)
+    station = Column(String(64), nullable=True)
     description = Column(UnicodeText().with_variant(Unicode(), "mssql"), nullable=True)
     status = Column(String(32), default="active")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -282,6 +293,10 @@ class Project(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_audit_log_user_id", "user_id"),
+        Index("ix_audit_log_ts", "ts"),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     actor_name = Column(Unicode(255), nullable=True)
@@ -293,6 +308,7 @@ class AuditLog(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notifications_user_id", "user_id"),)
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     kind = Column(String(64))
@@ -317,6 +333,13 @@ class UserInvitation(Base):
 
 class ModuleAccess(Base):
     __tablename__ = "module_access"
+    __table_args__ = (
+        Index("ix_module_access_user_id", "user_id"),
+        Index("ix_module_access_module_id", "module_id"),
+        # One override row per (user, module); duplicates would make the
+        # per-user disable flag ambiguous.
+        Index("ix_module_access_user_id_module_id", "user_id", "module_id", unique=True),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     module_id = Column(String(36), ForeignKey("modules.id"))

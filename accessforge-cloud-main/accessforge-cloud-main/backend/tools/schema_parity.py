@@ -36,7 +36,11 @@ finally:
         os.environ["DATABASE_URL"] = _original_database_url
 
 
-BASELINE_REVISION = "b8c9d0e1f2a3"
+from backend.tools.alembic_head import expected_migration_head
+
+# The revision a parity-checked database is expected to be stamped at: always
+# the current head, derived from the migration scripts instead of hardcoded.
+BASELINE_REVISION = expected_migration_head()
 IGNORED_TABLES = frozenset({"alembic_version"})
 
 EXIT_COMPATIBLE = 0

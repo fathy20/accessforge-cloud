@@ -13,8 +13,10 @@ from alembic.config import Config
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_DIRECTORY = PROJECT_ROOT / "alembic"
+from backend.tools.alembic_head import expected_migration_head
+
 BASELINE_REVISION = "f7a8b9c0d1e2"
-EXPECTED_HEAD = "b8c9d0e1f2a3"
+EXPECTED_HEAD = expected_migration_head()
 
 
 def _database_url(database_path: Path) -> str:

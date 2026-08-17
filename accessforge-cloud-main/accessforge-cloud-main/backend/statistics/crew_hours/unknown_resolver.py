@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Mapping, Sequence
 
 from .crew_context import CrewContextEntry, CrewContextIndex, FlightContext
-from .positions import NON_OPERATING_COCKPIT_POSITIONS, POSITIONING_POSITIONS
+from .positions import CREW_SET_EXCLUDED_POSITIONS, crew_set_identity
 
 
 # The break ceiling: two sectors count as one augmented rotation only strictly
@@ -36,12 +36,11 @@ _DUTY_WINDOW_SPAN = timedelta(hours=24)
 
 _PSN_POSITION = "psn"
 
-# Slots that ride the flight without operating it. Any of these on either leg
-# must not break the operating-crew comparison: PSN/PAD positioning plus the
-# non-operating cockpit slots (OBS/OBS2/STB).
+# Slots that ride the flight without operating it — the shared exclusion set
+# from positions.py (PSN/PAD positioning plus OBS/OBS2/STB), casefolded for
+# the current-leg position checks below.
 _NON_OPERATING_COMPARISON_POSITIONS = frozenset(
-    value.casefold()
-    for value in (POSITIONING_POSITIONS | NON_OPERATING_COCKPIT_POSITIONS)
+    value.casefold() for value in CREW_SET_EXCLUDED_POSITIONS
 )
 
 ResolutionReason = str
@@ -238,19 +237,14 @@ def _crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
 def operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
     """The comparison set: operating members only.
 
-    Excludes every positioning/non-operating slot — PSN, PAD (live case
-    RSX6081/RSX6082: a PAD rider on one leg must not break the match), and
-    the non-operating cockpit slots OBS/OBS2/STB. Public: the flight-level
-    facade in heavy.py iterates these members for STEP 4.
+    Shape adapter over positions.crew_set_identity — THE one crew-set
+    definition (owner ruling 2026-08-17), shared with duty grouping in
+    domain.py. Excludes PSN, PAD (live case RSX6081/RSX6082: a PAD rider on
+    one leg must not break the match), and OBS/OBS2/STB. Public: the
+    flight-level facade in heavy.py iterates these members for STEP 4.
     """
 
-    return frozenset(
-        entry.crew_code.strip().upper()
-        for entry in entries
-        if entry.crew_code
-        and entry.crew_code.strip()
-        and not _is_non_operating(entry.position)
-    )
+    return crew_set_identity((entry.crew_code, entry.position) for entry in entries)
 
 
 # Backwards-compatible private alias (pre-consolidation name).

@@ -216,6 +216,62 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Heavy", second.text)
         self.assertIn("SVX override", second.citation.source)
 
+    def test_cross_midnight_rider_rotation_survives_the_single_day_fetch(self):
+        # Bug report M-1: the real fetcher trims rows to the asked day via
+        # select_rows_for_period. A rider difference used to split the duty,
+        # dropping the cross-midnight return leg from a day-N fetch, so the
+        # Copilot's STEP 4 never saw the neighbour and answered Not Heavy
+        # while the report said Heavy. One crew-set identity keeps the pair.
+        from backend.statistics.crew_hours.domain import select_rows_for_period
+
+        rows = [
+            {
+                "scope_row_unique_id": "601",
+                "unique_id": 601,
+                "flightNo": "RSX6081",
+                "date_STD_log_UTC": "22-06-2026",
+                "JL_STD_UTC": "20:00",
+                "JL_STA_UTC": "23:30",
+                "jl_adep_preferred_code": "HRG",
+                "jl_ades_preferred_code": "OPO",
+                "crew_codes": ["C1", "C2", "P1"],
+                "crew_names": ["Crew C1", "Crew C2", "Rider P1"],
+                "crew_position_names": ["CPT", "FO", "PAD"],
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "03:30",
+            },
+            {
+                "scope_row_unique_id": "602",
+                "unique_id": 602,
+                "flightNo": "RSX6082",
+                "date_STD_log_UTC": "23-06-2026",
+                "JL_STD_UTC": "00:30",
+                "JL_STA_UTC": "04:00",
+                "jl_adep_preferred_code": "OPO",
+                "jl_ades_preferred_code": "HRG",
+                "crew_codes": ["C1", "C2"],
+                "crew_names": ["Crew C1", "Crew C2"],
+                "crew_position_names": ["CPT", "FO"],
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "03:30",
+            },
+        ]
+
+        def fetch(from_date, to_date):
+            selected = select_rows_for_period(rows, from_date, to_date)
+            totals = {code: "10:00" for row in selected for code in row["crew_codes"]}
+            return OfficialMcpReport(totals, selected)
+
+        answer = answer_locally(
+            "Is RSX6081 on 2026-06-22 Augmented (Heavy)?",
+            today=date(2026, 6, 30),
+            fetch_report=fetch,
+        )
+
+        self.assertIsNotNone(answer)
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertIn("Heavy", answer.text)
+
     def test_unknown_flight_number_says_so(self):
         answer = answer_locally(
             "Is RSX999 on 2026-06-02 Heavy?",

@@ -152,6 +152,31 @@ describe("application shell", () => {
     expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
   });
 
+  it("scrolls only the main region so the topbar and sidebar stay put", async () => {
+    testState.pathname = "/dashboard";
+    const { container } = renderWithProviders(<AppLayout>Page content</AppLayout>);
+
+    // The shell is exactly one viewport tall and never scrolls itself.
+    const shell = container.firstElementChild as HTMLElement;
+    expect(shell.className).toContain("h-screen");
+    expect(shell.className).toContain("overflow-hidden");
+
+    // Exactly one scroll container in the shell chrome: <main>.
+    const main = screen.getByRole("main");
+    expect(main.className).toContain("overflow-y-auto");
+    expect(main.className).toContain("min-h-0");
+
+    // The topbar is a sibling of the scroller, so content cannot push it away.
+    const header = container.querySelector("header") as HTMLElement;
+    expect(header.className).toContain("shrink-0");
+    expect(header.contains(main)).toBe(false);
+
+    // The sidebar spans the shell height and is likewise outside the scroller.
+    const sidebar = screen.getByLabelText("Main navigation");
+    expect(sidebar.className).toContain("h-full");
+    expect(sidebar.contains(main)).toBe(false);
+  });
+
   it("renders the Arabic shell in RTL without physical direction utilities", async () => {
     localStorage.setItem("redsea.lang", "ar");
     const { container } = renderWithProviders(<AppLayout>محتوى الصفحة</AppLayout>);

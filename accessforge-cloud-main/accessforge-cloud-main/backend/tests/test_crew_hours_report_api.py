@@ -33,7 +33,11 @@ from backend.statistics.crew_hours.errors import (
     LeonTransportError,
 )
 from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
-from backend.statistics.crew_hours.router import _validate_report_period
+from backend.statistics.crew_hours.router import (
+    _validate_report_period,
+    require_crew_hours_export,
+    require_crew_hours_view,
+)
 from backend.statistics.crew_hours.service import LiveCrewHoursService, get_crew_hours_service
 
 
@@ -75,10 +79,16 @@ class TestCrewHoursReportApi(unittest.TestCase):
         cls.client = TestClient(app)
 
     def setUp(self):
+        # The report and export routes require the crew_hours grants; the
+        # legacy POST placeholder still authenticates with get_current_user.
         app.dependency_overrides[get_current_user] = lambda: object()
+        app.dependency_overrides[require_crew_hours_view] = lambda: object()
+        app.dependency_overrides[require_crew_hours_export] = lambda: object()
 
     def tearDown(self):
         app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_crew_hours_view, None)
+        app.dependency_overrides.pop(require_crew_hours_export, None)
 
     @classmethod
     def tearDownClass(cls):
@@ -89,6 +99,8 @@ class TestCrewHoursReportApi(unittest.TestCase):
 
     def test_unauthenticated_crew_hours_endpoints_are_rejected(self):
         app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_crew_hours_view, None)
+        app.dependency_overrides.pop(require_crew_hours_export, None)
 
         report_response = self.client.get(
             "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30&position=All"
@@ -97,6 +109,11 @@ class TestCrewHoursReportApi(unittest.TestCase):
 
         self.assertEqual(report_response.status_code, 401)
         self.assertEqual(create_response.status_code, 401)
+
+    # The permissionless-user 403 contract is covered by AppHarness-backed
+    # tests in test_endpoint_authorization.py: the grant check reads the
+    # database, and this module's import-time app cannot guarantee one when
+    # the whole suite runs interleaved with harness tests.
 
     def test_mcp_report_endpoint_returns_mcp_rows_without_graphql(self):
         class FakeCrewClient:

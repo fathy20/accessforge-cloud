@@ -113,18 +113,21 @@ describe("registry-driven module UI", () => {
     localStorage.clear();
   });
 
-  it("renders only returned sidebar modules and no link for a null route", async () => {
+  it("links to the Modules grid instead of listing every module, keeping admin items", async () => {
     renderWithProviders(<AppSidebar />);
 
-    await waitFor(() => expect(screen.getByTestId("module-nav-task_extractor")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("module-nav-admin_users")).toBeInTheDocument());
 
-    expect(screen.getByTestId("module-nav-crew_hours")).toBeInTheDocument();
-    expect(screen.getByTestId("module-nav-tcm_indexing")).toBeInTheDocument();
-    expect(screen.getByTestId("module-nav-admin_users")).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^module-nav-/)).toHaveLength(apiModules.length);
-    expect(screen.queryByTestId("module-nav-effectivity")).not.toBeInTheDocument();
-    expect(screen.getByTestId("module-nav-tcm_indexing").tagName).not.toBe("A");
-    expect(screen.getByTestId("module-nav-tcm_indexing")).toHaveTextContent("Discovery required");
+    // One entry point to the grid, not a row per module.
+    const modulesLink = screen.getByTestId("shell-nav-modules");
+    expect(modulesLink).toHaveAttribute("href", "/modules");
+
+    for (const key of ["task_extractor", "task_stamping", "crew_hours", "tcm_indexing", "mail_merge"]) {
+      expect(screen.queryByTestId(`module-nav-${key}`)).not.toBeInTheDocument();
+    }
+
+    // Admin modules have no grid page, so they stay listed individually.
+    expect(screen.getAllByTestId(/^module-nav-/)).toHaveLength(1);
   });
 
   it("shows only maintenance modules on the maintenance dashboard", async () => {
@@ -147,26 +150,25 @@ describe("registry-driven module UI", () => {
     expect(screen.getByTestId("readiness-badge-tcm_indexing")).toHaveTextContent("Discovery required");
   });
 
+  // Readiness now surfaces on the grid: these modules left the sidebar when it
+  // was reduced to a single Modules link.
   it("renders different status treatments for different readiness families", async () => {
-    renderWithProviders(<AppSidebar />);
+    renderWithProviders(<MaintenancePage />);
 
-    const validationItem = await screen.findByTestId("module-nav-task_stamping");
-    const notMigratedItem = screen.getByTestId("module-nav-mail_merge");
-    const validationIndicator = screen.getByTestId("module-readiness-task_stamping");
-    const notMigratedIndicator = screen.getByTestId("module-readiness-mail_merge");
+    const validationBadge = await screen.findByTestId("readiness-badge-task_stamping");
+    const notMigratedBadge = screen.getByTestId("readiness-badge-mail_merge");
 
-    expect(validationItem).toHaveAttribute("data-readiness-status", "info");
-    expect(notMigratedItem).toHaveAttribute("data-readiness-status", "neutral");
-    expect(validationIndicator.className).not.toBe(notMigratedIndicator.className);
+    expect(validationBadge).toHaveTextContent("Under validation");
+    expect(notMigratedBadge).toHaveTextContent("Not migrated");
+    expect(validationBadge.className).not.toBe(notMigratedBadge.className);
   });
 
-  it("does not expose a not-migrated module with a link role", async () => {
-    renderWithProviders(<AppSidebar />);
+  it("does not expose a not-migrated module as a link", async () => {
+    renderWithProviders(<MaintenancePage />);
 
-    const item = await screen.findByTestId("module-nav-mail_merge");
+    const card = await screen.findByTestId("module-card-mail_merge");
 
-    expect(item).not.toHaveAttribute("role");
-    expect(item).toHaveAccessibleName("Mail Merge — Not migrated");
-    expect(screen.queryByRole("link", { name: "Mail Merge — Not migrated" })).not.toBeInTheDocument();
+    expect(card.closest("a")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Mail Merge/ })).not.toBeInTheDocument();
   });
 });

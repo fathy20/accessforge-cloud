@@ -87,7 +87,9 @@ engine.dispose()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(result["status"], "created")
         self.assertTrue(result["migrations_applied"])
-        self.assertEqual(result["final_revision"], "b8c9d0e1f2a3")
+        from backend.tools.alembic_head import expected_migration_head
+
+        self.assertEqual(result["final_revision"], expected_migration_head())
         self.assertEqual(self._sqlite_tables(path), EXPECTED_TABLES)
         self.assertFalse(self.fallback_path.exists())
         connection = sqlite3.connect(path)

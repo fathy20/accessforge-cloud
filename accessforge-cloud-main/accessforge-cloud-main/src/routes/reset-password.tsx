@@ -14,18 +14,24 @@ export const Route = createFileRoute("/reset-password")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) return toast.error("Min 8 characters");
+    if (!currentPassword) return toast.error("Enter your current (temporary) password");
+    if (password.length < 12) return toast.error("Min 12 characters");
     setLoading(true);
     try {
-      await ApiClient.fetch("/auth/change-password", {
+      const data = await ApiClient.fetch("/auth/change-password", {
         method: "POST",
-        body: JSON.stringify({ new_password: password }),
+        body: JSON.stringify({ current_password: currentPassword, new_password: password }),
       });
+      // The change revokes the old token; the server returns its replacement.
+      if (data.access_token) {
+        ApiClient.setToken(data.access_token);
+      }
       toast.success("Password updated");
       navigate({ to: "/dashboard", replace: true });
     } catch (err) {
@@ -46,12 +52,24 @@ function ResetPasswordPage() {
           <h1 className="font-semibold">Set a new password</h1>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="new-pw">New password</Label>
+          <Label htmlFor="current-pw">Current password</Label>
+          <Input
+            id="current-pw"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="new-pw">New password (min 12 characters)</Label>
           <Input
             id="new-pw"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
             required
           />
         </div>

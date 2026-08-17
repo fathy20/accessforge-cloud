@@ -223,6 +223,43 @@ def resolve_database_url(
     return database_url
 
 
+DEFAULT_CORS_ORIGINS: Final[tuple[str, ...]] = (
+    "http://localhost:3000",
+    "http://localhost:5173",
+)
+
+
+def resolve_cors_origins(
+    app_env: AppEnv | str,
+    environment: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Parse CORS_ORIGINS into a trimmed, wildcard-free origin list.
+
+    The middleware runs with allow_credentials=True, and credentialed CORS
+    forbids a wildcard origin — browsers reject it, so a configured "*" was
+    never functional, only misleading. Production refuses it outright;
+    development drops it with a warning. Entries are trimmed and trailing
+    slashes removed because origin matching is exact.
+    """
+
+    source = os.environ if environment is None else environment
+    raw = source.get("CORS_ORIGINS")
+    if raw is None or not raw.strip():
+        return list(DEFAULT_CORS_ORIGINS)
+
+    origins = [entry.strip().rstrip("/") for entry in raw.split(",")]
+    origins = [origin for origin in origins if origin]
+    if "*" in origins:
+        if app_env == "production":
+            raise _safe_configuration_error(
+                "CORS_ORIGINS",
+                "must not contain '*'; credentialed CORS forbids a wildcard origin",
+            )
+        logger.warning("Ignoring wildcard CORS origin; credentialed CORS cannot use '*'.")
+        origins = [origin for origin in origins if origin != "*"]
+    return origins or list(DEFAULT_CORS_ORIGINS)
+
+
 APP_ENV: AppEnv = get_app_env()
 DATABASE_URL: str = resolve_database_url(APP_ENV)
 SELF_SIGNUP_ENABLED: bool = _read_flag(os.environ, "SELF_SIGNUP_ENABLED", default=True)

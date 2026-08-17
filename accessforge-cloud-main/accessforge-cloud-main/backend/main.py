@@ -1,10 +1,11 @@
 import os
 import logging
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -12,12 +13,10 @@ from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import Session
 from typing import Optional
 import tempfile
-import sys
 from pydantic import BaseModel
 import traceback
-import json
 
-from .config import get_app_env, should_auto_create_schema
+from .config import get_app_env, resolve_cors_origins, should_auto_create_schema
 from .database import engine, Base, get_db
 from .models import (
     Job,
@@ -56,7 +55,42 @@ def _create_schema_if_allowed() -> None:
 
 _create_schema_if_allowed()
 
-app = FastAPI(title="Redsea Local Backend")
+
+def startup_db_seed() -> None:
+    """Project the code-owned registry into SQL, tolerating a concurrent sync.
+
+    With several workers, two processes can run this at once; the loser hits a
+    unique-key conflict. If a projection already exists the database is in the
+    desired state, so the conflict is logged and startup continues. An empty
+    projection with a failing sync is fatal — the app would run with no
+    visible modules.
+    """
+
+    from backend.database import SessionLocal as _SessionLocal
+
+    db = _SessionLocal()
+    try:
+        try:
+            sync_registry(db)
+        except Exception:
+            db.rollback()
+            if db.query(Module).count() == 0:
+                raise
+            logger.warning(
+                "Registry sync failed but a module projection exists; continuing.",
+                exc_info=True,
+            )
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    startup_db_seed()
+    yield
+
+
+app = FastAPI(title="Redsea Local Backend", lifespan=_lifespan)
 
 
 def _database_dialect_only() -> str:
@@ -128,7 +162,7 @@ def health_ready():
 
     return {"status": "ok", "dialect": dialect, "migration": migration}
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+CORS_ORIGINS = resolve_cors_origins(APP_ENV)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -144,10 +178,56 @@ app.include_router(project_router)
 app.include_router(statistics_router)
 app.include_router(copilot_router)
 
+# --- Response serializers -----------------------------------------------------
+# Endpoints return explicit shapes, never raw ORM rows: a raw row leaks server
+# internals (absolute storage paths, worker tracebacks) and silently widens the
+# API contract every time a column is added.
+
+
+def _notification_payload(notification: Notification) -> dict:
+    return {
+        "id": notification.id,
+        "kind": notification.kind,
+        "title": notification.title,
+        "body": notification.body,
+        "link": notification.link,
+        "read_at": notification.read_at,
+        "created_at": notification.created_at,
+    }
+
+
+def _upload_payload(upload: Upload) -> dict:
+    return {
+        "id": upload.id,
+        "original_name": upload.original_name,
+        "kind": _enum_value(upload.kind),
+        "mime": upload.mime,
+        "size_bytes": upload.size_bytes,
+        "sha256": upload.sha256,
+        "scan_state": upload.scan_state,
+        "retention_expires_at": upload.retention_expires_at,
+        "created_at": upload.created_at,
+    }
+
+
+def _job_payload(job: Job) -> dict:
+    return {
+        "id": job.id,
+        "module_key": job.module_key,
+        "status": _enum_value(job.status),
+        "progress": job.progress,
+        "error_message": job.error_message,
+        "output_refs": job.output_refs or {},
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
+    }
+
+
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     notifs = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
-    return notifs
+    return [_notification_payload(n) for n in notifs]
 
 @app.post("/api/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -174,6 +254,7 @@ OUTPUT_DIR = storage_backend.OUTPUT_DIR
 # Uploads API
 # ---------------------------------------------
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+MAX_FILES_PER_UPLOAD = 20
 
 @app.post("/api/uploads")
 async def upload_files(
@@ -181,6 +262,11 @@ async def upload_files(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    if len(files) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"At most {MAX_FILES_PER_UPLOAD} files per request.",
+        )
     results = []
     for file in files:
         try:
@@ -239,19 +325,14 @@ async def upload_files(
                 logger.exception("Could not remove upload after database failure.")
             raise
 
-        results.append({
-            "id": upload.id,
-            "original_name": upload.original_name,
-            "kind": upload.kind,
-            "created_at": upload.created_at
-        })
-        
+        results.append(_upload_payload(upload))
+
     return results
 
 @app.get("/api/uploads")
 def get_uploads(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     uploads = db.query(Upload).filter(Upload.user_id == current_user.id).order_by(Upload.created_at.desc()).limit(100).all()
-    return uploads
+    return [_upload_payload(upload) for upload in uploads]
 
 @app.delete("/api/uploads/{upload_id}")
 def delete_upload(upload_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -333,28 +414,40 @@ class CreateJobRequest(BaseModel):
 
 from backend.database import SessionLocal
 
+# Bound the per-job log list: a chatty handler otherwise grows the JSON column
+# (rewritten wholesale on every append) without limit.
+MAX_JOB_LOG_ENTRIES = 200
+
+
+def _append_job_log(logs, entry: dict) -> list:
+    combined = list(logs or []) + [entry]
+    return combined[-MAX_JOB_LOG_ENTRIES:]
+
+
 def run_job_background(job_id: str):
+    from datetime import datetime, timezone
+
     with SessionLocal() as db:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return
-            
+
         job.status = JobStatus.running
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
-        
+
         def log_progress(progress: int, msg: str):
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 if _j:
                     _j.progress = progress
-                    _j.logs = list(_j.logs) + [{"level": progress, "msg": msg}]
+                    _j.logs = _append_job_log(_j.logs, {"level": progress, "msg": msg})
                     _db.commit()
-            
+
         workdir = None
         try:
-            sys.path.append(str(Path(__file__).parent.parent))
             from worker.handlers import REGISTRY
-            
+
             module_key = job.module_key
             handler = REGISTRY.get(module_key)
             if not handler:
@@ -457,9 +550,15 @@ def run_job_background(job_id: str):
 
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
+                if _j is None:
+                    # The row vanished mid-run (manual cleanup, test teardown):
+                    # nothing to publish results onto.
+                    logger.warning("Job row disappeared before completion.", extra={"job_id": job_id})
+                    return
                 _j.status = JobStatus.done
                 _j.progress = 100
                 _j.output_refs = output_refs
+                _j.completed_at = datetime.now(timezone.utc)
                 output_owner = _db.query(User).filter(User.id == job.user_id).first()
                 for artifact in output_artifacts:
                     record_audit(
@@ -482,16 +581,22 @@ def run_job_background(job_id: str):
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 if _j:
                     _j.status = JobStatus.failed
-                    _j.error_message = str(e)
-                    _j.logs = list(_j.logs) + [{"level": 99, "msg": traceback.format_exc()}]
+                    # The client-facing message is bounded; the full traceback
+                    # stays in the server-side logs column, which the API never
+                    # returns.
+                    _j.error_message = str(e)[:2000]
+                    _j.completed_at = datetime.now(timezone.utc)
+                    _j.logs = _append_job_log(
+                        _j.logs, {"level": 99, "msg": traceback.format_exc()}
+                    )
                     _db.commit()
         finally:
             # Clean up the temporary workspace
             try:
                 if workdir and workdir.exists():
                     shutil.rmtree(workdir)
-            except Exception as e:
-                print(f"Failed to cleanup temp dir {workdir}: {e}")
+            except Exception:
+                logger.exception("Failed to clean up job workspace.", extra={"job_id": job_id})
 
 @app.post("/api/jobs")
 def create_job(
@@ -567,7 +672,15 @@ def _output_entry_storage_name(job: Job, entry: dict) -> str:
 
 def _owned_output_artifact(db: Session, user_id: str, filename: str) -> dict | None:
     requested_name = storage_backend.storage_basename(filename)
-    jobs = db.query(Job).filter(Job.user_id == user_id).all()
+    # Outputs only exist on completed jobs; the filter keeps this Python-side
+    # scan from touching every job the user ever ran. A relational outputs
+    # table is the real fix and belongs to the durable-jobs slice.
+    jobs = (
+        db.query(Job)
+        .filter(Job.user_id == user_id, Job.status == JobStatus.done)
+        .order_by(Job.created_at.desc())
+        .all()
+    )
     for job in jobs:
         output_refs = job.output_refs or {}
         for entry in output_refs.get("files", []):
@@ -646,7 +759,7 @@ def download_file(
 def get_jobs(
     module_key: Optional[str] = None,
     status: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -656,14 +769,14 @@ def get_jobs(
     if status:
         query = query.filter(Job.status == status)
     jobs = query.order_by(Job.created_at.desc()).limit(limit).all()
-    return jobs
+    return [_job_payload(job) for job in jobs]
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return _job_payload(job)
 
 # ---------------------------------------------
 # Modules / Config API
@@ -752,13 +865,5 @@ def _module_is_visible(
         and registry_definition.required_view_permission in permissions
     )
 
-# ---------------------------------------------
-# App Init
-# ---------------------------------------------
-@app.on_event("startup")
-def startup_db_seed():
-    db = next(get_db())
-    try:
-        sync_registry(db)
-    finally:
-        db.close()
+# App init happens in _lifespan (defined above app creation): the registry
+# projection is seeded there, replacing the deprecated on_event hook.

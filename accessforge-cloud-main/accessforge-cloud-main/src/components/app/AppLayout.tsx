@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/auth/use-permissions";
 import { RedSeaCopilot, createWingmanTransport } from "@/components/copilot";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
@@ -8,6 +9,7 @@ import { AppTopbar } from "./AppTopbar";
 export function AppLayout({ children }: { children: ReactNode }) {
   const { dir, t } = useI18n();
   const isMobile = useIsMobile();
+  const perms = usePermissions();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   // Backed by LEON's own Wingman chat via POST /api/copilot/ask.
   const copilotTransport = useMemo(
@@ -24,7 +26,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [isMobile]);
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground" dir={dir}>
+    // h-screen + overflow-hidden makes the shell exactly one viewport tall, so
+    // the only scrollable region is <main>. That keeps the sidebar and topbar
+    // in place without position:fixed, which would need width/offset mirroring
+    // and break when the sidebar collapses or the direction flips to RTL.
+    <div className="h-screen w-full overflow-hidden bg-background text-foreground" dir={dir}>
       <a
         href="#main-content"
         className="sr-only focus:fixed focus:start-page-gutter focus:top-3 focus:z-shell-skip-link focus:not-sr-only focus:rounded-md focus:border focus:border-interactive-focus focus:bg-surface-overlay focus:px-4 focus:py-2 focus:text-label focus:text-fg-primary"
@@ -32,15 +38,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
         {t("shell.skip_to_main")}
       </a>
 
-      <div className="flex min-h-screen w-full">
+      <div className="flex h-full w-full min-h-0">
         <AppSidebar
           isMobile={isMobile}
           mobileOpen={mobileNavigationOpen}
           onMobileOpenChange={setMobileNavigationOpen}
         />
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* min-h-0 lets this column shrink so its <main> child can scroll;
+            without it a flex item defaults to min-height:auto and grows
+            instead, pushing the topbar off screen. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <AppTopbar onOpenNavigation={() => setMobileNavigationOpen(true)} />
-          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto">
+          <main id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-shell px-page-gutter py-section-rhythm">
               {children}
             </div>
@@ -48,7 +57,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <RedSeaCopilot transport={copilotTransport} />
+      {/* Copilot only surfaces LEON crew data, so it follows the same grant
+          the backend enforces on /api/copilot — hiding it here just keeps the
+          UI honest; the server is the gate. */}
+      {perms.canViewModule("crew_hours") && <RedSeaCopilot transport={copilotTransport} />}
     </div>
   );
 }

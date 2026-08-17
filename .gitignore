@@ -40,7 +40,23 @@ dist-ssr
 __pycache__/
 *.pyc
 
-# Local database files
+# Local database files (including pre-migration backups)
 *.db
+*.db.bak-*
 *.sqlite
 *.sqlite3
+
+# Local artifact storage — user uploads and job outputs, never source
+local_storage/
+
+# Python virtual environments and test caches
+venv/
+.pytest_cache/
+
+# Session/agent working files — delegate scratch dirs, run state, task briefs
+.runtime/
+.codex-delegate-*/
+.*-brief.md
+
+# Supplementary local env files (LEON credentials live here on dev machines)
+.envpython

@@ -22,7 +22,11 @@ from alembic.config import Config
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_DIRECTORY = PROJECT_ROOT / "alembic"
-BASELINE_REVISION = "b8c9d0e1f2a3"
+from backend.tools.alembic_head import expected_migration_head
+
+# Adoption stamps at the current head: an adopted database, by definition of
+# passing the parity check against current metadata, has the head schema.
+BASELINE_REVISION = expected_migration_head()
 
 EXIT_SUCCESS = 0
 EXIT_REFUSED = 1

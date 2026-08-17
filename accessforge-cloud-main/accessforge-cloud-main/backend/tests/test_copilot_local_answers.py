@@ -102,7 +102,7 @@ class TestLocalAnswers(unittest.TestCase):
         self.assertIsNone(answer.citation)
 
 
-def _heavy_report(positions, tags=None):
+def _heavy_report(positions, adep="SSH", ades="VKO"):
     codes = [f"C{index}" for index in range(len(positions))]
     return OfficialMcpReport(
         {code: "01:00" for code in codes},
@@ -116,7 +116,9 @@ def _heavy_report(positions, tags=None):
                 "flightNo": "RSX431",
                 "acftType": "B738 - 737-800",
                 "blockTimeJourneyLog": "01:00",
-                "flightTags": [{"label": tag} for tag in (tags or [])],
+                # SVX/EVN are matched on the route, not on flight tags.
+                "jl_adep_preferred_code": adep,
+                "jl_ades_preferred_code": ades,
             }
         ],
     )
@@ -136,7 +138,7 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Heavy", answer.text)
         self.assertNotIn("Not Heavy", answer.text)
         self.assertEqual(answer.citation.tone, "heavy")
-        self.assertIn("EXTRA_COCKPIT_CREW", answer.citation.source)
+        self.assertIn("effective cockpit count = 5 > 2", answer.citation.source)
         self.assertIn("unique_id 660214", answer.citation.source)
 
     def test_standard_crew_is_not_heavy(self):
@@ -145,19 +147,29 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Not Heavy", answer.text)
         self.assertEqual(answer.citation.tone, "resolved")
 
-    def test_evn_tag_overrides_an_oversized_cockpit(self):
+    def test_evn_route_overrides_an_oversized_cabin(self):
+        # Six cabin would be Heavy on count; an EVN leg must override to No.
         answer = self._ask(
-            _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], tags=["EVN"])
+            _heavy_report(["CPT", "FO"] + [f"FA{i}" for i in range(1, 7)], ades="EVN")
         )
 
         self.assertIn("Not Heavy", answer.text)
-        self.assertIn("EVN_TAG", answer.citation.source)
+        self.assertIn("EVN override", answer.citation.source)
 
-    def test_svx_tag_forces_heavy_on_a_standard_crew(self):
-        answer = self._ask(_heavy_report(["CPT", "FO"], tags=["SVX"]))
+    def test_evn_does_not_override_the_cockpit_rule(self):
+        # The overrides are cabin-only: cockpit stays frozen and still fires.
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], ades="EVN")
+        )
+
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertIn("effective cockpit count = 5 > 2", answer.citation.source)
+
+    def test_svx_route_forces_heavy_on_a_standard_crew(self):
+        answer = self._ask(_heavy_report(["CPT", "FO", "FA1", "FA2"], ades="SVX"))
 
         self.assertIn("Heavy", answer.text)
-        self.assertIn("SVX_TAG", answer.citation.source)
+        self.assertIn("SVX override", answer.citation.source)
 
     def test_ops_and_sp_trainees_do_not_push_a_flight_over_the_line(self):
         # Standard 2 cockpit + 4 cabin, plus two cockpit trainees.
@@ -167,6 +179,40 @@ class TestHeavyFromMcp(unittest.TestCase):
 
         self.assertIn("Not Heavy", answer.text)
         self.assertIn("2 cockpit / 4 cabin", answer.text)
+
+    def test_bare_flight_and_date_routes_to_heavy(self):
+        # The answer to "Which flight?" carries no keyword at all.
+        for text in ("RSX431 on 2026-06-02", "RSX431 2026-06-02", "rsx431 on 2026-06-02"):
+            with self.subTest(text=text):
+                self.assertEqual(detect_intent(text), INTENT_HEAVY)
+
+    def test_bare_pattern_never_overrides_an_explicit_keyword(self):
+        self.assertEqual(
+            detect_intent("how many hours for RSX431 on 2026-06-02"), INTENT_HOURS
+        )
+        self.assertEqual(
+            detect_intent("who is on the roster on 2026-06-02"), INTENT_ROSTER
+        )
+
+    def test_bare_pattern_does_not_swallow_unrelated_messages(self):
+        for text in ("what is the weather in cairo", "hello", "2026-06-02", "RSX431"):
+            with self.subTest(text=text):
+                self.assertIsNone(detect_intent(text))
+
+    def test_two_turn_flow_resolves_the_follow_up(self):
+        report = _heavy_report(["CPT", "FO", "FA1", "FA2"], ades="SVX")
+        fetch = lambda _f, _t: report
+
+        first = answer_locally(
+            "Is this flight Augmented (Heavy)?", today=TODAY, fetch_report=fetch
+        )
+        self.assertIn("Which flight?", first.text)
+
+        # The follow-up must be answered locally, not fall through to Wingman.
+        second = answer_locally("RSX431 on 2026-06-02", today=TODAY, fetch_report=fetch)
+        self.assertIsNotNone(second)
+        self.assertIn("Heavy", second.text)
+        self.assertIn("SVX override", second.citation.source)
 
     def test_unknown_flight_number_says_so(self):
         answer = answer_locally(

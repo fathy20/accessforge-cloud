@@ -24,7 +24,10 @@ export const Route = createFileRoute("/auth")({
 });
 
 const emailSchema = z.string().trim().email("Invalid email").max(255);
-const passwordSchema = z.string().min(8, "Min 8 characters").max(72);
+// Sign-in accepts whatever the account already has; only new passwords are
+// held to the server's 12-character policy.
+const signInPasswordSchema = z.string().min(1, "Password is required").max(72);
+const signUpPasswordSchema = z.string().min(12, "Min 12 characters").max(72);
 
 import { ApiClient } from "@/lib/apiClient";
 
@@ -60,7 +63,7 @@ function AuthPage() {
     e.preventDefault();
     try {
       emailSchema.parse(email);
-      passwordSchema.parse(password);
+      (mode === "signup" ? signUpPasswordSchema : signInPasswordSchema).parse(password);
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast.error(err.issues[0].message);
@@ -71,15 +74,13 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const data = await ApiClient.fetch("/auth/register", {
+        // Registration is pending admin approval; no token is issued.
+        await ApiClient.fetch("/auth/register", {
           method: "POST",
           body: JSON.stringify({ email, password, full_name: fullName || "User" }),
         });
-        if (data.access_token) {
-          ApiClient.setToken(data.access_token);
-        }
-        toast.success("Account created successfully!");
-        navigate({ to: "/dashboard", replace: true });
+        toast.success("Registration submitted — an administrator must approve your account before you can sign in.");
+        setMode("signin");
       } else {
         const data = await ApiClient.fetch("/auth/login", {
           method: "POST",
@@ -88,8 +89,14 @@ function AuthPage() {
         if (data.access_token) {
           ApiClient.setToken(data.access_token);
         }
-        toast.success("Signed in successfully!");
-        navigate({ to: "/dashboard", replace: true });
+        if (data.must_change_password) {
+          // The token only opens the change-password route until a new
+          // password is set; send the user straight there.
+          navigate({ to: "/reset-password", replace: true });
+        } else {
+          toast.success("Signed in successfully!");
+          navigate({ to: "/dashboard", replace: true });
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication failed");

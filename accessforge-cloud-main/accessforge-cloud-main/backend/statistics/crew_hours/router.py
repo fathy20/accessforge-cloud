@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...auth import get_current_user
 from ...models import User
+from ...rbac.permissions import require_permissions
 from .errors import (
     CrewHoursCapabilityError,
     LeonAuthenticationError,
@@ -22,6 +23,13 @@ from .schemas import CrewHoursReportResponse, CrewHoursRequest, CrewHoursRespons
 from .service import CrewHoursService, get_crew_hours_service
 
 router = APIRouter(prefix="/crew-hours", tags=["crew-hours"])
+
+# Crew duty data is the module's payload, not its navigation entry, so the same
+# grant that reveals the module in /api/modules must also gate the data itself.
+# These are module-level names so tests (and any future route) can depend on or
+# override exactly one object per grant.
+require_crew_hours_view = require_permissions("crew_hours.view")
+require_crew_hours_export = require_permissions("crew_hours.view", "crew_hours.export")
 
 
 def _validate_report_period(from_date: Optional[str], to_date: Optional[str]) -> str | None:
@@ -101,7 +109,7 @@ def get_crew_hours_report(
     position: Annotated[Optional[str], Query()] = "All",
     crew_member: Annotated[Optional[str], Query()] = None,
     service: Annotated[CrewHoursService, Depends(get_crew_hours_service)] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_crew_hours_view),
 ) -> CrewHoursReportResponse:
     """Fetch official flight and crew data grouped by crew member."""
     period_error = _validate_report_period(from_date, to_date)
@@ -124,8 +132,7 @@ def export_crew_hours_report(
     position: Annotated[Optional[str], Query()] = "All",
     crew_member: Annotated[Optional[str], Query()] = None,
     service: Annotated[CrewHoursService, Depends(get_crew_hours_service)] = None,
-    # TODO(rbac): require permission "crew_hours.export"
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_crew_hours_export),
 ) -> StreamingResponse:
     period_error = _validate_report_period(from_date, to_date)
     if period_error:

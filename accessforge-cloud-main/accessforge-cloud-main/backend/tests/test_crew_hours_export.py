@@ -28,6 +28,10 @@ for _name in ("LEON_BASE_URL", "LEON_REFRESH_TOKEN", "LEON_MCP_URL", "LEON_TIMEO
 from backend.auth import get_current_user
 from backend.main import CORS_ORIGINS, app
 from backend.statistics.crew_hours.errors import LeonRateLimitError, LeonTimeoutError
+from backend.statistics.crew_hours.router import (
+    require_crew_hours_export,
+    require_crew_hours_view,
+)
 from backend.statistics.crew_hours.schemas import (
     CrewHoursPeriod,
     CrewHoursReportResponse,
@@ -167,13 +171,16 @@ class TestCrewHoursExport(unittest.TestCase):
 
     def setUp(self):
         self.service = _RecordingReportService(result=_report())
-        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-            email="exporter@example.com"
-        )
+        # The export route is gated by crew_hours.view + crew_hours.export;
+        # this override represents a user who holds both grants.
+        exporter = lambda: SimpleNamespace(email="exporter@example.com")  # noqa: E731
+        app.dependency_overrides[require_crew_hours_export] = exporter
+        app.dependency_overrides[require_crew_hours_view] = exporter
         app.dependency_overrides[get_crew_hours_service] = lambda: self.service
 
     def tearDown(self):
-        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_crew_hours_export, None)
+        app.dependency_overrides.pop(require_crew_hours_view, None)
         app.dependency_overrides.pop(get_crew_hours_service, None)
 
     @classmethod
@@ -188,12 +195,18 @@ class TestCrewHoursExport(unittest.TestCase):
         return self.client.get("/api/statistics/crew-hours/report/export", params=query)
 
     def test_endpoint_requires_authentication(self):
+        app.dependency_overrides.pop(require_crew_hours_export, None)
         app.dependency_overrides.pop(get_current_user, None)
 
         response = self._export_response()
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.service.calls, 0)
+
+    # The permissionless-user 403 contract is covered by AppHarness-backed
+    # tests in test_endpoint_authorization.py: the grant check reads the
+    # database, and this module's import-time app cannot guarantee one when
+    # the whole suite runs interleaved with harness tests.
 
     def test_query_validation_matches_report_endpoint_and_skips_service(self):
         for query, expected_detail in (

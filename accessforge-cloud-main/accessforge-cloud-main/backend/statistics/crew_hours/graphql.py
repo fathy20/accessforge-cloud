@@ -66,9 +66,39 @@ class LeonGraphQLExecutor:
             raise LeonResponseError("LEON GraphQL response was not valid JSON.") from exc
         if not isinstance(payload, dict):
             raise LeonResponseError("LEON GraphQL response had an invalid shape.")
-        if payload.get("errors"):
-            raise LeonResponseError("LEON GraphQL returned errors.")
+        errors = payload.get("errors")
+        if errors:
+            # Surface LEON's own wording. Discarding it cost hours of blind
+            # debugging: an access-restriction refusal and a malformed query
+            # were indistinguishable from a generic failure. Only the message,
+            # path and category are copied -- never the response payload.
+            raise LeonResponseError(_describe_errors(errors))
         data = payload.get("data")
         if not isinstance(data, dict):
             raise LeonResponseError("LEON GraphQL response did not contain a data object.")
         return data
+
+
+def _describe_errors(errors: Any) -> str:
+    """Render LEON's GraphQL errors array into one diagnosable sentence."""
+
+    if not isinstance(errors, list) or not errors:
+        return "LEON GraphQL returned errors."
+    parts: list[str] = []
+    for error in errors[:3]:
+        if not isinstance(error, Mapping):
+            continue
+        message = error.get("message")
+        if not isinstance(message, str) or not message.strip():
+            continue
+        detail = message.strip()
+        path = error.get("path")
+        if isinstance(path, list) and path:
+            detail += f" (at {'.'.join(str(step) for step in path)})"
+        extensions = error.get("extensions")
+        if isinstance(extensions, Mapping) and extensions.get("category"):
+            detail += f" [{extensions['category']}]"
+        parts.append(detail)
+    if not parts:
+        return "LEON GraphQL returned errors."
+    return "LEON GraphQL returned errors: " + "; ".join(parts)

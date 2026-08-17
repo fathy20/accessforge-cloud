@@ -37,7 +37,7 @@ function ProfilePage() {
 
   const [form, setForm] = useState({ full_name: "", department: "", job_title: "", phone: "", employee_id: "", avatar_url: "" });
   const [saving, setSaving] = useState(false);
-  const [pwd, setPwd] = useState({ a: "", b: "" });
+  const [pwd, setPwd] = useState({ current: "", a: "", b: "" });
   const [pwdSaving, setPwdSaving] = useState(false);
 
   useEffect(() => {
@@ -71,16 +71,21 @@ function ProfilePage() {
   };
 
   const changePassword = async () => {
-    if (pwd.a.length < 8) { toast.error(ar ? "8 أحرف على الأقل" : "Min 8 characters"); return; }
+    if (!pwd.current) { toast.error(ar ? "أدخل كلمة المرور الحالية" : "Enter your current password"); return; }
+    if (pwd.a.length < 12) { toast.error(ar ? "12 حرفًا على الأقل" : "Min 12 characters"); return; }
     if (pwd.a !== pwd.b) { toast.error(ar ? "كلمتا المرور غير متطابقتين" : "Passwords do not match"); return; }
     setPwdSaving(true);
     try {
-      await ApiClient.fetch("/auth/change-password", {
+      const data = await ApiClient.fetch("/auth/change-password", {
         method: "POST",
-        body: JSON.stringify({ new_password: pwd.a }),
+        body: JSON.stringify({ current_password: pwd.current, new_password: pwd.a }),
       });
+      // The change revokes the old token; adopt the replacement the server returns.
+      if (data.access_token) {
+        ApiClient.setToken(data.access_token);
+      }
       toast.success(ar ? "تم تحديث كلمة المرور" : "Password updated");
-      setPwd({ a: "", b: "" });
+      setPwd({ current: "", a: "", b: "" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to change password");
     } finally {
@@ -160,14 +165,18 @@ function ProfilePage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><KeyRound className="size-4" />{ar ? "كلمة المرور" : "Password"}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>{ar ? "كلمة المرور الحالية" : "Current password"}</Label>
+                  <Input type="password" autoComplete="current-password" value={pwd.current} onChange={(e) => setPwd({ ...pwd, current: e.target.value })} />
+                </div>
                 <div className="space-y-1.5">
                   <Label>{ar ? "كلمة المرور الجديدة" : "New password"}</Label>
-                  <Input type="password" value={pwd.a} onChange={(e) => setPwd({ ...pwd, a: e.target.value })} />
+                  <Input type="password" autoComplete="new-password" value={pwd.a} onChange={(e) => setPwd({ ...pwd, a: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{ar ? "تأكيد كلمة المرور" : "Confirm password"}</Label>
-                  <Input type="password" value={pwd.b} onChange={(e) => setPwd({ ...pwd, b: e.target.value })} />
+                  <Input type="password" autoComplete="new-password" value={pwd.b} onChange={(e) => setPwd({ ...pwd, b: e.target.value })} />
                 </div>
               </div>
               <div className="flex justify-end">

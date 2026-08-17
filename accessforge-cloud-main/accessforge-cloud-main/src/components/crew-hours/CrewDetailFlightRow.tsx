@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { displayAircraft, displayUtcTime, displayValue } from "./format";
+import { isLocallyResolvedHeavy, localResolutionMessage } from "./messages";
 import { PositionTokenBadge } from "./PositionTokenBadge";
 import type { CrewMemberSummary, FlightItem } from "./types";
 
@@ -27,6 +28,10 @@ export function CrewDetailFlightRow({
     flight.heavy_conflict ||
     flight.unknown_resolved,
   );
+  // The verdict was absent from LEON's augmented data and resolved by the
+  // local rotation rule — flagged with a red badge so the provenance is
+  // visible at a glance, not only inside the tooltip.
+  const locallyResolved = isLocallyResolvedHeavy(flight);
   const leonLabel =
     flight.leon_heavy === true
       ? t("crew.augmented.yes")
@@ -99,6 +104,16 @@ export function CrewDetailFlightRow({
                   !
                 </span>
               )}
+              {locallyResolved && (
+                <span
+                  role="img"
+                  aria-label={localResolutionMessage(t)}
+                  data-testid="local-resolution-marker"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground"
+                >
+                  !
+                </span>
+              )}
             </span>
           </TooltipTrigger>
           <TooltipContent>
@@ -129,6 +144,7 @@ export function CrewDetailFlightRow({
                     {t("crew.heavy.unknown_resolution")}: {flight.unknown_resolution_reason}
                   </p>
                 )}
+                {locallyResolved && <p>{localResolutionMessage(t)}</p>}
                 {(flight.is_training_position || flight.is_training_function) && (
                   <p>
                     {t("crew.heavy.training")}:{" "}

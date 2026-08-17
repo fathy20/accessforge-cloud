@@ -157,6 +157,10 @@ export const dict = {
     ar: "حل الحالة غير المعروفة",
     en: "Unknown resolution",
   },
+  "crew.heavy.local_resolution_badge": {
+    ar: "غير موجود في بيانات LEON للتعزيز — تم الحل بقاعدة الدوران المحلية",
+    en: "Not found in LEON augmented data — resolved by local rotation rule",
+  },
   "crew.heavy.training": { ar: "تدريب (TRN)", en: "Training (TRN)" },
   "crew.heavy.training_position": { ar: "من المركز (OPS/SP)", en: "Position (OPS/SP)" },
   "crew.heavy.training_function": { ar: "من الوظيفة (SFA)", en: "Function (SFA)" },

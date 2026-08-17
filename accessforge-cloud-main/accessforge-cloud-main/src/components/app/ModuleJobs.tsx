@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, RotateCcw, Ban, Download, ListTodo, Activity } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import { downloadAuthenticated, outputDownloadEndpoint } from "@/lib/uploads/helpers";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,9 +58,17 @@ export function ModuleJobs({ moduleKey }: { moduleKey: string }) {
     toast.error("Cancel not implemented yet in new backend");
   };
 
-  const downloadOutput = (url: string) => {
-    const fullUrl = url.startsWith("http") ? url : `http://localhost:8000${url}`;
-    window.open(fullUrl, "_blank", "noopener,noreferrer");
+  const downloadOutput = async (output: { name?: string; storage_name?: string; url?: string }) => {
+    const endpoint = outputDownloadEndpoint(output);
+    if (!endpoint) {
+      toast.error(ar ? "لا يوجد ملف" : "No downloadable file");
+      return;
+    }
+    try {
+      await downloadAuthenticated(endpoint, output.name || "output");
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   return (
@@ -99,7 +108,7 @@ export function ModuleJobs({ moduleKey }: { moduleKey: string }) {
                     </span>
                     {done && outputs.length > 0 && (
                       <Button size="sm" variant="default" className="h-7 text-xs gap-1.5"
-                        onClick={() => downloadOutput(outputs[0].url)}>
+                        onClick={() => downloadOutput(outputs[0])}>
                         <Download className="size-3" />
                         {ar ? "تحميل" : "Download"}
                       </Button>
@@ -122,7 +131,7 @@ export function ModuleJobs({ moduleKey }: { moduleKey: string }) {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {outputs.slice(1).map((p) => (
                         <Button key={p.url} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                          onClick={() => downloadOutput(p.url)}>
+                          onClick={() => downloadOutput(p)}>
                           <Download className="size-3" />
                           <span className="font-mono truncate max-w-[220px]">{p.name}</span>
                         </Button>

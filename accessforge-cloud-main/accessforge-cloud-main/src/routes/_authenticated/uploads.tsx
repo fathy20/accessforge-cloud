@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { formatBytes } from "@/lib/uploads/helpers";
+import { downloadAuthenticated, formatBytes } from "@/lib/uploads/helpers";
 
 export const Route = createFileRoute("/_authenticated/uploads")({
   head: () => ({ meta: [{ title: "Uploads · REDSEA" }] }),
@@ -84,8 +84,13 @@ function UploadsPage() {
     }
   };
 
-  const download = (id: string, name: string) => {
-    window.open(`${ApiClient.API_URL}/uploads/${id}/download`, "_blank");
+  const download = async (id: string, name: string) => {
+    try {
+      // window.open cannot carry the Bearer token; fetch with auth instead.
+      await downloadAuthenticated(`/uploads/${id}/download`, name);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   const filtered = uploads.filter((u: any) =>

@@ -31,3 +31,34 @@ export function formatBytes(n: number | null | undefined): string {
 export function sanitizeName(name: string): string {
   return name.replace(/[^\w.\-]+/g, "_").slice(0, 180);
 }
+
+import { ApiClient } from "@/lib/apiClient";
+
+/**
+ * Download an authenticated API endpoint and save it as a file.
+ *
+ * window.open() cannot send the Bearer token, so opening a protected download
+ * URL in a new tab is always a 401 — fetch the bytes with the token attached
+ * and hand them to the browser as an object URL instead.
+ */
+export async function downloadAuthenticated(endpoint: string, fallbackName: string): Promise<void> {
+  const { blob, filename } = await ApiClient.fetchBlob(endpoint);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || fallbackName;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Resolve the /downloads/{name} endpoint for a job output entry. */
+export function outputDownloadEndpoint(output: {
+  storage_name?: string | null;
+  url?: string | null;
+}): string | null {
+  const name = output.storage_name || output.url?.split("?")[0].split("/").pop();
+  return name ? `/downloads/${encodeURIComponent(name)}` : null;
+}

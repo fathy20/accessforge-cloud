@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -144,10 +144,56 @@ app.include_router(project_router)
 app.include_router(statistics_router)
 app.include_router(copilot_router)
 
+# --- Response serializers -----------------------------------------------------
+# Endpoints return explicit shapes, never raw ORM rows: a raw row leaks server
+# internals (absolute storage paths, worker tracebacks) and silently widens the
+# API contract every time a column is added.
+
+
+def _notification_payload(notification: Notification) -> dict:
+    return {
+        "id": notification.id,
+        "kind": notification.kind,
+        "title": notification.title,
+        "body": notification.body,
+        "link": notification.link,
+        "read_at": notification.read_at,
+        "created_at": notification.created_at,
+    }
+
+
+def _upload_payload(upload: Upload) -> dict:
+    return {
+        "id": upload.id,
+        "original_name": upload.original_name,
+        "kind": _enum_value(upload.kind),
+        "mime": upload.mime,
+        "size_bytes": upload.size_bytes,
+        "sha256": upload.sha256,
+        "scan_state": upload.scan_state,
+        "retention_expires_at": upload.retention_expires_at,
+        "created_at": upload.created_at,
+    }
+
+
+def _job_payload(job: Job) -> dict:
+    return {
+        "id": job.id,
+        "module_key": job.module_key,
+        "status": _enum_value(job.status),
+        "progress": job.progress,
+        "error_message": job.error_message,
+        "output_refs": job.output_refs or {},
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
+    }
+
+
 @app.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     notifs = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
-    return notifs
+    return [_notification_payload(n) for n in notifs]
 
 @app.post("/api/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -239,19 +285,14 @@ async def upload_files(
                 logger.exception("Could not remove upload after database failure.")
             raise
 
-        results.append({
-            "id": upload.id,
-            "original_name": upload.original_name,
-            "kind": upload.kind,
-            "created_at": upload.created_at
-        })
-        
+        results.append(_upload_payload(upload))
+
     return results
 
 @app.get("/api/uploads")
 def get_uploads(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     uploads = db.query(Upload).filter(Upload.user_id == current_user.id).order_by(Upload.created_at.desc()).limit(100).all()
-    return uploads
+    return [_upload_payload(upload) for upload in uploads]
 
 @app.delete("/api/uploads/{upload_id}")
 def delete_upload(upload_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -646,7 +687,7 @@ def download_file(
 def get_jobs(
     module_key: Optional[str] = None,
     status: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -656,14 +697,14 @@ def get_jobs(
     if status:
         query = query.filter(Job.status == status)
     jobs = query.order_by(Job.created_at.desc()).limit(limit).all()
-    return jobs
+    return [_job_payload(job) for job in jobs]
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return _job_payload(job)
 
 # ---------------------------------------------
 # Modules / Config API

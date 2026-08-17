@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -34,13 +34,23 @@ def _project_payload(project: Project) -> dict:
     }
 
 @router.get("")
-def list_projects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Projects are shared workspaces (the UI badges "mine" vs others), so every
-    # authenticated user sees the list — but bounded and newest first.
+def list_projects(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Projects are shared operational workspaces (maintenance activities for an
+    # aircraft at a station — see MCP_Memory/entities/project.md), not personal
+    # records. All authenticated users may list them; owner_id is provenance only.
+    # Any future restriction must be role-based, not owner-based.
     projects = (
         db.query(Project)
-        .order_by(Project.created_at.desc())
-        .limit(200)
+        # id as the tiebreaker keeps pagination deterministic when two
+        # projects share a created_at timestamp.
+        .order_by(Project.created_at.desc(), Project.id)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [_project_payload(p) for p in projects]

@@ -196,6 +196,73 @@ class TestProjectAuthorization(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_projects_are_visible_to_every_authenticated_user(self):
+        # Pinned access policy: projects are shared operational workspaces,
+        # not personal records — user B must see user A's project.
+        self.app.create_user("proj-author@example.test", roles=["engineer"])
+        self.app.create_user("proj-reader@example.test", roles=["viewer"])
+        project_id = self._create_project("proj-author@example.test", name="Shared A6 Check")
+
+        listing = self.app.client.get(
+            "/api/projects", headers=self.app.headers("proj-reader@example.test")
+        )
+
+        self.assertEqual(listing.status_code, 200)
+        rows = listing.json()
+        self.assertEqual([row["id"] for row in rows], [project_id])
+        # The response item shape is a pinned contract.
+        for key in ("id", "owner_id", "name", "code", "description", "status", "created_at"):
+            self.assertIn(key, rows[0])
+        self.assertEqual(rows[0]["name"], "Shared A6 Check")
+
+    def test_unauthenticated_project_list_is_rejected(self):
+        response = self.app.client.get("/api/projects")
+        self.assertEqual(response.status_code, 401)
+
+    def test_project_list_pagination_is_stable_and_newest_first(self):
+        from datetime import datetime
+
+        from backend.models import Project
+
+        self.app.create_user("proj-pager@example.test", roles=["engineer"])
+        headers = self.app.headers("proj-pager@example.test")
+        ids = [
+            self._create_project("proj-pager@example.test", name=f"Paged {index}")
+            for index in range(1, 4)
+        ]
+
+        # Pin distinct creation times so "newest first" is unambiguous.
+        with self.app.database.SessionLocal() as session:
+            for index, project_id in enumerate(ids, start=1):
+                session.query(Project).filter(Project.id == project_id).update(
+                    {"created_at": datetime(2026, 6, index, 6, 0, 0)}
+                )
+            session.commit()
+
+        first_page = self.app.client.get("/api/projects?limit=2&offset=0", headers=headers)
+        second_page = self.app.client.get("/api/projects?limit=2&offset=2", headers=headers)
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(
+            [row["id"] for row in first_page.json()], [ids[2], ids[1]]
+        )
+        self.assertEqual([row["id"] for row in second_page.json()], [ids[0]])
+
+        # Ordering is stable across calls.
+        repeat = self.app.client.get("/api/projects?limit=2&offset=0", headers=headers)
+        self.assertEqual(repeat.json(), first_page.json())
+
+    def test_project_list_limit_is_bounded(self):
+        self.app.create_user("proj-bounds@example.test", roles=["engineer"])
+        headers = self.app.headers("proj-bounds@example.test")
+
+        too_big = self.app.client.get("/api/projects?limit=500", headers=headers)
+        self.assertEqual(too_big.status_code, 422)
+        zero = self.app.client.get("/api/projects?limit=0", headers=headers)
+        self.assertEqual(zero.status_code, 422)
+        negative_offset = self.app.client.get("/api/projects?offset=-1", headers=headers)
+        self.assertEqual(negative_offset.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

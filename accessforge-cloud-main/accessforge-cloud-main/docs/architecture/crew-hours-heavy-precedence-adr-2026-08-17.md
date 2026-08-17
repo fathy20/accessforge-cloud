@@ -107,6 +107,18 @@ Heavy. Dates are no longer compared directly:
   `ROTATION_MISMATCH` ranks between `DIFFERENT_DAY` and
   `BREAK_EXCEEDS_LIMIT`.
 
+## Knowledge base authority (added 2026-08-18)
+
+The **repo-root `MCP_Memory/` tree** (`E:\...\last_V01\MCP_Memory`, tracked in
+this repository) is the one authoritative knowledge base. A nested
+single-file `MCP_Memory/` next to the app code absorbed the 2026-08-17/18
+decision entries while the root KB never saw them — that split is exactly how
+this project briefly "lost" the settled join-key finding. The nested tree was
+mirrored into the root decision log (`MCP_Memory/development/decision-log.md`)
+and `MCP_Memory/development/closed-questions.md`, then deleted (history:
+commits `e30917e` / `06611b0`). Do not recreate a nested MCP_Memory; new
+decisions go to the root tree, with this ADR holding the full Heavy rationale.
+
 ## Decision 4 — Join health is instrumented, not assumed
 
 **VERIFIED LIVE (probe runs on days 2026-06-16 / -20 / -22; recorded here

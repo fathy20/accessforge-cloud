@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -12,10 +12,8 @@ from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import Session
 from typing import Optional
 import tempfile
-import sys
 from pydantic import BaseModel
 import traceback
-import json
 
 from .config import get_app_env, should_auto_create_schema
 from .database import engine, Base, get_db
@@ -374,28 +372,40 @@ class CreateJobRequest(BaseModel):
 
 from backend.database import SessionLocal
 
+# Bound the per-job log list: a chatty handler otherwise grows the JSON column
+# (rewritten wholesale on every append) without limit.
+MAX_JOB_LOG_ENTRIES = 200
+
+
+def _append_job_log(logs, entry: dict) -> list:
+    combined = list(logs or []) + [entry]
+    return combined[-MAX_JOB_LOG_ENTRIES:]
+
+
 def run_job_background(job_id: str):
+    from datetime import datetime, timezone
+
     with SessionLocal() as db:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             return
-            
+
         job.status = JobStatus.running
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
-        
+
         def log_progress(progress: int, msg: str):
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 if _j:
                     _j.progress = progress
-                    _j.logs = list(_j.logs) + [{"level": progress, "msg": msg}]
+                    _j.logs = _append_job_log(_j.logs, {"level": progress, "msg": msg})
                     _db.commit()
-            
+
         workdir = None
         try:
-            sys.path.append(str(Path(__file__).parent.parent))
             from worker.handlers import REGISTRY
-            
+
             module_key = job.module_key
             handler = REGISTRY.get(module_key)
             if not handler:
@@ -498,9 +508,15 @@ def run_job_background(job_id: str):
 
             with SessionLocal() as _db:
                 _j = _db.query(Job).filter(Job.id == job_id).first()
+                if _j is None:
+                    # The row vanished mid-run (manual cleanup, test teardown):
+                    # nothing to publish results onto.
+                    logger.warning("Job row disappeared before completion.", extra={"job_id": job_id})
+                    return
                 _j.status = JobStatus.done
                 _j.progress = 100
                 _j.output_refs = output_refs
+                _j.completed_at = datetime.now(timezone.utc)
                 output_owner = _db.query(User).filter(User.id == job.user_id).first()
                 for artifact in output_artifacts:
                     record_audit(
@@ -523,16 +539,22 @@ def run_job_background(job_id: str):
                 _j = _db.query(Job).filter(Job.id == job_id).first()
                 if _j:
                     _j.status = JobStatus.failed
-                    _j.error_message = str(e)
-                    _j.logs = list(_j.logs) + [{"level": 99, "msg": traceback.format_exc()}]
+                    # The client-facing message is bounded; the full traceback
+                    # stays in the server-side logs column, which the API never
+                    # returns.
+                    _j.error_message = str(e)[:2000]
+                    _j.completed_at = datetime.now(timezone.utc)
+                    _j.logs = _append_job_log(
+                        _j.logs, {"level": 99, "msg": traceback.format_exc()}
+                    )
                     _db.commit()
         finally:
             # Clean up the temporary workspace
             try:
                 if workdir and workdir.exists():
                     shutil.rmtree(workdir)
-            except Exception as e:
-                print(f"Failed to cleanup temp dir {workdir}: {e}")
+            except Exception:
+                logger.exception("Failed to clean up job workspace.", extra={"job_id": job_id})
 
 @app.post("/api/jobs")
 def create_job(
@@ -608,7 +630,15 @@ def _output_entry_storage_name(job: Job, entry: dict) -> str:
 
 def _owned_output_artifact(db: Session, user_id: str, filename: str) -> dict | None:
     requested_name = storage_backend.storage_basename(filename)
-    jobs = db.query(Job).filter(Job.user_id == user_id).all()
+    # Outputs only exist on completed jobs; the filter keeps this Python-side
+    # scan from touching every job the user ever ran. A relational outputs
+    # table is the real fix and belongs to the durable-jobs slice.
+    jobs = (
+        db.query(Job)
+        .filter(Job.user_id == user_id, Job.status == JobStatus.done)
+        .order_by(Job.created_at.desc())
+        .all()
+    )
     for job in jobs:
         output_refs = job.output_refs or {}
         for entry in output_refs.get("files", []):

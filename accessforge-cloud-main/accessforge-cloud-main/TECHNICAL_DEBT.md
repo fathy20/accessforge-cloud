@@ -29,9 +29,19 @@ SYSTEM_AUDIT.md for those.
 ### 3. Secrets in git history
 - **Problem**: `.env` (JWT secret, `WORKER_HMAC_SECRET`, SQL and Supabase
   credentials) and `redsea.db` are reachable in history before `5be7448`.
+  A live `.env` value was additionally treated as compromised on 2026-08-18.
 - **Impact**: anyone with repo access holds every historical credential.
-- **Solution**: rotate all of them; rewrite history with `git filter-repo`
-  before widening repo access.
+- **Solution — sequence agreed 2026-08-18, in this order; do NOT reorder:**
+  1. **Rotate** all of the above (in progress, owner). Once rotated, the
+     history blobs are worthless and the rewrite is hygiene, not an emergency.
+  2. **Close PR #5 and PR #6 first.** Never run the rewrite while PRs are
+     open — it force-rebases every branch and orphans their heads.
+  3. **Coordinate a window with the frontend teammate**: the rewrite breaks
+     their clone; they re-clone fresh afterwards.
+  4. **Rewrite history** with `git filter-repo` (drop historical `.env` and
+     `redsea.db`), then force-push and re-protect branches.
+- This item stays OPEN until step 4 completes — ".env is gitignored/untracked
+  today" is not grounds to close it; the exposure is historical.
 - **Complexity**: S (coordination, not code).
 
 ## P2

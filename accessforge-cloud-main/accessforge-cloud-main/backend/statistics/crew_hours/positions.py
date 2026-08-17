@@ -61,6 +61,11 @@ LEON_POSITION_GROUPS: Mapping[str, frozenset[str]] = {
 
 TRAINING_FLIGHT_TYPES = frozenset({"LINE_TRAINING", "LINE_CHECK"})
 NON_OPERATING_COCKPIT_POSITIONS = frozenset({"OBS", "OBS2", "STB"})
+# Positioning slots (live values inside crew_position_names / flight-list
+# position names): the member rides the flight but does not operate it.
+# Excluded from operating counts and from STEP 4 crew-set comparison; their
+# numeric block-time inclusion semantics are governed elsewhere and unchanged.
+POSITIONING_POSITIONS = frozenset({"PSN", "PAD"})
 COCKPIT_POS_TYPE = "COCKPIT"
 CABIN_POS_TYPE = "CABIN"
 

@@ -41,6 +41,11 @@ class FlightContext:
     end_time_utc: str | None
     flight_tags: tuple[str, ...]
     entries: tuple[CrewContextEntry, ...]
+    # STEP 4 rotation continuity compares these between neighbouring sectors.
+    # They come from the same flight list on both sides of the comparison, so
+    # only internal consistency matters (ICAO preferred, IATA fallback).
+    departure_airport: str | None = None
+    arrival_airport: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,12 +77,16 @@ def build_crew_context_index(
             start_time_value: object = flight.start_time_utc
             end_time_value: object = flight.end_time_utc
             flight_tags_value: object = flight.flight_tags
+            start_airport_value: object = flight.start_airport
+            end_airport_value: object = flight.end_airport
         elif isinstance(flight, Mapping):
             flight_nid_value = flight.get("flightNid")
             crew_list_value = flight.get("crewList")
             start_time_value = flight.get("startTimeUTC")
             end_time_value = flight.get("endTimeUTC")
             flight_tags_value = flight.get("flightTags")
+            start_airport_value = flight.get("startAirport")
+            end_airport_value = flight.get("endAirport")
         else:
             raise LeonContractError("LEON flight item had an invalid shape.")
 
@@ -126,6 +135,8 @@ def build_crew_context_index(
             end_time_utc=_optional_string(end_time_value),
             flight_tags=_flight_tag_labels(flight_tags_value),
             entries=tuple(entries),
+            departure_airport=_airport_code(start_airport_value),
+            arrival_airport=_airport_code(end_airport_value),
         )
     return CrewContextIndex(available=True, by_flight=by_flight, contexts=contexts)
 
@@ -231,6 +242,8 @@ def _parse_crew_context_flights(
                 "startTimeUTC": item.get("startTimeUTC"),
                 "endTimeUTC": item.get("endTimeUTC"),
                 "flightTags": flight_tags,
+                "startAirport": item.get("startAirport"),
+                "endAirport": item.get("endAirport"),
             }
         )
     return flights
@@ -273,6 +286,26 @@ def _normalized_crew_code(value: object) -> str | None:
 
     code = _optional_string(value)
     return code.upper() if code else None
+
+
+def _airport_code(value: object) -> str | None:
+    """Extract one comparable airport code: ICAO preferred, IATA fallback.
+
+    The flight-list query selects ``startAirport { code { icao iata } }``.
+    A missing or unexpected shape degrades to None (rotation continuity then
+    fails closed) rather than failing the whole report.
+    """
+
+    if not isinstance(value, Mapping):
+        return None
+    code_object = value.get("code")
+    if not isinstance(code_object, Mapping):
+        return None
+    for key in ("icao", "iata"):
+        candidate = code_object.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip().upper()
+    return None
 
 
 def _contact_name(contact: Mapping[str, object] | None) -> str | None:

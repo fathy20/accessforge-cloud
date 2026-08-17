@@ -180,6 +180,55 @@ def _crew_context_chunk_count(from_date: str, to_date: str) -> int:
         return 0
 
 
+class _JoinHealthCounters:
+    """Per-report join instrumentation across the three LEON identifier spaces.
+
+    The Report Wizard's ``unique_id`` is joined against the FTL index (keyed
+    by ``trNid``) and the flight-list index (keyed by ``flightNid``) on the
+    UNVERIFIED assumption that they are the same number — the column docs mark
+    it AMBIGUOUS. If they differ, every lookup misses and the whole report
+    silently reads No; these counters make that failure loud instead.
+    """
+
+    __slots__ = (
+        "augmented_hits",
+        "augmented_attempts",
+        "crew_context_hits",
+        "crew_context_attempts",
+    )
+
+    def __init__(self) -> None:
+        self.augmented_hits = 0
+        self.augmented_attempts = 0
+        self.crew_context_hits = 0
+        self.crew_context_attempts = 0
+
+
+# Below this hit rate, against a non-empty index, the join is presumed broken.
+_JOIN_HEALTH_MINIMUM_HIT_RATE = 0.5
+
+
+def _join_health_status(
+    counters: _JoinHealthCounters,
+    augmented_index: AugmentedIndex,
+    crew_context_index: CrewContextIndex,
+) -> str:
+    def degraded(hits: int, attempts: int, index_size: int) -> bool:
+        return (
+            attempts > 0
+            and index_size > 0
+            and hits / attempts < _JOIN_HEALTH_MINIMUM_HIT_RATE
+        )
+
+    augmented_size = len(augmented_index.by_crew_sector) if augmented_index.available else 0
+    context_size = len(crew_context_index.by_flight) if crew_context_index.available else 0
+    if degraded(counters.augmented_hits, counters.augmented_attempts, augmented_size) or degraded(
+        counters.crew_context_hits, counters.crew_context_attempts, context_size
+    ):
+        return "DEGRADED"
+    return "OK"
+
+
 def _build_mcp_report_response(
     report: OfficialMcpReport,
     *,
@@ -192,6 +241,7 @@ def _build_mcp_report_response(
 ) -> CrewHoursReportResponse:
     augmented_index = augmented_index or AugmentedIndex(False, {}, 0, 0)
     crew_context_index = crew_context_index or CrewContextIndex(False, {})
+    join_health_counters = _JoinHealthCounters()
     # Built once per report; STEP 4 needs each crew member's flights in time order.
     rotation_index = build_rotation_index(crew_context_index)
     crew_map: Dict[str, Dict[str, Any]] = {}
@@ -271,6 +321,7 @@ def _build_mcp_report_response(
                 crew_context_index=crew_context_index,
                 rotation_index=rotation_index,
                 is_trn=explicit_trn,
+                join_health=join_health_counters,
             )
             crew_map[key]["flights"].append(flight)
         row_crew_codes.append(row_codes)
@@ -368,6 +419,34 @@ def _build_mcp_report_response(
         if isinstance(item.official_total, str) and item.official_total.strip()
     )
     crew_summaries.sort(key=lambda item: (item.display_name.casefold(), item.person_code or ""))
+
+    join_health = _join_health_status(
+        join_health_counters, augmented_index, crew_context_index
+    )
+    # DEBUG when healthy: clean reports stay quiet (a pinned contract); the
+    # counters always travel in the response, and degradation warns loudly.
+    logger.debug(
+        "Crew Hours join health period=%s..%s augmented=%d/%d crew_context=%d/%d status=%s",
+        from_date,
+        to_date,
+        join_health_counters.augmented_hits,
+        join_health_counters.augmented_attempts,
+        join_health_counters.crew_context_hits,
+        join_health_counters.crew_context_attempts,
+        join_health,
+    )
+    if join_health == "DEGRADED":
+        logger.warning(
+            "Crew Hours join health DEGRADED: report unique_id values are not "
+            "matching the FTL trNid / flight-list flightNid indices "
+            "(augmented %d/%d, crew_context %d/%d). Run "
+            "backend.statistics.crew_hours.tools.id_probe to confirm the join key.",
+            join_health_counters.augmented_hits,
+            join_health_counters.augmented_attempts,
+            join_health_counters.crew_context_hits,
+            join_health_counters.crew_context_attempts,
+        )
+
     return CrewHoursReportResponse(
         period=CrewHoursPeriod(from_date=from_date, to_date=to_date),
         source="leon_mcp_report",
@@ -378,6 +457,11 @@ def _build_mcp_report_response(
         official_totals_available=official_totals_available,
         official_totals_unavailable=len(crew_summaries) - official_totals_available,
         official_totals_by_position=official_totals_by_position,
+        join_health=join_health,
+        augmented_lookup_hits=join_health_counters.augmented_hits,
+        augmented_lookup_attempts=join_health_counters.augmented_attempts,
+        crew_context_hits=join_health_counters.crew_context_hits,
+        crew_context_attempts=join_health_counters.crew_context_attempts,
         crew_members=crew_summaries,
     )
 
@@ -391,6 +475,7 @@ def _mcp_flight_item(
     augmented_index: AugmentedIndex | None = None,
     crew_context_index: CrewContextIndex | None = None,
     rotation_index: Mapping[str, tuple[FlightContext, ...]] | None = None,
+    join_health: _JoinHealthCounters | None = None,
 ) -> FlightItem:
     flight_nid = _optional_string(row.get("scope_row_unique_id"))
     if flight_nid is None:
@@ -406,10 +491,36 @@ def _mcp_flight_item(
         if crew_context_index.available
         else ()
     )
+    # EVN/SVX are airport codes in live data. Collect every route code we know
+    # — the report row's [JL] preferred codes plus the flight-list context —
+    # so the absolute rules fire when either source names the airport.
+    flight_context = (
+        crew_context_index.contexts.get(unique_id)
+        if crew_context_index.available and unique_id is not None
+        else None
+    )
+    route_airports = (
+        _optional_string(row.get("jl_adep_preferred_code")),
+        _optional_string(row.get("jl_ades_preferred_code")),
+        flight_context.departure_airport if flight_context else None,
+        flight_context.arrival_airport if flight_context else None,
+    )
+    if join_health is not None:
+        # A hit is key-presence, not a non-None value: an ambiguous FTL value
+        # still proves the identifiers joined.
+        if augmented_index.available:
+            join_health.augmented_attempts += 1
+            if augmented_index.has_key(crew_code, row.get("unique_id")):
+                join_health.augmented_hits += 1
+        if crew_context_index.available:
+            join_health.crew_context_attempts += 1
+            if unique_id is not None and unique_id in crew_context_index.by_flight:
+                join_health.crew_context_hits += 1
     derived_heavy, derived_reason = derive_heavy_detail(
         entries,
         _optional_string(row.get("acftType")),
         crew_context_index.tags_for(unique_id),
+        route_airports=route_airports,
     )
     heavy_decision = decide_heavy(leon_heavy, derived_heavy, derived_reason)
 
@@ -427,10 +538,12 @@ def _mcp_flight_item(
             crew_code,
         )
         effective_heavy = resolution.effective_heavy
-        unknown_resolved = resolution.resolved
+        # Every leg that entered STEP 4 is resolver-decided — Yes or No — and
+        # carries the badge fields; that is what the red exclamation means.
+        # Deterministic EVN/SVX/count verdicts never reach this branch.
+        unknown_resolved = True
         unknown_resolution_reason = resolution.reason
-        if resolution.resolved:
-            heavy_source = "LOCAL_RULE"
+        heavy_source = "LOCAL_RULE"
 
     entry = _crew_entry(entries, crew_code)
     # positioning_crew remains intentionally unused; its alignment and semantics are unverified.

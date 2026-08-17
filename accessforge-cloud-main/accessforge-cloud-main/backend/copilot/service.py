@@ -8,6 +8,7 @@ from datetime import date
 from typing import Callable, Sequence
 
 from ..statistics.crew_hours.config import get_leon_configuration
+from ..statistics.crew_hours.domain import utc_today
 from ..statistics.crew_hours.mcp_report import OfficialMcpReport, fetch_official_report
 from ..statistics.crew_hours.token_provider import LeonAccessTokenProvider
 from ..statistics.crew_hours.transport import HttpxLeonTransport
@@ -54,7 +55,7 @@ class CopilotService:
         client: WingmanChatClient,
         *,
         fetch_report: Callable[[str, str], OfficialMcpReport] | None = None,
-        today: Callable[[], date] = date.today,
+        today: Callable[[], date] = utc_today,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         poll_timeout_seconds: float = POLL_TIMEOUT_SECONDS,

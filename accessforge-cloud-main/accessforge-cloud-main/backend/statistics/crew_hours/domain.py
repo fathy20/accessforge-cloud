@@ -56,6 +56,14 @@ class NormalizedReportRow:
         return crew_set_identity((slot.code, slot.position) for slot in self.crew)
 
 
+def utc_today() -> date:
+    """Today on the UTC clock. All Crew Hours date defaults derive from UTC
+    (owner ruling 2026-08-18): the report data is UTC-keyed, and around
+    midnight a non-UTC server's local date is a different day."""
+
+    return datetime.now(timezone.utc).date()
+
+
 def buffered_query_dates(from_date: str, to_date: str) -> tuple[str, str]:
     """Return the bounded UTC read window surrounding an already-valid period."""
 

@@ -293,5 +293,19 @@ class TestHeavyFromMcp(unittest.TestCase):
         )
 
 
+class TestCopilotTodayDefault(unittest.TestCase):
+    def test_default_today_callable_is_the_utc_clock(self):
+        # L-5 ruling (2026-08-18): all date defaults derive from UTC. The
+        # Copilot's relative periods ("today", "this month") must not follow
+        # the server-local clock, which is a different day around midnight.
+        import inspect
+
+        from backend.copilot.service import CopilotService
+        from backend.statistics.crew_hours.domain import utc_today
+
+        default = inspect.signature(CopilotService.__init__).parameters["today"].default
+        self.assertIs(default, utc_today)
+
+
 if __name__ == "__main__":
     unittest.main()

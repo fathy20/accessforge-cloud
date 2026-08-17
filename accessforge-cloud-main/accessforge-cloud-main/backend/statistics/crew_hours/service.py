@@ -6,7 +6,7 @@ from fastapi import Depends
 
 from .augmented import AugmentedIndex
 from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
-from .domain import buffered_query_dates, is_trn_total, normalize_report_row
+from .domain import buffered_query_dates, is_trn_total, normalize_report_row, utc_today
 from .errors import (
     CrewHoursCapabilityError,
     LeonAuthenticationError,
@@ -65,7 +65,8 @@ class LiveCrewHoursService:
         crew_member: str | None = None,
     ) -> CrewHoursReportResponse:
         """Build the report from the authoritative MCP Report Wizard rows."""
-        today = date.today()
+        # UTC, never server-local (L-5 ruling 2026-08-18): the data is UTC-keyed.
+        today = utc_today()
         if not from_date:
             from_date = today.replace(day=1).isoformat()
         if not to_date:

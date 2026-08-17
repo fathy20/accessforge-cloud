@@ -383,6 +383,63 @@ class TestCrewHoursReportApi(unittest.TestCase):
             "Query parameter 'from' must not be after 'to'.",
         )
 
+    def test_empty_period_defaults_derive_from_utc_not_server_local(self):
+        # L-5 ruling (2026-08-18): all date defaults derive from UTC, never
+        # the server-local clock — the report data is UTC-keyed, and near
+        # midnight in a non-UTC timezone the local date is a different day.
+        from datetime import date as real_date
+        from unittest import mock
+
+        from backend.statistics.crew_hours import service as crew_hours_service
+        from backend.statistics.crew_hours.errors import LeonTransportError
+
+        class _ServerLocalDate(real_date):
+            @classmethod
+            def today(cls):  # a non-UTC server just past its local midnight
+                return cls(2026, 7, 1)
+
+        class _CapturingClient:
+            def __init__(self):
+                self.period = None
+
+            def fetch_official_totals(self, from_date, to_date):
+                self.period = (from_date, to_date)
+                # Other suites pop crew_hours modules from sys.modules, so the
+                # file-level OfficialMcpReport can be a stale class object under
+                # full-suite interleaving; build with the class the service's
+                # isinstance check actually uses.
+                return crew_hours_service.OfficialMcpReport(
+                    {"AKA": "01:00"},
+                    [
+                        {
+                            "scope_row_unique_id": "9001",
+                            "unique_id": 9001,
+                            "flightNo": "RSX1",
+                            "crew_codes": ["AKA"],
+                            "blockTimeJourneyLog": "01:00",
+                        }
+                    ],
+                )
+
+            def fetch_augmented_index(self, from_date, to_date):
+                raise LeonTransportError("not under test")
+
+        client = _CapturingClient()
+        with mock.patch.object(crew_hours_service, "date", _ServerLocalDate), \
+                mock.patch.object(
+                    crew_hours_service,
+                    "utc_today",
+                    lambda: real_date(2026, 6, 30),
+                    create=True,
+                ):
+            response = crew_hours_service.LiveCrewHoursService(
+                client
+            ).get_crew_hours_report("", "")
+
+        self.assertEqual(client.period, ("2026-06-01", "2026-06-30"))
+        self.assertEqual(response.period.from_date, "2026-06-01")
+        self.assertEqual(response.period.to_date, "2026-06-30")
+
     def test_unconfigured_report_does_not_use_demo_fallback(self):
         response = self.client.get(
             "/api/statistics/crew-hours/report?from=2026-06-01&to=2026-06-30&position=All"

@@ -109,8 +109,8 @@ Heavy. Dates are no longer compared directly:
 
 ## Knowledge base authority (added 2026-08-18)
 
-The **repo-root `MCP_Memory/` tree** (`E:\...\last_V01\MCP_Memory`, tracked in
-this repository) is the one authoritative knowledge base. A nested
+The **repo-root `MCP_Memory/` tree** (two levels above this app directory,
+tracked in this repository) is the one authoritative knowledge base. A nested
 single-file `MCP_Memory/` next to the app code absorbed the 2026-08-17/18
 decision entries while the root KB never saw them — that split is exactly how
 this project briefly "lost" the settled join-key finding. The nested tree was

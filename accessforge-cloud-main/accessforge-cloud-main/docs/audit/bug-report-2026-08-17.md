@@ -68,6 +68,7 @@ response shapes) is why nothing critical remains.
 - **Where:** `backend/project_routes.py:48–49` — `POST ""` guarded by `get_current_user` only; the UI offers creation to engineer+ (`src/routes/_authenticated/projects.tsx:34`).
 - **What is wrong:** a `guest`/`viewer` can create projects via the API. Documented as a known looseness in `MCP_Memory/api/projects.md`; escalating it here for an actual ruling.
 - **Severity:** medium-low (no data exposure; content pollution + audit noise). **Proposed fix (if ruled):** role gate (engineer/admin/super_admin) mirroring the UI — one dependency + one test.
+- **RESOLVED 2026-08-18 (`0e2d405`) — owner re-tiered this UP: an authorization gap, not cosmetics.** Creation is now engineer+ via `_require_project_creator`, mirroring the UI's canCreate roles. The list path is deliberately untouched — shared visibility is settled. Pinned by AppHarness tests: viewer gets 403 on create AND 200 on list; guest gets 403.
 
 ## L-1 · api-contract — pagination inconsistency across list endpoints
 
@@ -93,6 +94,7 @@ response shapes) is why nothing critical remains.
 
 - **Where:** `backend/statistics/crew_hours/service.py:68` — `date.today()` fills empty from/to; all report data is UTC.
 - **What is wrong:** near midnight in a non-UTC server timezone the default month/day boundary is off by one day vs the data. **Severity:** low. **Proposed fix:** `datetime.now(timezone.utc).date()`.
+- **RESOLVED 2026-08-18 (`8dccf55`) — real defect, zero delivered impact, nothing to reissue.** Exposure was analysed before fixing: the runtime host is **Egypt Standard Time, not UTC** (local and UTC dates were actually different while the fix was made), so the default path produced wrong dates for ~2h every night since `0819ced` (2026-08-03). But the default is unreachable from the UI — the date pickers initialize explicitly and `buildCrewHoursReportQuery` refuses non-strict ranges, so every delivered report and export carried explicit operator-chosen dates. Only a parameterless direct API call in the local-midnight window could have hit it; no known consumer does. The fix is one `utc_today()` in `domain.py`, feeding both the service defaults and the Copilot's relative periods ("today"/"this month" — a second server-local surface found during the analysis).
 
 ## L-6 · duplicated logic — four parser/helper families duplicated across modules
 

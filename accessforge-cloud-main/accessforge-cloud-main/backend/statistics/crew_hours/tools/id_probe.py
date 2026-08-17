@@ -27,6 +27,11 @@ import argparse
 import sys
 from typing import Any, Mapping, Sequence
 
+# Loading backend.config is what reads the .env files (root and backend/.env)
+# exactly as the application does; without it LEON_* is never populated and
+# the probe cannot run at all. Import side effect is intentional.
+import backend.config  # noqa: F401
+
 from ..augmented import _extract_duty_rows, build_duty_list_query
 from ..config import load_leon_configuration
 from ..flight_query import build_flight_list_query
@@ -198,7 +203,15 @@ def run_probe(day: str, flight_filter: str | None, *, out=sys.stdout) -> int:
         " the flight query carries no flight number):",
         file=out,
     )
-    flight_payload = executor.execute_query(build_flight_list_query(day, day))
+    # LEON rejects a zero-length flightList timeInterval ("Interval length out
+    # of bounds" when start == end as bare dates), so the window is one day
+    # wide — rows starting on the following day may appear and are harmless.
+    from datetime import date as _date, timedelta as _timedelta
+
+    next_day = (_date.fromisoformat(day) + _timedelta(days=1)).isoformat()
+    flight_payload = executor.execute_query(
+        build_flight_list_query(day, next_day, include_crew_function=False)
+    )
     flight_list = flight_payload.get("flightList")
     if isinstance(flight_list, list) and flight_list:
         for flight in flight_list:

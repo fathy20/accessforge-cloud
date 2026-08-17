@@ -18,8 +18,26 @@ from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_DIR = Path("local_storage/uploads")
-OUTPUT_DIR = Path("local_storage/outputs")
+
+def _storage_root() -> Path:
+    """Anchor artifact storage to a stable location, never the process cwd.
+
+    A cwd-relative root means a server started from any other directory
+    silently orphans every artifact recorded in the database. Default is
+    <project root>/local_storage — identical to the old behavior when the
+    server was launched from the project root — overridable for deployments
+    via ARTIFACT_STORAGE_DIR.
+    """
+
+    configured = os.getenv("ARTIFACT_STORAGE_DIR")
+    if configured and configured.strip():
+        return Path(configured.strip()).expanduser().resolve()
+    return Path(__file__).resolve().parents[1] / "local_storage"
+
+
+STORAGE_ROOT = _storage_root()
+UPLOAD_DIR = STORAGE_ROOT / "uploads"
+OUTPUT_DIR = STORAGE_ROOT / "outputs"
 CHUNK_SIZE = 1024 * 1024
 MAX_ORIGINAL_NAME_LENGTH = 512
 _MAGIC_PREFIX_LENGTH = 16

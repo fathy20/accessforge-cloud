@@ -1,6 +1,7 @@
 import os
 import logging
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
 
@@ -15,7 +16,7 @@ import tempfile
 from pydantic import BaseModel
 import traceback
 
-from .config import get_app_env, should_auto_create_schema
+from .config import get_app_env, resolve_cors_origins, should_auto_create_schema
 from .database import engine, Base, get_db
 from .models import (
     Job,
@@ -54,7 +55,42 @@ def _create_schema_if_allowed() -> None:
 
 _create_schema_if_allowed()
 
-app = FastAPI(title="Redsea Local Backend")
+
+def _seed_registry() -> None:
+    """Project the code-owned registry into SQL, tolerating a concurrent sync.
+
+    With several workers, two processes can run this at once; the loser hits a
+    unique-key conflict. If a projection already exists the database is in the
+    desired state, so the conflict is logged and startup continues. An empty
+    projection with a failing sync is fatal — the app would run with no
+    visible modules.
+    """
+
+    from backend.database import SessionLocal as _SessionLocal
+
+    db = _SessionLocal()
+    try:
+        try:
+            sync_registry(db)
+        except Exception:
+            db.rollback()
+            if db.query(Module).count() == 0:
+                raise
+            logger.warning(
+                "Registry sync failed but a module projection exists; continuing.",
+                exc_info=True,
+            )
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    _seed_registry()
+    yield
+
+
+app = FastAPI(title="Redsea Local Backend", lifespan=_lifespan)
 
 
 def _database_dialect_only() -> str:
@@ -126,7 +162,7 @@ def health_ready():
 
     return {"status": "ok", "dialect": dialect, "migration": migration}
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+CORS_ORIGINS = resolve_cors_origins(APP_ENV)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -218,6 +254,7 @@ OUTPUT_DIR = storage_backend.OUTPUT_DIR
 # Uploads API
 # ---------------------------------------------
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+MAX_FILES_PER_UPLOAD = 20
 
 @app.post("/api/uploads")
 async def upload_files(
@@ -225,6 +262,11 @@ async def upload_files(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    if len(files) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"At most {MAX_FILES_PER_UPLOAD} files per request.",
+        )
     results = []
     for file in files:
         try:
@@ -823,13 +865,5 @@ def _module_is_visible(
         and registry_definition.required_view_permission in permissions
     )
 
-# ---------------------------------------------
-# App Init
-# ---------------------------------------------
-@app.on_event("startup")
-def startup_db_seed():
-    db = next(get_db())
-    try:
-        sync_registry(db)
-    finally:
-        db.close()
+# App init happens in _lifespan (defined above app creation): the registry
+# projection is seeded there, replacing the deprecated on_event hook.

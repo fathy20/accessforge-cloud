@@ -5,11 +5,11 @@ Welcome to the central nervous system of the AccessForge Project. This Knowledge
 
 ## 🧭 Starting Points for Agents
 Based on your current task, start here:
-- **Want to understand the big picture?** Read [system/overview.md](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/system/overview.md) and [mapping/app2-vs-web.md](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/mapping/app2-vs-web.md)
-- **Want to implement/edit a specific Module?** Look in `modules/` (e.g., [modules/task-extractor.md](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/modules/task-extractor.md)) then deep-dive into its [business-logic/](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/business-logic/).
-- **Need to write SQL or map an Entity?** Check [database/erd.md](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/database/erd.md) and [entities/](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/entities/).
-- **Curious why a technical choice was made?** Read the [decisions/](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/decisions/) folder (ADRs).
-- **Need to write Tests?** Go to [testing/](file:///E:/work/REDSEA/web/last_V01/MCP_Memory/testing/) to ensure feature parity with App2.
+- **Want to understand the big picture?** Read [system/overview.md](system/overview.md) and [mapping/app2-vs-web.md](mapping/app2-vs-web.md)
+- **Want to implement/edit a specific Module?** Look in `modules/` (e.g., [modules/task-extractor.md](modules/task-extractor.md)) then deep-dive into its [business-logic/](business-logic/).
+- **Need to write SQL or map an Entity?** Check [database/erd.md](database/erd.md) and [entities/](entities/).
+- **Curious why a technical choice was made?** Read the [decisions/](decisions/) folder (ADRs).
+- **Need to write Tests?** Go to [testing/](testing/) to ensure feature parity with App2.
 
 ---
 

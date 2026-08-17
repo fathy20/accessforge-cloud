@@ -1,5 +1,25 @@
 # Development Decision Log
 
+## 2026-08-18 — Join key CONFIRMED live; docs corrected to match
+
+- **`unique_id == flightNid == trNid` is settled, not open.** `id_probe.py`
+  was run against live LEON for days 2026-06-16 / -20 / -22 in an earlier
+  session: all three endpoints returned the same identifier (RSX331 =
+  `67230742` across Report Wizard, flight list, and FTL), airports came back
+  ICAO (HESH→USSS). A live June 2026 report then showed `join_health: OK`,
+  `augmented_lookup_hits 1892/2493`, `crew_context_hits 2107/2493`. The only
+  in-repo record of this was the `_row_flight_nid` docstring in
+  `backend/copilot/local_answers.py`; the ADR (Decision 4) and the 2026-08-17
+  entry below still said UNVERIFIED — both are corrected as of this entry.
+  Do not re-run the probe or re-decide the key; the hit-rate instrumentation
+  remains as a regression tripwire only.
+- **The `workSchedule { function }` gap is documented, not unverified.** LEON
+  *rejects* the selection (live 2026-06 run) — that rejection is the reason
+  the cabin-trainee rule (Function == "SFA", the Q1 ruling) does not fire in
+  production. Surfaced as `cabin_trainee_detection: "unavailable"` in report
+  metadata (pinned by tests in `test_crew_hours_heavy.py`). Follow-up stays
+  open on LEON's side: enable the Function field.
+
 ## 2026-08-17 — Owner rulings: one Heavy engine, trainee definition, consolidation
 
 - **Q1 ruling — cabin trainee = Work Schedule Function == "SFA"** (the
@@ -102,7 +122,8 @@
   the return leg cannot break the match.
 - **Join health instrumented, not assumed.** The Report-Wizard `unique_id` ↔
   FTL `trNid` ↔ flight-list `flightNid` equivalence remains UNVERIFIED (column
-  ADR: AMBIGUOUS). Each report run exposes
+  ADR: AMBIGUOUS). *[Superseded — confirmed live; see the 2026-08-18 entry.]*
+  Each report run exposes
   `augmented_lookup_hits/attempts` and `crew_context_hits/attempts` plus
   `join_health` ("DEGRADED" below a 50% hit rate against a non-empty index,
   with a warning log). `backend/statistics/crew_hours/tools/id_probe.py`

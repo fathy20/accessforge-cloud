@@ -109,11 +109,20 @@ Heavy. Dates are no longer compared directly:
 
 ## Decision 4 — Join health is instrumented, not assumed
 
-The pipeline joins Report Wizard rows (`unique_id`) to the FTL index
-(`trNid`) and the flight-list index (`flightNid`) on an **unverified**
+**VERIFIED LIVE (probe runs on days 2026-06-16 / -20 / -22; recorded here
+2026-08-18): `unique_id == flightNid == trNid`.** `id_probe.py` returned the
+same number from all three endpoints — e.g. RSX331 = `67230742` in the Report
+Wizard row, the flight list, and the FTL index — with airports returned as
+ICAO (HESH→USSS). A full live June 2026 report subsequently showed
+`join_health: OK` with `augmented_lookup_hits 1892/2493` and
+`crew_context_hits 2107/2493`. The join key is confirmed; the instrumentation
+below stays in place as a regression tripwire, not as an open question.
+
+At design time the pipeline joined Report Wizard rows (`unique_id`) to the FTL
+index (`trNid`) and the flight-list index (`flightNid`) on a then-unverified
 assumption that these are the same number (the column ADR marks the report
-identifiers AMBIGUOUS). If they differ, every lookup misses and the whole
-report silently reads No. Instead of guessing a remapping:
+identifiers AMBIGUOUS). If they differed, every lookup would miss and the
+whole report silently read No. Instead of guessing a remapping:
 
 - Every report run counts `augmented_lookup_hits/attempts` and
   `crew_context_hits/attempts` (a *hit* is key presence, so an ambiguous FTL

@@ -175,12 +175,22 @@ def _heavy_answer(
         )
 
     wanted = match.group(1).replace(" ", "").replace("-", "")
-    report = fetch_report(period.start.isoformat(), period.end.isoformat())
+    # M-1 ruling (2026-08-18): fetch one day beyond the asked period on both
+    # sides. The fetcher trims by DUTY-ATTRIBUTED date, so a cross-midnight
+    # neighbour (or the asked leg itself, when a rider difference re-attributes
+    # it to the previous day's duty) lands outside a single-day fetch. The
+    # extra rows only feed the STEP-4 index; the answer still targets the
+    # asked flight on the asked date via the row's own calendar date below.
+    report = fetch_report(
+        (period.start - timedelta(days=1)).isoformat(),
+        (period.end + timedelta(days=1)).isoformat(),
+    )
     rows = [
         row
         for row in report.rows
         if (_text(row.get("flightNo")) or "").upper().replace(" ", "").replace("-", "")
         == wanted
+        and _row_in_period(row, period)
     ]
     if not rows:
         return CopilotAnswer(
@@ -291,6 +301,18 @@ def _entries_from_row(row: Mapping[str, Any]) -> list[CrewContextEntry]:
             )
         )
     return entries
+
+
+def _row_in_period(row: Mapping[str, Any], period: Period) -> bool:
+    """True when the row's OWN calendar date falls inside the asked period.
+
+    The widened Heavy fetch returns neighbouring days too; answer targeting
+    uses the row's `date_STD_log_UTC`, not the fetcher's duty attribution.
+    Rows without a parseable date stay eligible (required-column contract).
+    """
+
+    source_date = normalize_report_row(row).source_date
+    return source_date is None or period.start <= source_date <= period.end
 
 
 def _row_flight_nid(row: Mapping[str, Any]) -> int | None:

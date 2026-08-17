@@ -12,6 +12,7 @@ from datetime import date
 
 from backend.copilot.local_answers import _context_index_from_report, answer_locally
 from backend.statistics.crew_hours.augmented import AugmentedIndex
+from backend.statistics.crew_hours.domain import select_rows_for_period
 from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
 from backend.statistics.crew_hours.positions import POSITIONING_POSITIONS
 from backend.statistics.crew_hours.service import _build_mcp_report_response
@@ -69,10 +70,18 @@ def report_path_verdict(report: OfficialMcpReport, unique_id: int, crew_code: st
 def copilot_path_verdict(report: OfficialMcpReport, flight_number: str, day_iso: str):
     """The REAL Copilot local answer; verdict parsed from its fixed phrasing."""
 
+    def fetch(from_date: str, to_date: str) -> OfficialMcpReport:
+        # Emulate the REAL fetcher's trimming (fetch_official_report):
+        # duty-attributed period selection, not a pass-through of all rows.
+        return OfficialMcpReport(
+            dict(report),
+            select_rows_for_period(report.rows, from_date, to_date),
+        )
+
     answer = answer_locally(
         f"Is {flight_number} on {day_iso} Augmented (Heavy)?",
         today=date(2026, 6, 30),
-        fetch_report=lambda _f, _t: report,
+        fetch_report=fetch,
     )
     assert answer is not None
     if "cannot be determined" in answer.text:
@@ -148,6 +157,23 @@ class TestHeavyCrossConsistency(unittest.TestCase):
         ])
         self.assert_flight_agrees(report, 611, "RSX6081", "2026-06-22")
         self.assert_flight_agrees(report, 612, "RSX6084", "2026-06-23")
+
+    def test_case_6_cross_midnight_return_with_rider_difference(self):
+        # M-1 (bug report 2026-08-17): the return leg STARTS on the next UTC
+        # day, and the legs differ by a PAD rider — so duty grouping (PSN-only
+        # identity, the 2026-08-09 parity ruling) does NOT connect them, and a
+        # single-day fetch trims the return leg out. The Copilot's STEP 4 then
+        # never saw the neighbour and answered No while the month-window
+        # report answered Yes. The widened Copilot fetch window closes this.
+        report = _report([
+            _row(701, "RSX6081", "22-06-2026", "20:00", "23:30", "HRG", "OPO",
+                 [("C1", "CPT"), ("C2", "FO"), ("P1", "PAD")]),
+            _row(702, "RSX6082", "23-06-2026", "00:30", "04:00", "OPO", "HRG",
+                 [("C1", "CPT"), ("C2", "FO")]),
+        ])
+        self.assert_flight_agrees(report, 701, "RSX6081", "2026-06-22")
+        self.assert_flight_agrees(report, 702, "RSX6082", "2026-06-23")
+        self.assertTrue(copilot_path_verdict(report, "RSX6081", "2026-06-22"))
 
     def test_case_5_cabin_positioning_rider_no_on_both_surfaces(self):
         # Four operating cabin plus a PAD rider: the rider never tips the

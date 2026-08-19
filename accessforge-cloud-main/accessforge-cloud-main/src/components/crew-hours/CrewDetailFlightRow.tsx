@@ -139,7 +139,9 @@ export function CrewDetailFlightRow({
                     {t("crew.heavy.derived")}: {derivedLabel}
                   </p>
                 )}
-                {flight.unknown_resolved && flight.unknown_resolution_reason && (
+                {/* Shown whenever STEP 4 ran, badge or not: the reason is
+                    diagnostic, while the badge is a claim about the verdict. */}
+                {flight.unknown_resolution_reason && (
                   <p>
                     {t("crew.heavy.unknown_resolution")}: {flight.unknown_resolution_reason}
                   </p>

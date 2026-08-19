@@ -298,7 +298,11 @@ def _add_detail_crew_block(
             _augmented_heavy_display(flight.leon_heavy),
             _augmented_heavy_display(flight.derived_heavy),
             _training_source_display(flight),
-            flight.unknown_resolution_reason if flight.unknown_resolved else None,
+            # Keyed on the reason, not on the badge: the badge now means only
+            # "the resolver established Heavy", while the reason is present for
+            # every leg STEP 4 touched. This keeps the exported column exactly
+            # as it was before the badge rule narrowed.
+            flight.unknown_resolution_reason,
         )
         for column, value in enumerate(provenance_values, start=augmented_column + 1):
             provenance_cell = worksheet.cell(row=row, column=column)

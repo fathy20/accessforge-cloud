@@ -87,11 +87,18 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    pair now reports `ROTATION_MISMATCH` instead of `BREAK_EXCEEDS_LIMIT`,
    because the rotation check runs before the break arithmetic.
 
-8. **Badge semantics.** The red exclamation means exactly one thing: "absent
-   from LEON augmented data, decided by the local rotation rule". Every leg
-   that enters STEP 4 gets `unknown_resolved=True` + `heavy_source=LOCAL_RULE`
-   regardless of Yes/No (both legs of a resolved rotation carry it);
-   airport/tag/count-decided rows never do.
+8. **Badge semantics — CORRECTED 2026-08-19 (owner ruling).** The red
+   exclamation means exactly one thing: **the rotation resolver established
+   Heavy = True**. `unknown_resolved = resolution.effective_heavy`. A resolver
+   No means "no qualifying rotation was found" — absence of evidence, not a
+   local resolution — and carries no badge. Deterministic verdicts (LEON value,
+   EVN/SVX airport, count rule) never enter STEP 4 and so never carry it
+   either. `unknown_resolution_reason` is still recorded for every leg STEP 4
+   touched, because it is diagnostic rather than a claim; the export column and
+   the tooltip line key on the reason, not the badge. `heavy_source` stays
+   `LOCAL_RULE` on a resolver No.
+   RETRACTED: the previous wording "every leg that enters STEP 4 gets
+   `unknown_resolved=True` regardless of Yes/No".
 
 Also settled (context, same ADR): thresholds are the operator standard
 complement — cockpit > 2, cabin > 4, derived from June 2026 data (304

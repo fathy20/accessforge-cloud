@@ -418,7 +418,7 @@ class TestScreenshotEvidence(unittest.TestCase):
                 self.assertTrue(flight.unknown_resolved)
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
 
-    def test_case_4_unresolvable_chain_is_no_with_badges_on_both_legs(self):
+    def test_case_4_unresolvable_chain_is_no_without_badges(self):
         # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: the rotation never
         # returns to HRG. With continuity now a true out-and-back, the pair
         # fails on ROTATION_MISMATCH before the break arithmetic is reached.
@@ -444,22 +444,24 @@ class TestScreenshotEvidence(unittest.TestCase):
             for leg in ("RSX6081", "RSX6084"):
                 flight = flights[leg]
                 self.assertIs(flight.augmented_heavy, False, f"{code} {leg}")
-                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
+                self.assertFalse(flight.unknown_resolved, f"{code} {leg}")
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
                 self.assertEqual(
                     flight.unknown_resolution_reason, "ROTATION_MISMATCH"
                 )
 
-    def test_step_four_entry_always_flags_unknown_resolved(self):
-        # A leg absent from the crew-context index still entered STEP 4: its No
-        # is resolver-decided and must carry the badge fields.
+    def test_step_four_entry_does_not_flag_unknown_resolved_on_a_no(self):
+        # Owner ruling 2026-08-19, replacing "every STEP-4 entry is badged":
+        # the badge means the resolver ESTABLISHED Heavy = True. A No means no
+        # qualifying rotation was found, which is an absence of evidence -- the
+        # reason is still recorded, the badge is not.
         rows = [_screenshot_row(621, "RSX700", "HRG", "SSH", ["C1"], ["CPT"])]
 
         response = self._response(rows, [])
 
         flight = self._flights_by_leg(response, "C1")["RSX700"]
         self.assertIs(flight.augmented_heavy, False)
-        self.assertTrue(flight.unknown_resolved)
+        self.assertFalse(flight.unknown_resolved)
         self.assertEqual(flight.heavy_source, "LOCAL_RULE")
         self.assertEqual(flight.unknown_resolution_reason, "NO_FLIGHT_CONTEXT")
 

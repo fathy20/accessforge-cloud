@@ -37,6 +37,11 @@ class FlightItem(BaseModel):
     is_training_position: bool = False
     is_training_function: bool = False
     # STEP 4 provenance for flights LEON left without an augmentation value.
+    # unknown_resolved is the BADGE, and the badge means exactly one thing:
+    # the rotation resolver established Heavy = True. A resolver No means "no
+    # qualifying rotation found", which is not a local resolution and carries no
+    # badge (owner ruling 2026-08-19). The reason is kept either way, because it
+    # is diagnostic rather than a claim.
     unknown_resolved: bool = False
     unknown_resolution_reason: str | None = None
 

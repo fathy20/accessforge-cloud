@@ -392,6 +392,8 @@ class TestCaseC(unittest.TestCase):
                 self.assertEqual(
                     flight.unknown_resolution_reason, "ROTATION_MISMATCH", f"{code} {leg}"
                 )
+                # 2.4: a resolver No is not a resolver-established Heavy.
+                self.assertFalse(flight.unknown_resolved, f"{code} {leg}")
 
     def test_the_same_pair_flown_as_an_out_and_back_is_yes(self):
         # Change only the second leg's destination back to the origin.
@@ -423,6 +425,52 @@ class TestCaseC(unittest.TestCase):
         flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
         self.assertIs(flight.augmented_heavy, False)
         self.assertEqual(flight.unknown_resolution_reason, "ROTATION_MISMATCH")
+
+
+# --------------------------------------------------------------------------
+# 2.4 — badge ⟺ the resolver established Heavy = True
+# --------------------------------------------------------------------------
+
+
+class TestBadgeMeansResolverEstablishedHeavy(unittest.TestCase):
+    def test_a_resolver_no_carries_no_badge(self):
+        # Case D: 22-06 HRG→OPO then 23-06 OPO→SSH. STEP 4 ran and found no
+        # qualifying rotation. "Not found" is not "locally resolved".
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1101, "RSX6081", "HRG", "OPO", crew),
+            _row(1102, "RSX6084", "OPO", "SSH", crew),
+        ]
+        contexts = [
+            _context(1101, "2026-06-22T15:00:00Z", "2026-06-22T21:00:00Z", crew, "HRG", "OPO"),
+            _context(1102, "2026-06-23T08:00:00Z", "2026-06-23T12:00:00Z", crew, "OPO", "SSH"),
+        ]
+
+        response = _response(rows, contexts)
+        for code in ("C1", "C2"):
+            for leg, flight in _legs(response, code).items():
+                self.assertIs(flight.augmented_heavy, False, f"{code} {leg}")
+                self.assertFalse(flight.unknown_resolved, f"{code} {leg}")
+
+    def test_a_leg_with_no_context_at_all_carries_no_badge(self):
+        rows = [_row(1111, "RSX700", "HRG", "SSH", [("C1", "CPT")])]
+
+        flight = _legs(_response(rows, []), "C1")["RSX700"]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertFalse(flight.unknown_resolved)
+        self.assertEqual(flight.unknown_resolution_reason, "NO_FLIGHT_CONTEXT")
+
+    def test_a_count_rule_verdict_carries_no_badge(self):
+        crew = [("C1", "CPT"), ("C2", "FO"), ("C3", "FO2")]
+        rows = [_row(1121, "RSX500", "HRG", "SSH", crew)]
+        contexts = [
+            _context(1121, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH")
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX500"]
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_reason, "EXTRA_COCKPIT_CREW")
+        self.assertFalse(flight.unknown_resolved)
 
 
 if __name__ == "__main__":

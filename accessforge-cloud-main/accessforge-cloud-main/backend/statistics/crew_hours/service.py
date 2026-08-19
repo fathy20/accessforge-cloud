@@ -556,10 +556,12 @@ def _mcp_flight_item(
             crew_code,
         )
         effective_heavy = resolution.effective_heavy
-        # Every leg that entered STEP 4 is resolver-decided — Yes or No — and
-        # carries the badge fields; that is what the red exclamation means.
-        # Deterministic EVN/SVX/count verdicts never reach this branch.
-        unknown_resolved = True
+        # The badge marks a verdict the resolver ESTABLISHED, and it can only
+        # establish a Yes: a No means "no qualifying rotation was found", which
+        # is an absence of evidence, not a local resolution (owner ruling
+        # 2026-08-19). Deterministic EVN/SVX/count verdicts never reach this
+        # branch at all, so they can never carry it either.
+        unknown_resolved = resolution.effective_heavy
         unknown_resolution_reason = resolution.reason
         heavy_source = "LOCAL_RULE"
 

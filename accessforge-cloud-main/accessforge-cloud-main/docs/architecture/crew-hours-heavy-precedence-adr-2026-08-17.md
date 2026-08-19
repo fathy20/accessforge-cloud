@@ -278,6 +278,19 @@ then RSX6084 OPO→SSH) now reports `ROTATION_MISMATCH` rather than
 `BREAK_EXCEEDS_LIMIT`, because the rotation check runs before the break
 arithmetic.
 
+### 6.4 — The badge means the resolver established Heavy = True. Supersedes Decision 5's badge semantics and closed question 8.
+
+`service.py` set `unknown_resolved = True` unconditionally on STEP-4 entry, so a
+resolver No — which means "no qualifying rotation was found" — was badged as a
+local resolution. Absence of evidence is not a resolution. `unknown_resolved` is
+now `resolution.effective_heavy`.
+
+`unknown_resolution_reason` is still recorded on every leg STEP 4 touched: it is
+diagnostic, not a claim. The Excel export column and the tooltip line are keyed
+on the reason rather than on the badge, so both show exactly what they showed
+before the badge rule narrowed. `heavy_source` stays `LOCAL_RULE` for a resolver
+No, because the verdict did come from the local rule.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

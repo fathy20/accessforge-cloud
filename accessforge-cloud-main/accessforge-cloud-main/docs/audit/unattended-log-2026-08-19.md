@@ -7,6 +7,17 @@ Owner ruling in force (Q-2): **most restrictive row wins** in the
 `module_access` dedupe — if any duplicate has `enabled=False`, that row is the
 survivor. A migration must never grant access someone was explicitly denied.
 
+Owner constraint in force (B-1): the new dedupe is developed and tested against
+**local/throwaway SQLite only**. It has **not been run against any real
+database**, and the migration stays unrun until the owner approves it in person.
+This is machine-enforced, not just observed: every dedupe test routes through
+`validate_test_database_url` (`backend/config.py:168`), which refuses any URL
+containing `mssql`, `pyodbc`, `sqlexpress` or `redsea_dev`, refuses any
+non-SQLite backend, and requires an absolute path under the temp directory. The
+one SQL-Server-facing test generates **offline DDL only**
+(`command.upgrade(..., sql=True)`) against a deliberately non-routable
+documentation host and never opens a connection.
+
 | # | Item | Status | Commit |
 |---|---|---|---|
 | 1 | B-1 — `module_access` dedupe by restrictiveness, not `MIN(id)` | DONE | `556037d` |
@@ -73,12 +84,54 @@ survivor. A migration must never grant access someone was explicitly denied.
 `backend/tests/test_cmp_tcm_parity.py`
 - Extended the existing harness (which already runs App2's real
   `_extract_tasks_from_excel_mpd_rsd` and compares against the web handler — the
-  right pattern; its fixture simply had no `A10` row).
-- `test_a_related_check_code_is_not_matched_by_substring`. **Verified RED before
-  the fix:** asked for `A1`, the web handler produced
-  `['27-001-00.pdf', '27-002-00.pdf']` while App2 returned only `27-001-00`.
-- After the fix: **8 passed** across `test_cmp_tcm_parity`, `test_check_control`,
-  `test_api_check_control`.
+  right pattern; its fixture simply had no `A10`/`A11` rows). Fixture PDF gained
+  a third page so every task a wrong match could reach actually exists — an
+  absent task would be skipped silently and hide the over-match.
+- `test_related_check_codes_are_not_matched_by_substring` — covers **A10 and
+  A11**. **Verified RED against the pre-fix predicate:** asked for `A1`, the web
+  handler produced `['27-001-00.pdf', '27-002-00.pdf', '27-003-00.pdf']` while
+  App2 returned only `27-001-00`. Asserts both the aggregate output and, per
+  related check, that its task is absent.
+- `test_each_related_check_still_finds_its_own_task` — the fix must narrow
+  matching, not break it: `A10` → `27-002-00`, `A11` → `27-003-00`. Passes before
+  and after, so it is a true control.
+- After the fix: **3 passed** in this file; **8 passed** across it plus
+  `test_check_control` and `test_api_check_control`.
+
+> ### A false green I had to fix in my own test
+> The first version of the substring test **passed vacuously**. `related_checks`
+> held `(check, task)` while the helper expected `(task, check)`, so the A10/A11
+> rows were written **swapped** — column 24 contained `27-002-00`, never `A10`.
+> The test asserted the right thing about a fixture that did not contain the
+> case. It was caught only because the companion control test failed with an
+> empty result, which sent me to probe the handler directly (the handler was
+> fine). The pairing is now a dict keyed by check code so it cannot be read in
+> the wrong order, and the red output above was re-captured against the
+> corrected fixture. Worth remembering: a passing parity test proves nothing
+> until you have seen it fail for the right reason.
+
+### B-2 deploy impact — generated cards will differ
+
+This is a **behaviour change by design**, not a refactor. Any check code that is
+a **prefix of another** previously collected the longer code's rows too:
+
+| Asked for | Before (substring) | After (equality) |
+|---|---|---|
+| `A1` | `A1` + `A10` + `A11` rows | `A1` rows only |
+| `A2` | `A2` + `A20`… if present | `A2` rows only |
+| `C1` | `C1` + `C10`… if present | `C1` rows only |
+
+Consequences to expect after deploy:
+- **Task-card packages regenerated for such a check will contain fewer PDFs than
+  the same request produced before.** That is the correction — the extra cards
+  belonged to a different check — but it will look like a regression to anyone
+  comparing against an earlier output folder.
+- Codes with no longer sibling (`A6`, `120DY`, `2000FC`, `C6`) are unaffected.
+- Any previously generated package for `A1`/`A2`/`C1`-style codes should be
+  treated as **over-inclusive**, not as the baseline.
+- This does **not** touch B-3: `cmp_tcm` still never calls `expand_check`, so
+  related checks remain *under*-generated. The two effects are independent and
+  point in opposite directions — do not net them off when reviewing output.
 
 ## Correction made to the approved plan
 
@@ -135,7 +188,8 @@ item 3 reduces to L-6 + M-3/M-4/M-6. No work was done on M-2/I-2.
 
 ## Verification
 
-Full backend suite after both fixes: **510 passed in 242.74s (4:02)** — the
+Full backend suite after both fixes and the B-2 test hardening: **512 passed in
+299.71s (4:59)**. The intermediate 510-pass run covered the
 507-test baseline plus the 3 new tests, all collected in that run. Frontend
 suite unchanged and untouched (48 passed in PASS 1; no `src/` files were edited).
 

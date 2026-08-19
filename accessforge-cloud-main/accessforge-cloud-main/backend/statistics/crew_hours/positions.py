@@ -70,7 +70,7 @@ POSITIONING_POSITIONS = frozenset({"PSN", "PAD"})
 # THE crew-set identity (owner ruling 2026-08-17): the ONE definition of
 # "same crew" for comparisons — used by BOTH connected-duty grouping
 # (domain.select_rows_for_period) and the STEP-4 rotation comparison
-# (unknown_resolver.operating_crew_codes). Do not create a third.
+# (unknown_resolver.rotation_crew_codes). Do not create a third.
 # Riders (PSN/PAD) and non-operating cockpit slots (OBS/OBS2/STB) never make
 # two legs "different crews".
 # NOTE: this is a SET IDENTITY only. Per-member block-time inclusion in the

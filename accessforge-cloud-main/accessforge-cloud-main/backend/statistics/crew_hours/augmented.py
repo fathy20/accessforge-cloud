@@ -261,6 +261,9 @@ def _normalize_crew_code(value: Any) -> str | None:
 
 
 def _normalize_tr_nid(value: Any) -> int | None:
+    # LENIENT by design: an unusable trNid just fails the join for that duty
+    # row. Distinct from crew_context._normalize_flight_nid, which RAISES —
+    # there a bad flightNid is a broken LEON contract (L-6 ruling 2026-08-18).
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):

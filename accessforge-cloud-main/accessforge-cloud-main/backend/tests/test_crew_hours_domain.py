@@ -237,7 +237,7 @@ class TestConnectedDutyAttribution(unittest.TestCase):
 
         self.assertEqual(len(self._select(rows, "2026-06-01", "2026-06-30")), 2)
 
-    def test_psn_members_are_excluded_from_operating_crew_set_comparison(self):
+    def test_psn_members_are_excluded_from_rotation_crew_set_comparison(self):
         rows = (
             report_leg(
                 "RSX-PSN-OUT",

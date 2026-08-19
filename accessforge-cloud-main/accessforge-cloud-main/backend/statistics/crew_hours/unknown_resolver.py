@@ -108,7 +108,7 @@ def resolve_unknown_heavy(
     if not neighbours:
         return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT")
 
-    current_crew = _operating_crew_codes(current.entries)
+    current_crew = rotation_crew_codes(current.entries)
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
     for neighbour in neighbours:
         neighbour_start = _parse_utc(neighbour.start_time_utc)
@@ -137,7 +137,7 @@ def resolve_unknown_heavy(
                 reason, "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
             )
             continue
-        if _operating_crew_codes(neighbour.entries) != current_crew:
+        if rotation_crew_codes(neighbour.entries) != current_crew:
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
         return UnknownResolution(True, True, "SAME_DAY_SHORT_BREAK_SAME_CREW")
@@ -234,21 +234,20 @@ def _crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
     )
 
 
-def operating_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
-    """The comparison set: operating members only.
+def rotation_crew_codes(entries: Sequence[CrewContextEntry]) -> frozenset[str]:
+    """The STEP-4 comparison set — the ROTATION crew identity.
 
     Shape adapter over positions.crew_set_identity — THE one crew-set
-    definition (owner ruling 2026-08-17), shared with duty grouping in
-    domain.py. Excludes PSN, PAD (live case RSX6081/RSX6082: a PAD rider on
-    one leg must not break the match), and OBS/OBS2/STB. Public: the
+    definition (owner one-identity ruling 2026-08-17), shared with duty
+    grouping in domain.py (NormalizedReportRow.rotation_crew_set). Excludes
+    PSN, PAD (live case RSX6081/RSX6082: a PAD rider on one leg must not
+    break the match), and OBS/OBS2/STB. Deliberately different from the
+    TOTALS crew rule (CrewSlot.counts_in_totals, PSN-only, 2026-08-09 parity
+    ruling) — do NOT unify the two (M-2 ruling 2026-08-18). Public: the
     flight-level facade in heavy.py iterates these members for STEP 4.
     """
 
     return crew_set_identity((entry.crew_code, entry.position) for entry in entries)
-
-
-# Backwards-compatible private alias (pre-consolidation name).
-_operating_crew_codes = operating_crew_codes
 
 
 def _is_non_operating(position: str | None) -> bool:

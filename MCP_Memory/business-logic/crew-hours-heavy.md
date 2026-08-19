@@ -46,6 +46,22 @@ RSX331 = 67230742 everywhere). Every run still reports
 `join_health` ("DEGRADED" below a 50% hit rate against a non-empty index) as a
 regression tripwire.
 
+## Two crew-set concepts — deliberately different (M-2/I-2 rulings 2026-08-18)
+
+- **TOTALS crew rule** — `CrewSlot.counts_in_totals` (PSN-only exclusion,
+  2026-08-09 parity ruling). Governs per-member numeric block-time totals.
+- **ROTATION crew identity** — `positions.crew_set_identity`, exposed as
+  `NormalizedReportRow.rotation_crew_set` (duty grouping) and
+  `unknown_resolver.rotation_crew_codes` (STEP-4 comparison). Excludes
+  PSN, PAD, OBS, OBS2, STB (2026-08-17 one-identity ruling).
+- **UI position-filter vocabulary** — frontend `UI_POSITION_FILTER_TOKENS`
+  (6 tokens incl. FDP/FDPI/RMP/INSP) is a display filter ONLY; it is not,
+  and must never be aligned with, the backend count rule
+  (`POSITIONING_POSITIONS`, PSN/PAD).
+
+Unifying any two of these silently changes displayed numbers or verdicts —
+each carries a comment naming its governing ruling.
+
 ## Invariants (do not change without an owner ruling)
 
 - Thresholds cockpit > 2 / cabin > 4 — re-derive from data if fleet or cabin

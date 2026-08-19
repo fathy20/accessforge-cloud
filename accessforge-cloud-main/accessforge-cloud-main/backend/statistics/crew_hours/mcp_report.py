@@ -312,7 +312,7 @@ def _aggregate_report_rows(
             continue
         minutes = _parse_block_time(block_time)
         for crew_slot in normalized_row.crew:
-            if not crew_slot.is_operating:
+            if not crew_slot.counts_in_totals:
                 continue
             totals[crew_slot.code] = totals.get(crew_slot.code, 0) + minutes
     return (

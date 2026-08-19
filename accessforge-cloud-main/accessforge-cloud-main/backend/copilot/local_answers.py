@@ -325,6 +325,10 @@ def _row_flight_nid(row: Mapping[str, Any]) -> int | None:
 
 
 def _optional_int(value: Any) -> int | None:
+    # Duplicate-by-design of service._optional_int and shape-twin of
+    # augmented._normalize_tr_nid (lenient, None on junk) — unlike
+    # crew_context._normalize_flight_nid, which RAISES because a bad flightNid
+    # is a broken LEON contract (L-6 ruling 2026-08-18). Keep in sync.
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):
@@ -400,6 +404,8 @@ def _describe_reason(
 
 
 def _tags_from_row(row: Mapping[str, Any]) -> tuple[str, ...]:
+    # Report-ROW tag parser; twin of crew_context._flight_tag_labels, which
+    # parses the GraphQL flight-list shape (L-6 ruling 2026-08-18).
     raw = row.get("flightTags")
     if not isinstance(raw, list):
         return ()
@@ -561,4 +567,7 @@ def _format_minutes(total_minutes: int) -> str:
 
 
 def _text(value: Any) -> str | None:
+    # LENIENT report-row parser; twin of service._optional_string, distinct
+    # from the STRICT crew_context._strict_string_or_none (L-6 ruling
+    # 2026-08-18). Keep in sync until the Deliverable-3 parsing module.
     return value.strip() if isinstance(value, str) and value.strip() else None

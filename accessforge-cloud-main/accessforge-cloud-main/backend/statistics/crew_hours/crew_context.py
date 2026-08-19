@@ -116,18 +116,18 @@ def build_crew_context_index(
                 raise LeonContractError("LEON flight workSchedule contained an invalid object.")
             entries.append(
                 CrewContextEntry(
-                    pos_type=_optional_string(
+                    pos_type=_strict_string_or_none(
                         position_object.get("posType") if position_object else None
                     ),
-                    position=_optional_string(
+                    position=_strict_string_or_none(
                         position_object.get("name") if position_object else None
                     ),
-                    training_type=_optional_string(crew.get("flightTrainingType")),
+                    training_type=_strict_string_or_none(crew.get("flightTrainingType")),
                     crew_code=_normalized_crew_code(
                         contact_object.get("personCode") if contact_object else None
                     ),
                     crew_name=_contact_name(contact_object),
-                    function=_optional_string(
+                    function=_strict_string_or_none(
                         work_schedule_object.get("function") if work_schedule_object else None
                     ),
                 )
@@ -135,8 +135,8 @@ def build_crew_context_index(
         by_flight[flight_nid] = tuple(entries)
         contexts[flight_nid] = FlightContext(
             flight_nid=flight_nid,
-            start_time_utc=_optional_string(start_time_value),
-            end_time_utc=_optional_string(end_time_value),
+            start_time_utc=_strict_string_or_none(start_time_value),
+            end_time_utc=_strict_string_or_none(end_time_value),
             flight_tags=_flight_tag_labels(flight_tags_value),
             entries=tuple(entries),
             departure_airport=_airport_code(start_airport_value),
@@ -268,6 +268,8 @@ def _flight_nid_as_int(flight: LeonFlight | Mapping[str, object]) -> int:
 
 
 def _normalize_flight_nid(value: object) -> int:
+    # STRICT by design: a bad flightNid is a broken LEON contract and raises.
+    # Lenient counterpart: augmented._normalize_tr_nid (L-6 ruling 2026-08-18).
     if isinstance(value, bool):
         raise LeonContractError("LEON flight item had an invalid flightNid.")
     if isinstance(value, int):
@@ -280,7 +282,13 @@ def _normalize_flight_nid(value: object) -> int:
     raise LeonContractError("LEON flight item had an invalid flightNid.")
 
 
-def _optional_string(value: object) -> str | None:
+def _strict_string_or_none(value: object) -> str | None:
+    # STRICT by design (L-6 ruling 2026-08-18): this parses LEON's GraphQL
+    # crew-context payload, where a wrong TYPE is a broken contract and must
+    # raise, not silently vanish. The LENIENT twins (service._optional_string,
+    # local_answers._text) parse report ROWS where malformed cells degrade to
+    # None. Deliberately different names, deliberately different semantics —
+    # do not merge them.
     if value is None:
         return None
     if not isinstance(value, str):
@@ -292,7 +300,7 @@ def _optional_string(value: object) -> str | None:
 def _normalized_crew_code(value: object) -> str | None:
     """Crew codes are matched against the FTL index, which upper-cases them."""
 
-    code = _optional_string(value)
+    code = _strict_string_or_none(value)
     return code.upper() if code else None
 
 
@@ -321,13 +329,15 @@ def _contact_name(contact: Mapping[str, object] | None) -> str | None:
         return None
     parts = [
         part
-        for part in (_optional_string(contact.get("name")), _optional_string(contact.get("surname")))
+        for part in (_strict_string_or_none(contact.get("name")), _strict_string_or_none(contact.get("surname")))
         if part
     ]
     return " ".join(parts) or None
 
 
 def _flight_tag_labels(value: object) -> tuple[str, ...]:
+    # GraphQL flight-list tag parser; twin of local_answers._tags_from_row,
+    # which parses report rows (L-6 ruling 2026-08-18).
     if value is None:
         return ()
     if not isinstance(value, list):
@@ -337,7 +347,7 @@ def _flight_tag_labels(value: object) -> tuple[str, ...]:
         if isinstance(tag, str):
             label = tag.strip()
         elif isinstance(tag, Mapping):
-            label = _optional_string(tag.get("label")) or ""
+            label = _strict_string_or_none(tag.get("label")) or ""
         else:
             raise LeonContractError("LEON flight flightTags contained an invalid tag.")
         if label:

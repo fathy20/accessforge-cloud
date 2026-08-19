@@ -67,17 +67,22 @@ export interface CrewHoursReport {
 }
 
 export const OFFICIAL_MCP_SOURCE = "official_mcp_report";
-export const POSITIONING_TOKENS = ["PAD", "PSN", "FDP", "FDPI", "RMP", "INSP"] as const;
+// UI position-filter vocabulary ONLY (I-2 ruling 2026-08-18): the tokens the
+// dropdown offers and the display filter matches. Deliberately DIFFERENT from
+// the backend operating-count/rotation rule (positions.POSITIONING_POSITIONS,
+// PSN/PAD only) — "fixing" the mismatch would silently change the Heavy count
+// rule. Do not align these lists.
+export const UI_POSITION_FILTER_TOKENS = ["PAD", "PSN", "FDP", "FDPI", "RMP", "INSP"] as const;
 export const ALL_AIRCRAFT = "__all_aircraft__";
 export const ALL_POSITION_TOKENS = "All";
 export const ACTIVE_POSITION_TOKEN = "Active";
 
 export type OfficialPosition = "Cockpit" | "Cabin" | "Maintenance" | "Unclassified";
-export type PositioningToken = (typeof POSITIONING_TOKENS)[number];
+export type UiPositionFilterToken = (typeof UI_POSITION_FILTER_TOKENS)[number];
 export type PositionTokenFilter =
   | typeof ALL_POSITION_TOKENS
   | typeof ACTIVE_POSITION_TOKEN
-  | PositioningToken;
+  | UiPositionFilterToken;
 export type ReportTab = "cockpit" | "cockpit-summary" | "cabin" | "cabin-summary";
 export type ReportTabPosition = Extract<OfficialPosition, "Cockpit" | "Cabin">;
 

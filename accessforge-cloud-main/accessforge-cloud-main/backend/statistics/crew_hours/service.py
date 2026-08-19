@@ -604,10 +604,16 @@ def _crew_entry(
 
 
 def _optional_string(value: Any) -> str | None:
+    # LENIENT by design (L-6 ruling 2026-08-18): report-row cells degrade to
+    # None. Strict counterpart: crew_context._strict_string_or_none (raises on
+    # a broken LEON contract). Same-name twin: local_answers._text. Keep the
+    # semantics distinct; consolidation is Deliverable-3 material.
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _optional_int(value: Any) -> int | None:
+    # Duplicate-by-design of local_answers._optional_int (L-6 ruling
+    # 2026-08-18). Keep in sync until the Deliverable-3 parsing module.
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):

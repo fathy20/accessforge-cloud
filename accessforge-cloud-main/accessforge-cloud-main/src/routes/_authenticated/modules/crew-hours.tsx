@@ -18,7 +18,7 @@ import { CrewReportTabPanel } from "@/components/crew-hours/CrewReportTabPanel";
 import { displayOfficialHours, formatLastLoadedAt } from "@/components/crew-hours/format";
 import { buildCrewHoursReportQuery, hasOfficialMcpTotal, isValidReportPeriod, reportTabPosition } from "@/components/crew-hours/filters";
 import { outsideTabCrewMessage, reportTabLabel } from "@/components/crew-hours/messages";
-import { ACTIVE_POSITION_TOKEN, ALL_AIRCRAFT, ALL_POSITION_TOKENS, OFFICIAL_MCP_SOURCE, POSITIONING_TOKENS, REPORT_TABS } from "@/components/crew-hours/types";
+import { ACTIVE_POSITION_TOKEN, ALL_AIRCRAFT, ALL_POSITION_TOKENS, OFFICIAL_MCP_SOURCE, REPORT_TABS, UI_POSITION_FILTER_TOKENS } from "@/components/crew-hours/types";
 import type { CrewHoursReport, PositionTokenFilter, ReportTab } from "@/components/crew-hours/types";
 export const Route = createFileRoute("/_authenticated/modules/crew-hours")({
   head: () => ({ meta: [{ title: "Crew Hours (LEON) · REDSEA" }] }),
@@ -116,7 +116,7 @@ function CrewHoursPage() {
     }));
   };
   const aircraftOptions = report === null ? [] : Array.from(new Set(report.crew_members.flatMap((crew) => crew.flights.map((flight) => flight.aircraft_reg).filter((registration): registration is string => typeof registration === "string" && registration.trim().length > 0)))).sort();
-  const positionTokenOptions = report === null ? [] : POSITIONING_TOKENS.filter((token) => report.crew_members.some((crew) => crew.flights.some((flight) => flight.position === token)));
+  const positionTokenOptions = report === null ? [] : UI_POSITION_FILTER_TOKENS.filter((token) => report.crew_members.some((crew) => crew.flights.some((flight) => flight.position === token)));
   const unclassifiedRoles = report?.crew_members.filter((crew) => crew.position_type === null).length ?? 0;
   const hasClientSideDisplayFilter = aircraftFilter !== ALL_AIRCRAFT || positionTokenFilter !== ALL_POSITION_TOKENS;
   const activeTabOutsideMessage = report ? outsideTabCrewMessage(report, reportTabPosition(activeTab), t) : null;

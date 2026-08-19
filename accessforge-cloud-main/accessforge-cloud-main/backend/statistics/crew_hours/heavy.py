@@ -218,7 +218,7 @@ def classify_flight_heavy(
     Returns (verdict, reason); verdict None means "no crew context at all".
     """
 
-    from .unknown_resolver import operating_crew_codes, resolve_unknown_heavy
+    from .unknown_resolver import resolve_unknown_heavy, rotation_crew_codes
 
     context = (
         index.contexts.get(flight_nid)
@@ -246,7 +246,7 @@ def classify_flight_heavy(
     if decision.derived_heavy is True:
         return True, decision.heavy_reason
 
-    codes = sorted(operating_crew_codes(entries))
+    codes = sorted(rotation_crew_codes(entries))
     if not codes:
         # No crew context at all is indeterminate; crew with no operating
         # member (all positioning/non-operating) is simply not Heavy.

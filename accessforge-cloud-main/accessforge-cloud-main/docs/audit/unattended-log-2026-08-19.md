@@ -21,7 +21,7 @@ documentation host and never opens a connection.
 | # | Item | Status | Commit |
 |---|---|---|---|
 | 1 | B-1 — `module_access` dedupe by restrictiveness, not `MIN(id)` | DONE | `556037d` |
-| 2 | B-2 — `cmp_tcm` exact check match, not substring | DONE | `48d60f0` |
+| 2 | B-2 — `cmp_tcm` exact check match, not substring | DONE | `48d60f0`, hardened in `f90363a` |
 
 ---
 
@@ -188,26 +188,42 @@ item 3 reduces to L-6 + M-3/M-4/M-6. No work was done on M-2/I-2.
 
 ## Verification
 
-Full backend suite after both fixes and the B-2 test hardening: **512 passed in
-299.71s (4:59)**. The intermediate 510-pass run covered the
-507-test baseline plus the 3 new tests, all collected in that run. Frontend
-suite unchanged and untouched (48 passed in PASS 1; no `src/` files were edited).
+Full backend suite, final state: **512 passed in 299.71s (4:59)** — the 507-test
+baseline plus 5 new tests (3 for B-1, 2 for B-2). An intermediate run before the
+B-2 test hardening was **510 passed in 242.74s (4:02)**. Frontend suite unchanged
+and untouched (48 passed in PASS 1; no `src/` file was edited in this window).
 
-Honesty notes on how that number was reached:
+Honesty notes on how those numbers were reached:
 - Both fixes were developed test-first, with the red output captured verbatim
-  above before any production line changed.
-- **One** full-suite run covers both items rather than one run per item. The
-  first full run was started after B-1 but before B-2 landed, so its result
+  above before any production line changed. For B-2 the red was captured twice:
+  once against the original (vacuous) fixture, then again against the corrected
+  one — only the second is real evidence.
+- Full-suite runs cover both items together rather than one run per item. The
+  very first run was started after B-1 but before B-2 landed, so its result
   would have been ambiguous; it was stopped and re-run clean. Per-item targeted
-  suites were green individually (25 for B-1's file, 8 for B-2's).
+  suites were green individually (25 in B-1's file, 3 in B-2's).
+- To capture B-2's red without reverting the commit, `worker/handlers.py` was
+  temporarily replaced with its pre-fix version from `556037d` and then
+  restored; `git diff --quiet` confirmed byte-identity with the committed fix
+  afterwards.
 - **A retraction.** The PASS 1 plan claimed the suite takes 22m 29s versus the
   "~4½ minutes" in `TECHNICAL_DEBT.md` #10, and called the debt item's number
-  wrong. That was a cold-cache run. Warm, the same suite takes 4m 02s, matching
-  the documented figure. The plan has been corrected and #10 needs no change.
+  wrong. That was a cold-cache run. Warm, the same suite takes 4–5 minutes,
+  matching the documented figure. The plan has been corrected; #10 needs no
+  change.
 
 ## Commits on this branch
 
-`556037d` (B-1) and `48d60f0` (B-2), on `fix/crew-hours-heavy-airport-rules` —
-the branch that was already checked out. Only my own files were staged: the
-working tree carried 14 pre-existing uncommitted crew-hours changes from before
-this window, and those remain untouched and uncommitted.
+On `fix/crew-hours-heavy-airport-rules` — the branch that was already checked
+out:
+
+| Commit | Contents |
+|---|---|
+| `556037d` | B-1 — dedupe keeps the denied row (+ 3 migration tests) |
+| `48d60f0` | B-2 — exact check match (+ `normalize_check_code`) |
+| `b7d8485` | Plan, log, and the two plan retractions |
+| `f90363a` | B-2 — A11 coverage and the vacuous-test fix (+ 2 tests) |
+
+Only my own files were staged. The working tree carried **14 pre-existing
+uncommitted crew-hours changes** from before this window; they remain untouched
+and uncommitted.

@@ -217,16 +217,20 @@ def _heavy_answer(
     # here too, over an index built from the same report rows. LEON's FTL
     # augmentation value is not reachable on this path, so leon_heavy is None.
     index = _context_index_from_report(report)
+    adep = _text(row.get("jl_adep_preferred_code"))
+    ades = _text(row.get("jl_ades_preferred_code"))
     verdict, reason_code = classify_flight_heavy(
         index,
         build_rotation_index(index),
         _row_flight_nid(row),
         aircraft_type=_text(row.get("acftType")),
+        # The report row's own codes, not only the ones the context copied:
+        # one airport can arrive as IATA here and ICAO there, and the facade
+        # must see every form or an ICAO-coded SVX leg reads as Not Heavy.
+        route_airports=(adep, ades),
     )
     cockpit = operating_cockpit_count(entries)
     cabin = operating_cabin_count(entries)
-    adep = _text(row.get("jl_adep_preferred_code"))
-    ades = _text(row.get("jl_ades_preferred_code"))
     reason = _describe_reason(
         reason_code, adep=adep, ades=ades, cockpit=cockpit, cabin=cabin
     )

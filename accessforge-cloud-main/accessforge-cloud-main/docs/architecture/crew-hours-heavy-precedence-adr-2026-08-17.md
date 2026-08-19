@@ -195,6 +195,40 @@ citation prose. `cabin_heavy.py` survives one release as a warning shim, then
 is deleted. `backend/tests/test_heavy_cross_consistency.py` pins report ≡
 Copilot on the five screenshot cases permanently.
 
+## Decision 6 — Five corrections from the June 2026 UI review (owner rulings, 2026-08-19)
+
+Every item here was diagnosed from live screenshots, ruled on by the owner, and
+landed with a failing test first. Each one superseded a rule written above; the
+superseded text is named so the two are never read as still coexisting.
+
+### 6.1 — Airport codes are matched on BOTH code systems (D-1)
+
+**Root cause (owner-accepted, 2026-08-19): neither surface could see the second
+code form of an airport.** `_route_matches` compared route airports against the
+literal `"SVX"`/`"EVN"`, while `crew_context._airport_code` prefers ICAO. An
+ICAO-coded leg therefore contributed `USSS`/`UDYZ`, matched nothing, and read
+Not Heavy — on the Crew Hours report **and** in the Copilot, identically.
+
+An earlier framing of this defect said the Copilot facade was *structurally
+blind* to the airport rule. That framing is **withdrawn and is not the record**:
+`copilot.local_answers._context_index_from_report` already copied the report
+row's `jl_adep/jl_ades_preferred_code` into the `FlightContext` it built, which
+is why the IATA-coded `SVX` Copilot test passed before any change. There was one
+root cause, not two, and it hit both surfaces the same way.
+
+The fix, in two parts:
+
+- `positions.AIRPORT_CODE_ALIASES` holds `SVX ↔ USSS` and `EVN ↔ UDYZ`.
+  Matching is exact equality after trim+uppercase against **either** form —
+  still never a substring, so `USSSX` and `UDYZA` do not match. Adding a third
+  airport to an absolute rule means adding it to that one map.
+- `classify_flight_heavy` grew a `route_airports` parameter and
+  `merge_route_airports` unions it with the context's codes, each spelling kept
+  as received. The report passes the row's preferred codes; the Copilot passes
+  the same row fields. This removes the coupling that left the facade dependent
+  on whatever the context happened to copy, even though that coupling was not
+  itself the bug.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

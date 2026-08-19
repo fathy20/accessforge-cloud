@@ -173,6 +173,26 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Heavy", answer.text)
         self.assertIn("SVX override", answer.citation.source)
 
+    def test_icao_coded_svx_leg_agrees_with_the_report(self):
+        # D-1: the airport rule compared against the IATA literal only, so an
+        # ICAO-coded leg read as Not Heavy on this path while the report said
+        # Heavy. Both engines must now give the same answer for USSS.
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FA1", "FA2"], adep="HESH", ades="USSS")
+        )
+
+        self.assertIn("Heavy", answer.text)
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertIn("SVX override", answer.citation.source)
+
+    def test_icao_coded_evn_leg_still_vetoes(self):
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], adep="HESH", ades="UDYZ")
+        )
+
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("EVN override", answer.citation.source)
+
     def test_ops_and_sp_trainees_do_not_push_a_flight_over_the_line(self):
         # Standard 2 cockpit + 4 cabin, plus two cockpit trainees.
         answer = self._ask(

@@ -19,6 +19,7 @@ from .leon_client import CrewHoursLeonClient, get_crew_hours_leon_client
 from .heavy import (
     decide_heavy,
     derive_heavy_detail,
+    merge_route_airports,
     is_training_function,
     is_training_position,
 )
@@ -505,11 +506,16 @@ def _mcp_flight_item(
         if crew_context_index.available and unique_id is not None
         else None
     )
-    route_airports = (
-        _optional_string(row.get("jl_adep_preferred_code")),
-        _optional_string(row.get("jl_ades_preferred_code")),
-        flight_context.departure_airport if flight_context else None,
-        flight_context.arrival_airport if flight_context else None,
+    route_airports = merge_route_airports(
+        (
+            _optional_string(row.get("jl_adep_preferred_code")),
+            _optional_string(row.get("jl_ades_preferred_code")),
+        ),
+        (
+            (flight_context.departure_airport, flight_context.arrival_airport)
+            if flight_context
+            else ()
+        ),
     )
     if join_health is not None:
         # A hit is key-presence, not a non-None value: an ambiguous FTL value

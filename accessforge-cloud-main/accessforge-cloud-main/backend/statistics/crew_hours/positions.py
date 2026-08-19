@@ -107,6 +107,25 @@ TRAINING_FUNCTION_CABIN = "SFA"
 EVN_TAG = "EVN"
 SVX_TAG = "SVX"
 
+# The same two airports, in both code systems. Live data mixes them: the MCP
+# report row's ``jl_adep/jl_ades_preferred_code`` and the flight-list context's
+# ``_airport_code`` (ICAO preferred, IATA fallback) can name one airport two
+# different ways on the same flight, and comparing against the IATA literal
+# alone silently lost every ICAO-coded leg. Matching stays EXACT on either
+# form after trim+uppercase — never a substring, so USSSX and UDYZA do not
+# match. Adding a third airport to a rule means adding it here, once.
+AIRPORT_CODE_ALIASES: Mapping[str, frozenset[str]] = {
+    SVX_TAG: frozenset({"SVX", "USSS"}),
+    EVN_TAG: frozenset({"EVN", "UDYZ"}),
+}
+
+
+def airport_code_forms(code: str) -> frozenset[str]:
+    """Every accepted spelling of one airport, upper-cased."""
+
+    normalized = code.strip().upper()
+    return AIRPORT_CODE_ALIASES.get(normalized, frozenset({normalized}))
+
 # --- Heavy Thresholds (strictly-greater) ---
 # cockpit_count > HEAVY_COCKPIT_THRESHOLD → Heavy
 # cabin_count   > HEAVY_CABIN_THRESHOLD   → Heavy

@@ -16,6 +16,7 @@ from .positions import (
     CABIN_POS_TYPE,
     COCKPIT_POS_TYPE,
     EVN_TAG,
+    airport_code_forms,
     HEAVY_CABIN_THRESHOLD,
     HEAVY_COCKPIT_THRESHOLD,
     NON_OPERATING_COCKPIT_POSITIONS,
@@ -135,16 +136,52 @@ def is_svx_flight(flight_tags: Sequence[str] | None) -> bool:
     return bool(tags) and SVX_TAG in tags
 
 
-def _route_matches(route_airports: Sequence[str | None] | None, code: str) -> bool:
-    """Exact airport-code match after trim+uppercase — never a substring match."""
+def merge_route_airports(
+    *sources: Sequence[str | None] | None,
+) -> tuple[str | None, ...]:
+    """Union every airport source, preserving each code exactly as received.
+
+    Duplicates are dropped by their normalized form so the trace stays short,
+    but the first spelling seen is what the trace shows — both an IATA and an
+    ICAO spelling of the same airport survive, because they are what the two
+    sources actually said.
+    """
+
+    merged: list[str | None] = []
+    seen: set[str] = set()
+    for source in sources:
+        for airport in source or ():
+            if not isinstance(airport, str) or not airport.strip():
+                continue
+            key = airport.strip().upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(airport)
+    return tuple(merged)
+
+
+def _route_match(route_airports: Sequence[str | None] | None, code: str) -> str | None:
+    """Return the route code that matched this airport, or None.
+
+    Exact equality after trim+uppercase against every accepted form of the
+    airport (SVX/USSS, EVN/UDYZ) — never a substring match. Returning the
+    matched value rather than a bool lets the trace show WHICH form fired.
+    """
 
     if not route_airports:
-        return False
-    target = code.strip().upper()
-    return any(
-        isinstance(airport, str) and airport.strip().upper() == target
-        for airport in route_airports
-    )
+        return None
+    targets = airport_code_forms(code)
+    for airport in route_airports:
+        if isinstance(airport, str) and airport.strip().upper() in targets:
+            return airport
+    return None
+
+
+def _route_matches(route_airports: Sequence[str | None] | None, code: str) -> bool:
+    """Alias-aware exact airport match; see _route_match for the matched form."""
+
+    return _route_match(route_airports, code) is not None
 
 
 def derive_heavy_detail(
@@ -206,6 +243,7 @@ def classify_flight_heavy(
     *,
     aircraft_type: str | None = None,
     leon_heavy: bool | None = None,
+    route_airports: Sequence[str | None] | None = None,
 ) -> tuple[bool | None, str]:
     """THE flight-level Heavy verdict — the single engine for every surface.
 
@@ -216,6 +254,12 @@ def classify_flight_heavy(
     STEP 4 at flight level: the flight is Heavy when any operating member's
     rotation qualifies (positioning and non-operating slots never decide).
     Returns (verdict, reason); verdict None means "no crew context at all".
+
+    ``route_airports`` carries the caller's own airport codes — for the report
+    that is the row's ``jl_adep/jl_ades_preferred_code``. They are UNIONED with
+    the flight-list context's codes, and a match on any of them counts. Callers
+    that omit them see only the context's codes, which is how an ICAO-coded SVX
+    leg used to be invisible to the airport rule on this path.
     """
 
     from .unknown_resolver import resolve_unknown_heavy, rotation_crew_codes
@@ -230,10 +274,11 @@ def classify_flight_heavy(
         entries,
         aircraft_type,
         context.flight_tags if context is not None else None,
-        route_airports=(
+        route_airports=merge_route_airports(
+            route_airports,
             (context.departure_airport, context.arrival_airport)
             if context is not None
-            else None
+            else None,
         ),
     )
     decision = decide_heavy(leon_heavy, derived, derived_reason)

@@ -27,6 +27,17 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    both. Evidence: RSX331/RSX332 SSH↔SVX 16-06 both Yes; RSX121/RSX122 SSH↔EVN
    20/21-06 both No, badge-free.
 
+   **Both code systems count (owner ruling 2026-08-19, D-1).** `SVX ↔ USSS` and
+   `EVN ↔ UDYZ` are one airport each, held in `positions.AIRPORT_CODE_ALIASES`.
+   Exact equality on either form; still never a substring. Live data mixes the
+   two — the report row and the flight-list context can name one airport two
+   ways on the same flight — and comparing against the IATA literal alone lost
+   every ICAO-coded leg, on the report AND in the Copilot. `classify_flight_heavy`
+   takes `route_airports` and UNIONS the caller's codes with the context's; a
+   match on any counts. NOT a Copilot-only defect: the earlier "the Copilot is
+   structurally blind to the airport rule" framing is withdrawn — its context
+   already carried the row's codes.
+
 4. **Cabin trainee = Work Schedule Function == "SFA" ONLY.** Owner ruling
    (Q1, 2026-08-17). Never Position-only — SFA as a *position* is a normal
    senior cabin rank; a Position rule would exclude operating crew.

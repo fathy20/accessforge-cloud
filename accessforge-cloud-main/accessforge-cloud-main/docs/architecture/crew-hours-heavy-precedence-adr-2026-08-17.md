@@ -203,31 +203,30 @@ superseded text is named so the two are never read as still coexisting.
 
 ### 6.1 — Airport codes are matched on BOTH code systems (D-1)
 
-**Root cause (owner-accepted, 2026-08-19): neither surface could see the second
-code form of an airport.** `_route_matches` compared route airports against the
-literal `"SVX"`/`"EVN"`, while `crew_context._airport_code` prefers ICAO. An
-ICAO-coded leg therefore contributed `USSS`/`UDYZ`, matched nothing, and read
-Not Heavy — on the Crew Hours report **and** in the Copilot, identically.
+`_route_matches` compared route airports against the literal `"SVX"`/`"EVN"`,
+while `crew_context._airport_code` prefers ICAO. The flight-list context
+therefore contributed `USSS`/`UDYZ` and the airport rule could never fire from
+it. `positions.AIRPORT_CODE_ALIASES` now holds `SVX ↔ USSS` and `EVN ↔ UDYZ`,
+and matching is exact equality after trim+uppercase against **either** form —
+still never a substring, so `USSSX` and `UDYZA` do not match. Adding a third
+airport to an absolute rule means adding it to that one map.
 
-An earlier framing of this defect said the Copilot facade was *structurally
-blind* to the airport rule. That framing is **withdrawn and is not the record**:
-`copilot.local_answers._context_index_from_report` already copied the report
-row's `jl_adep/jl_ades_preferred_code` into the `FlightContext` it built, which
-is why the IATA-coded `SVX` Copilot test passed before any change. There was one
-root cause, not two, and it hit both surfaces the same way.
+`classify_flight_heavy` also grew a `route_airports` parameter. It previously
+passed only the context's two codes, so the Copilot facade saw whatever the
+context happened to carry and nothing else. It now UNIONS the caller's codes —
+for the report, the row's `jl_adep/jl_ades_preferred_code`; for the Copilot, the
+same row fields — with the context's, and a match on any of them counts.
+`merge_route_airports` keeps each spelling as received, so an IATA and an ICAO
+name for one airport both survive into the trace.
 
-The fix, in two parts:
-
-- `positions.AIRPORT_CODE_ALIASES` holds `SVX ↔ USSS` and `EVN ↔ UDYZ`.
-  Matching is exact equality after trim+uppercase against **either** form —
-  still never a substring, so `USSSX` and `UDYZA` do not match. Adding a third
-  airport to an absolute rule means adding it to that one map.
-- `classify_flight_heavy` grew a `route_airports` parameter and
-  `merge_route_airports` unions it with the context's codes, each spelling kept
-  as received. The report passes the row's preferred codes; the Copilot passes
-  the same row fields. This removes the coupling that left the facade dependent
-  on whatever the context happened to copy, even though that coupling was not
-  itself the bug.
+Correction to the diagnosis as written: the Copilot was **not** structurally
+blind to the airport rule. `_context_index_from_report` already copied the
+report row's preferred codes into the `FlightContext` it built, which is why
+`test_svx_route_forces_heavy_on_a_standard_crew` passed. The real defect was
+narrower and still serious: neither surface could see a *second* form of the
+same airport, so an ICAO-coded SVX leg read Not Heavy on both. The alias map is
+the fix; the explicit `route_airports` argument removes the coupling that made
+the facade depend on what the context happened to copy.
 
 ### 6.2 — Crew continuity, not role identity (D-2). Supersedes Decision 3's third bullet.
 
@@ -237,28 +236,23 @@ and rode home as PAD therefore vanished from one side only — which broke the
 rotation not just for them but for **every** member of it (live case RSX6077
 HRG→LIS 14:25–20:40 / RSX6078 LIS→HRG 21:50–03:35+1).
 
-**The implemented rule, stated in full (owner-accepted 2026-08-19):** for each
-leg, the comparison set is
+`_continuity_sets` now compares, for each leg, its operating crew UNION everyone
+present on **both** legs in any capacity, plus the subject explicitly. A member
+whose presence is continuous across the pair cannot be evidence of a crew
+change, whatever they were doing on each leg. Riders present on only ONE leg
+stay excluded — that part of Decision 3 was correct (RSX6081/RSX6082).
 
-> that leg's **operating crew** ∪ **everyone present on both legs in any
-> capacity** ∪ **the subject member**.
+Note on the ruling's wording: "the operating crew of both legs plus the subject
+member on both legs" is not on its own sufficient to produce the ruled outcome.
+For subject C1 in case B the two sides would still read `{C1,C2,C3}` against
+`{C1,C3}`, because the PAD rider C2 is a *different* member and is still
+dropped. The outcome the owner ruled — YES on both legs for **every** member —
+requires keeping anyone present on both legs, which is what is implemented. The
+ruled outcome was treated as authoritative over the literal set description.
 
-Riders present on only ONE leg stay excluded — that part of Decision 3 was
-correct (RSX6081/RSX6082).
-
-Why not the ruling's literal wording: "the operating crew of both legs plus the
-subject member on both legs" is not on its own sufficient. For subject C1 in case
-B the two sides would still read `{C1,C2,C3}` against `{C1,C3}`, because the PAD
-rider C2 is a *different* member and is still dropped, so C1 would still break.
-The owner ruled the OUTCOME — YES on both legs for **every** member — and
-confirmed on 2026-08-19 that the outcome governs and the set description was
-imprecise. The rule above is what delivers it.
-
-**Knock-on, deliberate — do not "fix" it:** a member riding **PSN** on the other
-leg no longer breaks their colleagues' rotation either, for the same reason —
-they are present on both legs, so their presence is continuous. `PSN` keeps its
-immediate NO on the leg *being judged*, which is a different rule and unchanged.
-Pinned by `test_psn_keeps_its_immediate_no`.
+`PSN` keeps its immediate NO on the leg being judged, unchanged. A PSN rider on
+the *other* leg no longer breaks the rotation for their colleagues, because they
+are present on both.
 
 ### 6.3 — Rotation continuity is a TRUE out-and-back. Supersedes Decision 3's first bullet.
 
@@ -327,9 +321,6 @@ an untraced one cannot diverge), and `UnknownResolution` carries its own steps.
 The service layer converts to the pydantic mirror at the boundary. The UI shows
 it as a `Decision trace` disclosure inside the existing verdict tooltip, for
 **every** leg — not only resolver-decided ones.
-
-`tools/heavy_cases.py` renders cases A–D offline from synthetic rows, so a
-regression prints the wrong answer instead of waiting for a screenshot.
 
 ## Unchanged, deliberately
 

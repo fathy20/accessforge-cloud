@@ -420,8 +420,10 @@ class TestScreenshotEvidence(unittest.TestCase):
 
     def test_case_4_unresolvable_chain_is_no_without_badges(self):
         # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: the rotation never
-        # returns to HRG. With continuity now a true out-and-back, the pair
-        # fails on ROTATION_MISMATCH before the break arithmetic is reached.
+        # returns to HRG. Two rules changed what this case reports:
+        # rotation continuity is now a true out-and-back, so the pair fails on
+        # ROTATION_MISMATCH before the break arithmetic is even reached; and a
+        # resolver No carries no badge (owner rulings 2026-08-19).
         rows = [
             _screenshot_row(611, "RSX6081", "HRG", "OPO", ["C1", "C2"], ["CPT", "FO"]),
             _screenshot_row(612, "RSX6084", "OPO", "SSH", ["C1", "C2"], ["CPT", "FO"]),

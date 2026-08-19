@@ -19,7 +19,12 @@ Settled disputes: `../development/closed-questions.md`.
    `cabin_trainee_detection: "unavailable"`.
 2. **EVN airport → never Heavy** (absolute; vetoes everything below, wins over
    SVX). **SVX airport → always Heavy** (absolute). Matched on ADEP/ADES
-   codes; legacy flight tags are a secondary signal only.
+   codes; legacy flight tags are a secondary signal only. **Both code systems
+   count** (2026-08-19): `SVX ↔ USSS`, `EVN ↔ UDYZ`, held in
+   `positions.AIRPORT_CODE_ALIASES`; exact equality on either form, never a
+   substring. The report row's preferred codes and the flight-list context's
+   codes are UNIONED, and a match on any of them counts — one airport can
+   arrive as IATA from one source and ICAO from the other.
 3. **LEON's `crewAugmentation` value**, when present. If it disagrees with an
    airport absolute, the absolute wins and the row carries
    `heavy_conflict=True`, `heavy_source="LOCAL_RULE"` (warning logged).
@@ -29,13 +34,36 @@ Settled disputes: `../development/closed-questions.md`.
    positioning slots (PSN, PAD, OBS, OBS2, STB) never count as operating crew.
    A LEON-silent count-Yes is final — STEP 4 cannot override it.
 5. **STEP 4 rotation resolver** — only when LEON is silent AND the count rule
-   is UNKNOWN: a neighbouring sector on the same duty (midnight-safe window
-   anchored on the first sector's UTC start date) with break < 4h (4:00
-   rejects), identical operating-crew set (PSN/PAD/OBS/STB excluded on both
-   legs), and chained airports → Yes; otherwise No. A member positioned PSN is
-   No immediately (`PSN_POSITIONING`). Missing airport data fails closed
-   (`ROTATION_MISMATCH`). Both legs of a resolver-decided rotation get
-   `unknown_resolved=True` + `heavy_source=LOCAL_RULE` (the red badge).
+   is UNKNOWN. Three parts of this were corrected by owner rulings on
+   2026-08-19:
+   - **A TRUE out-and-back**, not a chain: `neighbour.departure ==
+     current.arrival` **AND** `neighbour.arrival == current.departure`. The old
+     either-direction test made any same-direction pair with a stable roster
+     and a short break report Heavy. Missing airport data still fails closed
+     (`ROTATION_MISMATCH`).
+   - **Break < 4h strict** (4:00 rejects), midnight-safe window anchored on the
+     first sector's UTC start date. Unchanged.
+   - **Crew CONTINUITY, not role identity**: each leg's comparison set is its
+     operating crew UNION everyone present on BOTH legs in any capacity, plus
+     the subject. A member who flew out as FO and rode home as PAD used to
+     vanish from one side of a symmetric set equality and break the rotation for
+     EVERY member of it. Riders present on only ONE leg stay excluded.
+   - **Pairing direction**: the backward neighbour is always searched; the
+     forward one only when nothing connected precedes this leg.
+   - A member positioned PSN on the leg being judged is No immediately
+     (`PSN_POSITIONING`). Unchanged.
+   - **The badge means the resolver established Heavy = True.** A resolver No
+     means "no qualifying rotation was found" and carries NO badge.
+     `unknown_resolution_reason` is still recorded either way (diagnostic, not a
+     claim), and `heavy_source` stays `LOCAL_RULE`.
+
+6. **Every leg carries a `heavy_trace`** (2026-08-19) — the ordered list of
+   rules evaluated, each with its outcome and the inputs it saw: airports as
+   received in every form and from both sources, times as received, operating
+   counts with thresholds, and the two crew sets compared. Shown as a
+   `Decision trace` disclosure on the verdict cell of EVERY leg, deterministic
+   or resolver-decided. Offline renderer for the four reviewed cases:
+   `python -m backend.statistics.crew_hours.tools.heavy_cases`.
 
 ## Data joins
 
@@ -69,5 +97,9 @@ each carries a comment naming its governing ruling.
   cabin > 2).
 - UNKNOWN is never displayed; PAD block-time inclusion in numeric totals is
   unchanged by all of the above; official block-time totals are untouched.
-- The red badge means only "absent from LEON augmented data, decided by the
-  local rotation rule" — never anything else.
+- The red badge means only "the rotation resolver ESTABLISHED Heavy = True"
+  (corrected 2026-08-19) — never anything else, and never a resolver No.
+- `heavy.py`, `unknown_resolver.py`, and `trace.py` stay pure: no I/O, no
+  service imports. `derive_heavy_detail` delegates to
+  `derive_heavy_detail_traced`, so a traced verdict and an untraced one cannot
+  diverge.

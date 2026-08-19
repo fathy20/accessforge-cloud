@@ -32,11 +32,8 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    Exact equality on either form; still never a substring. Live data mixes the
    two — the report row and the flight-list context can name one airport two
    ways on the same flight — and comparing against the IATA literal alone lost
-   every ICAO-coded leg, on the report AND in the Copilot. `classify_flight_heavy`
-   takes `route_airports` and UNIONS the caller's codes with the context's; a
-   match on any counts. NOT a Copilot-only defect: the earlier "the Copilot is
-   structurally blind to the airport rule" framing is withdrawn — its context
-   already carried the row's codes.
+   every ICAO-coded leg. `classify_flight_heavy` takes `route_airports` and
+   UNIONS the caller's codes with the context's; a match on any counts.
 
 4. **Cabin trainee = Work Schedule Function == "SFA" ONLY.** Owner ruling
    (Q1, 2026-08-17). Never Position-only — SFA as a *position* is a normal
@@ -47,29 +44,20 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    Pinned by `test_no_sp_ops_cabin_exclusion_exists`.
 
 6. **PAD/PSN (and OBS/OBS2/STB) never count as operating crew.** Excluded from
-   the operating cockpit/cabin counts and from STEP 4's same-crew comparison
-   on both legs. PSN is short-circuited to No (`PSN_POSITIONING`); PAD is not —
-   a PAD rider's row follows the flight-level rules. Block-time inclusion for
-   PAD is untouched. Evidence: RSX6081/RSX6082 HRG↔OPO 22-06 (a cockpit PAD
-   rider wrongly broke the crew-set match and inflated the count).
+   the operating cockpit/cabin counts. PSN is short-circuited to No
+   (`PSN_POSITIONING`); PAD is not — a PAD rider's row follows the flight-level
+   rules. Block-time inclusion for PAD is untouched. Evidence:
+   RSX6081/RSX6082 HRG↔OPO 22-06 (a cockpit PAD rider wrongly broke the
+   crew-set match and inflated the count).
 
    **The STEP-4 comparison is crew CONTINUITY, not role identity (owner ruling
    2026-08-19, D-2).** Comparing the position-filtered sets was a symmetric set
    equality, so a member who flew out as FO and rode home as PAD vanished from
    one side and broke the rotation for EVERY member of it (RSX6077/RSX6078
-   HRG↔LIS 14-06). The implemented rule, in full: for each leg, that leg's
-   OPERATING crew ∪ everyone present on BOTH legs in any capacity ∪ the subject
-   member. Riders present on only ONE leg stay excluded. The owner's literal
-   wording ("operating crew of both legs plus the subject") does not reach this
-   outcome on its own; the ruled OUTCOME governs (confirmed 2026-08-19).
-
-   **KNOCK-ON — deliberate, do NOT "fix" it.** A member riding PSN on the OTHER
-   leg no longer breaks their colleagues' rotation, because they are present on
-   both legs and their presence is therefore continuous. This follows from the
-   rule above and is intended. PSN keeps its immediate NO on the leg BEING
-   JUDGED — a different rule, unchanged. Pinned by
-   `test_psn_keeps_its_immediate_no`. Anyone "restoring" the old symmetric set
-   equality to make PSN riders break rotations again would re-introduce D-2.
+   HRG↔LIS 14-06). `_continuity_sets` compares each leg's operating crew UNION
+   everyone present on BOTH legs in any capacity, plus the subject. Riders
+   present on only ONE leg stay excluded. PSN keeps its immediate NO on the leg
+   being judged.
 
 7. **STEP 4 break gate is strict: `break >= 4h` rejects.** 3:59 connects,
    exactly 4:00 does not (parity invariant `0 <= break < 4h`). The duty window
@@ -83,16 +71,13 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    The previous either-direction test made any same-direction pair with a
    stable roster and a short break report Heavy — a live wrong-verdict class.
    Evidence: RSX8891 HRG→SSH then RSX6083 SSH→OPO, break 0:50, identical
-   roster → No on both, `ROTATION_MISMATCH`. Side effect: the RSX6081/RSX6084
-   pair now reports `ROTATION_MISMATCH` instead of `BREAK_EXCEEDS_LIMIT`,
-   because the rotation check runs before the break arithmetic.
+   roster → No on both, `ROTATION_MISMATCH`.
 
    **Pairing direction (owner ruling 2026-08-19).** A leg whose duty began on
    an earlier leg pairs BACKWARD. The backward neighbour is always searched;
    the forward one only when nothing connected precedes this leg (`_connects`,
    break gate alone). Both directions are searched only for a leg that is first
-   in its duty — which is also the only state in which two `_weaker` reasons
-   can compete.
+   in its duty.
 
 8. **Badge semantics — CORRECTED 2026-08-19 (owner ruling).** The red
    exclamation means exactly one thing: **the rotation resolver established
@@ -115,8 +100,7 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    disclosure on the verdict cell of every leg. `heavy.py` and
    `unknown_resolver.py` stay pure: the step type lives in `trace.py` and
    `derive_heavy_detail` delegates to `derive_heavy_detail_traced`, so a traced
-   verdict and an untraced one cannot diverge. Offline renderer for the four
-   reviewed cases: `python -m backend.statistics.crew_hours.tools.heavy_cases`.
+   verdict and an untraced one cannot diverge.
 
 Also settled (context, same ADR): thresholds are the operator standard
 complement — cockpit > 2, cabin > 4, derived from June 2026 data (304

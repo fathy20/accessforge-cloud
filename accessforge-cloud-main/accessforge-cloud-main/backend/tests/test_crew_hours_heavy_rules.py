@@ -356,5 +356,74 @@ class TestCaseB(unittest.TestCase):
         self.assertIs(_legs(response, "C1")["RSX6078"].augmented_heavy, True)
 
 
+# --------------------------------------------------------------------------
+# 2.3 — rotation continuity is a true out-and-back
+# --------------------------------------------------------------------------
+
+
+class TestCaseC(unittest.TestCase):
+    """Case C — RSX8891 HRG→SSH then RSX6083 SSH→OPO: chain onward, not a return.
+
+    Break 0:50 and an identical roster, so every other gate passes. Only the
+    out-and-back requirement can produce the correct No here, and the reason
+    must name the rotation, not the crew or the break.
+    """
+
+    def _response(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1001, "RSX8891", "HRG", "SSH", crew),
+            _row(1002, "RSX6083", "SSH", "OPO", crew),
+        ]
+        contexts = [
+            _context(1001, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH"),
+            _context(1002, "2026-06-18T08:00:00Z", "2026-06-18T13:30:00Z", crew, "SSH", "OPO"),
+        ]
+        return _response(rows, contexts)
+
+    def test_chain_onward_is_no_on_both_legs_for_rotation_reasons(self):
+        response = self._response()
+
+        for code in ("C1", "C2"):
+            flights = _legs(response, code)
+            for leg in ("RSX8891", "RSX6083"):
+                flight = flights[leg]
+                self.assertIs(flight.augmented_heavy, False, f"{code} {leg}")
+                self.assertEqual(
+                    flight.unknown_resolution_reason, "ROTATION_MISMATCH", f"{code} {leg}"
+                )
+
+    def test_the_same_pair_flown_as_an_out_and_back_is_yes(self):
+        # Change only the second leg's destination back to the origin.
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1011, "RSX8891", "HRG", "SSH", crew),
+            _row(1012, "RSX8892", "SSH", "HRG", crew),
+        ]
+        contexts = [
+            _context(1011, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH"),
+            _context(1012, "2026-06-18T08:00:00Z", "2026-06-18T09:20:00Z", crew, "SSH", "HRG"),
+        ]
+
+        for leg, flight in _legs(_response(rows, contexts), "C1").items():
+            self.assertIs(flight.augmented_heavy, True, leg)
+            self.assertEqual(flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+    def test_a_missing_airport_still_fails_closed(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1021, "RSX8891", "HRG", None, crew),
+            _row(1022, "RSX8892", None, "HRG", crew),
+        ]
+        contexts = [
+            _context(1021, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", None),
+            _context(1022, "2026-06-18T08:00:00Z", "2026-06-18T09:20:00Z", crew, None, "HRG"),
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertEqual(flight.unknown_resolution_reason, "ROTATION_MISMATCH")
+
+
 if __name__ == "__main__":
     unittest.main()

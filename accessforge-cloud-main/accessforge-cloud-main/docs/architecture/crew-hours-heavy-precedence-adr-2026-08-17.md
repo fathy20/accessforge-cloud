@@ -260,6 +260,24 @@ they are present on both legs, so their presence is continuous. `PSN` keeps its
 immediate NO on the leg *being judged*, which is a different rule and unchanged.
 Pinned by `test_psn_keeps_its_immediate_no`.
 
+### 6.3 — Rotation continuity is a TRUE out-and-back. Supersedes Decision 3's first bullet.
+
+`_rotation_chained` accepted a shared airport in *either* direction, so a chain
+onward qualified: any same-direction pair with a stable roster and a break under
+four hours was reported Heavy. That contradicts the original rule ("flew out and
+came back") and was a live wrong-verdict class, not a theoretical one.
+`_rotation_out_and_back` now requires `neighbour.departure == current.arrival`
+**AND** `neighbour.arrival == current.departure`. The predicate is symmetric, so
+it reads the same whether the neighbour precedes or follows the current leg, and
+missing airport data still fails closed as `ROTATION_MISMATCH`.
+
+Evidence: case C, RSX8891 HRG→SSH then RSX6083 SSH→OPO, break 0:50, identical
+roster — every other gate passes and only this one produces the correct No.
+Consequence recorded in the tests: the pre-existing case-4 pair (RSX6081 HRG→OPO
+then RSX6084 OPO→SSH) now reports `ROTATION_MISMATCH` rather than
+`BREAK_EXCEEDS_LIMIT`, because the rotation check runs before the break
+arithmetic.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

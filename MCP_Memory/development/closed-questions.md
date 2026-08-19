@@ -77,6 +77,16 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    included; `DIFFERENT_DAY` requires a different UTC date AND >24h
    start-to-start.
 
+   **Rotation continuity is a TRUE out-and-back (owner ruling 2026-08-19).**
+   `neighbour.departure == current.arrival` AND
+   `neighbour.arrival == current.departure`. A chain onward is NOT a rotation.
+   The previous either-direction test made any same-direction pair with a
+   stable roster and a short break report Heavy — a live wrong-verdict class.
+   Evidence: RSX8891 HRG→SSH then RSX6083 SSH→OPO, break 0:50, identical
+   roster → No on both, `ROTATION_MISMATCH`. Side effect: the RSX6081/RSX6084
+   pair now reports `ROTATION_MISMATCH` instead of `BREAK_EXCEEDS_LIMIT`,
+   because the rotation check runs before the break arithmetic.
+
 8. **Badge semantics.** The red exclamation means exactly one thing: "absent
    from LEON augmented data, decided by the local rotation rule". Every leg
    that enters STEP 4 gets `unknown_resolved=True` + `heavy_source=LOCAL_RULE`

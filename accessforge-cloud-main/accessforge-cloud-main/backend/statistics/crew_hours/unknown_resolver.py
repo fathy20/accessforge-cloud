@@ -118,9 +118,11 @@ def resolve_unknown_heavy(
         if neighbour_start is None or neighbour_end is None:
             reason = _weaker(reason, "MISSING_FLIGHT_TIMES")
             continue
-        # Rotation continuity: the neighbour must chain airports with this
-        # leg. Missing airport data cannot establish continuity — fail closed.
-        if not _rotation_chained(current, neighbour):
+        # Rotation continuity: a true out-and-back. Chaining onward to a third
+        # airport is NOT a rotation (owner ruling 2026-08-19) - the original
+        # rule is "flew out and came back". Missing airport data cannot
+        # establish continuity - fail closed.
+        if not _rotation_out_and_back(current, neighbour):
             reason = _weaker(reason, "ROTATION_MISMATCH")
             continue
         break_duration = _break_between(
@@ -164,12 +166,19 @@ def _weaker(current: ResolutionReason, candidate: ResolutionReason) -> Resolutio
         return candidate
 
 
-def _rotation_chained(current: FlightContext, neighbour: FlightContext) -> bool:
-    """An out-and-back or chained rotation shares an airport at the junction."""
+def _rotation_out_and_back(current: FlightContext, neighbour: FlightContext) -> bool:
+    """A rotation is a TRUE out-and-back: the pair returns where it started.
+
+    Owner ruling 2026-08-19. The previous version accepted a shared airport in
+    EITHER direction, so a chain onward (HRG->SSH then SSH->OPO) qualified and
+    any same-direction pair with a stable roster and a short break was reported
+    Heavy. Both clauses must hold now, which is symmetric: it reads the same
+    whether the neighbour precedes or follows the current leg.
+    """
 
     return (
         _same_airport(neighbour.departure_airport, current.arrival_airport)
-        or _same_airport(neighbour.arrival_airport, current.departure_airport)
+        and _same_airport(neighbour.arrival_airport, current.departure_airport)
     )
 
 

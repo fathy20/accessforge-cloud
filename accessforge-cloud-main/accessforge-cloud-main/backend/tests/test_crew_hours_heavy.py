@@ -419,8 +419,9 @@ class TestScreenshotEvidence(unittest.TestCase):
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
 
     def test_case_4_unresolvable_chain_is_no_with_badges_on_both_legs(self):
-        # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: next duty day, the
-        # rotation never returns. Both legs entered STEP 4, so both carry the badge.
+        # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: the rotation never
+        # returns to HRG. With continuity now a true out-and-back, the pair
+        # fails on ROTATION_MISMATCH before the break arithmetic is reached.
         rows = [
             _screenshot_row(611, "RSX6081", "HRG", "OPO", ["C1", "C2"], ["CPT", "FO"]),
             _screenshot_row(612, "RSX6084", "OPO", "SSH", ["C1", "C2"], ["CPT", "FO"]),
@@ -446,7 +447,7 @@ class TestScreenshotEvidence(unittest.TestCase):
                 self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
                 self.assertEqual(
-                    flight.unknown_resolution_reason, "BREAK_EXCEEDS_LIMIT"
+                    flight.unknown_resolution_reason, "ROTATION_MISMATCH"
                 )
 
     def test_step_four_entry_always_flags_unknown_resolved(self):

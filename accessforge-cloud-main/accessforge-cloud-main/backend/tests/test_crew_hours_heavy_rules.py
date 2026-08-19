@@ -473,5 +473,83 @@ class TestBadgeMeansResolverEstablishedHeavy(unittest.TestCase):
         self.assertFalse(flight.unknown_resolved)
 
 
+# --------------------------------------------------------------------------
+# 2.5 — pairing direction
+# --------------------------------------------------------------------------
+
+
+class TestPairingDirection(unittest.TestCase):
+    """A leg that is not first in its duty pairs backward only."""
+
+    def _index(self):
+        # 14-06 HRG→LIS 14:25-20:40, then LIS→HRG 21:50-03:35(+1) — one duty,
+        # break 1:10. The next day's HRG→LIS is a different duty entirely.
+        return _index(
+            _context(
+                1201, "2026-06-14T14:25:00Z", "2026-06-14T20:40:00Z",
+                [("C1", "CPT"), ("C9", "FO")], "HRG", "LIS",
+            ),
+            _context(
+                1202, "2026-06-14T21:50:00Z", "2026-06-15T03:35:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "LIS", "HRG",
+            ),
+            _context(
+                1203, "2026-06-15T06:00:00Z", "2026-06-15T12:15:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "HRG", "LIS",
+            ),
+        )
+
+    def test_the_late_leg_pairs_backward_and_not_forward(self):
+        index = self._index()
+
+        resolution = resolve_unknown_heavy(
+            index, build_rotation_index(index), 1202, "C1"
+        )
+
+        # Backward is the only direction considered: the roster changed on the
+        # outbound leg, so the answer is CREW_SET_CHANGED. Pairing forward with
+        # the next day's leg would have produced a spurious Yes -- that leg is a
+        # perfect out-and-back partner by airports, break arithmetic aside.
+        self.assertIs(resolution.effective_heavy, False)
+        self.assertEqual(resolution.reason, "CREW_SET_CHANGED")
+
+    def test_a_leg_first_in_its_duty_still_pairs_forward(self):
+        index = self._index()
+
+        resolution = resolve_unknown_heavy(
+            index, build_rotation_index(index), 1201, "C1"
+        )
+
+        # 1201 has no predecessor at all, so the forward search runs and finds
+        # the genuine out-and-back partner.
+        self.assertIs(resolution.effective_heavy, False)
+        self.assertEqual(resolution.reason, "CREW_SET_CHANGED")
+
+    def test_forward_pairing_survives_when_the_predecessor_is_a_separate_duty(self):
+        # A 10h gap before the leg means the leg IS first in its own duty, so
+        # the forward partner must still be reachable.
+        index = _index(
+            _context(
+                1301, "2026-06-14T02:00:00Z", "2026-06-14T04:00:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "HRG", "SSH",
+            ),
+            _context(
+                1302, "2026-06-14T18:00:00Z", "2026-06-14T20:00:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "HRG", "SSH",
+            ),
+            _context(
+                1303, "2026-06-14T21:00:00Z", "2026-06-14T23:00:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "SSH", "HRG",
+            ),
+        )
+
+        resolution = resolve_unknown_heavy(
+            index, build_rotation_index(index), 1302, "C1"
+        )
+
+        self.assertIs(resolution.effective_heavy, True)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+
 if __name__ == "__main__":
     unittest.main()

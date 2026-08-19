@@ -104,12 +104,24 @@ def resolve_unknown_heavy(
     if current_start is None or current_end is None:
         return UnknownResolution(False, True, "MISSING_FLIGHT_TIMES")
 
-    neighbours = _neighbours(rotation_index.get(normalized_code, ()), current)
-    if not neighbours:
+    previous, upcoming = _previous_and_next(
+        rotation_index.get(normalized_code, ()), current
+    )
+    # Pairing direction (owner ruling 2026-08-19): a leg whose duty began on an
+    # earlier leg pairs BACKWARD. Forward is searched only when this leg is
+    # itself first in its duty - nothing connected before it.
+    first_in_duty = not _connects(current_start, current_end, previous)
+    candidates: list[FlightContext] = []
+    if previous is not None:
+        candidates.append(previous)
+    if upcoming is not None and first_in_duty:
+        candidates.append(upcoming)
+
+    if not candidates:
         return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT")
 
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
-    for neighbour in neighbours:
+    for neighbour in candidates:
         neighbour_start = _parse_utc(neighbour.start_time_utc)
         neighbour_end = _parse_utc(neighbour.end_time_utc)
         current_crew, neighbour_crew = _continuity_sets(
@@ -219,23 +231,45 @@ def _same_airport(left: str | None, right: str | None) -> bool:
     return bool(normalized_left) and normalized_left == normalized_right
 
 
-def _neighbours(
+def _previous_and_next(
     contexts: Sequence[FlightContext],
     current: FlightContext,
-) -> tuple[FlightContext, ...]:
-    """Return the immediately previous and next flight for this crew member."""
+) -> tuple[FlightContext | None, FlightContext | None]:
+    """The immediately previous and next flight for this crew member, in order."""
 
-    ordered = [context for context in contexts]
+    ordered = list(contexts)
     for position, context in enumerate(ordered):
         if context.flight_nid != current.flight_nid:
             continue
-        found: list[FlightContext] = []
-        if position > 0:
-            found.append(ordered[position - 1])
-        if position + 1 < len(ordered):
-            found.append(ordered[position + 1])
-        return tuple(found)
-    return ()
+        previous = ordered[position - 1] if position > 0 else None
+        upcoming = ordered[position + 1] if position + 1 < len(ordered) else None
+        return previous, upcoming
+    return None, None
+
+
+def _connects(
+    current_start: datetime,
+    current_end: datetime,
+    neighbour: FlightContext | None,
+) -> bool:
+    """Whether a neighbour shares this leg's duty - the break gate alone.
+
+    Used only to answer "is this leg first in its duty?", which decides whether
+    the forward search runs at all. Airports and crew are deliberately not
+    consulted: a leg preceded by a connected sector is mid-duty even if that
+    sector turns out not to be a qualifying rotation partner.
+    """
+
+    if neighbour is None:
+        return False
+    neighbour_start = _parse_utc(neighbour.start_time_utc)
+    neighbour_end = _parse_utc(neighbour.end_time_utc)
+    if neighbour_start is None or neighbour_end is None:
+        return False
+    return (
+        _break_between(current_start, current_end, neighbour_start, neighbour_end)
+        < UNKNOWN_MAX_BREAK
+    )
 
 
 def _break_between(

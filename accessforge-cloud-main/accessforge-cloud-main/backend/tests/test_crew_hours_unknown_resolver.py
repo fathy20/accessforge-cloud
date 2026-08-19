@@ -309,9 +309,14 @@ class TestRotationContinuity(unittest.TestCase):
 class TestReasonRanking(unittest.TestCase):
     def test_the_closest_near_miss_wins_across_neighbours(self):
         # Previous neighbour fails rotation; next neighbour fails only on crew.
+        # The previous sector ends 13h before this leg starts, so this leg IS
+        # first in its own duty and both directions are searched -- which is the
+        # only state in which two reasons compete (pairing-direction ruling,
+        # 2026-08-19). A connected predecessor would confine the search to
+        # backward and the answer would simply be ROTATION_MISMATCH.
         crew = (_entry("C1"), _entry("C2", position="FO"))
         index = _index(
-            _context(300, "2026-06-01T15:00:00Z", "2026-06-01T17:00:00Z", crew, adep="AAA", ades="BBB"),
+            _context(300, "2026-06-01T05:00:00Z", "2026-06-01T07:00:00Z", crew, adep="AAA", ades="BBB"),
             _context(301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
             _context(
                 302,

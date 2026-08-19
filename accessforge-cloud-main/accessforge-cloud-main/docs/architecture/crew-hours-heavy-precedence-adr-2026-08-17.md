@@ -291,6 +291,22 @@ on the reason rather than on the badge, so both show exactly what they showed
 before the badge rule narrowed. `heavy_source` stays `LOCAL_RULE` for a resolver
 No, because the verdict did come from the local rule.
 
+### 6.5 — Pairing direction: backward first, forward only when first in duty
+
+A leg whose duty began on an earlier leg pairs with the **previous** leg. The
+resolver searched both neighbours and returned on the first success, so a leg in
+mid-duty could be paired forward with an unrelated next-day sector.
+`_previous_and_next` now returns the two neighbours separately; the backward
+candidate is always searched, and the forward candidate only when `_connects`
+says nothing shares this leg's duty before it. `_connects` consults the break
+gate alone — a leg preceded by a connected sector is mid-duty even if that
+sector turns out not to be a qualifying partner. `break < 4h` stays strict.
+
+One consequence: two reasons can only compete in `_weaker` when a leg IS first
+in its duty, since that is the only state in which both directions are searched.
+`test_the_closest_near_miss_wins_across_neighbours` was re-timed to put the
+predecessor 13h away for exactly that reason.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

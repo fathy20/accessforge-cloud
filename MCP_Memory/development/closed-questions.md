@@ -87,6 +87,13 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    pair now reports `ROTATION_MISMATCH` instead of `BREAK_EXCEEDS_LIMIT`,
    because the rotation check runs before the break arithmetic.
 
+   **Pairing direction (owner ruling 2026-08-19).** A leg whose duty began on
+   an earlier leg pairs BACKWARD. The backward neighbour is always searched;
+   the forward one only when nothing connected precedes this leg (`_connects`,
+   break gate alone). Both directions are searched only for a leg that is first
+   in its duty — which is also the only state in which two `_weaker` reasons
+   can compete.
+
 8. **Badge semantics — CORRECTED 2026-08-19 (owner ruling).** The red
    exclamation means exactly one thing: **the rotation resolver established
    Heavy = True**. `unknown_resolved = resolution.effective_heavy`. A resolver

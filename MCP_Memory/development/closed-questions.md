@@ -107,6 +107,17 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    RETRACTED: the previous wording "every leg that enters STEP 4 gets
    `unknown_resolved=True` regardless of Yes/No".
 
+9. **Every leg carries a `heavy_trace` (owner ruling 2026-08-19).** An ordered
+   record on `FlightItem`: each rule evaluated, its outcome, and the inputs it
+   used — airports as received in every form and from both sources, times as
+   received, operating counts with thresholds, and the two crew sets compared.
+   Present for deterministic verdicts too, surfaced as a `Decision trace`
+   disclosure on the verdict cell of every leg. `heavy.py` and
+   `unknown_resolver.py` stay pure: the step type lives in `trace.py` and
+   `derive_heavy_detail` delegates to `derive_heavy_detail_traced`, so a traced
+   verdict and an untraced one cannot diverge. Offline renderer for the four
+   reviewed cases: `python -m backend.statistics.crew_hours.tools.heavy_cases`.
+
 Also settled (context, same ADR): thresholds are the operator standard
 complement — cockpit > 2, cabin > 4, derived from June 2026 data (304
 flights: standard 2+4) — re-derive from data if the fleet or cabin policy

@@ -293,6 +293,66 @@ describe("Crew Hours detail rendering", () => {
     });
   });
 
+  it("shows the decision trace on a deterministic row, which carries no badge", async () => {
+    // 2.6: every leg explains itself, not only resolver-decided ones. This row
+    // is decided by the airport rule, so it has no badge and must still show
+    // the steps that produced its Yes.
+    const tracedCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 1,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_number: "RSX331",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "SVX_AIRPORT",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: false,
+          heavy_trace: [
+            {
+              step: "LEON_AUGMENTATION",
+              outcome: "LEON is silent for this leg",
+              inputs: { ftl_index_available: true },
+            },
+            {
+              step: "STEP_2_SVX_AIRPORT",
+              outcome: "matched 'USSS' -> Heavy Yes",
+              inputs: { route_airports: ["SSH", "SVX", "HESH", "USSS"] },
+            },
+            { step: "VERDICT", outcome: "Heavy Yes", inputs: { badge: false } },
+          ],
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [tracedCrew] }}
+        crews={[tracedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).toBeNull();
+
+    const verdict = screen.getAllByLabelText(/Augmented \(Heavy\)/)[0];
+    fireEvent.focus(verdict);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("heavy-trace").length).toBeGreaterThan(0);
+    });
+    const trace = screen.getAllByTestId("heavy-trace")[0];
+    expect(trace).toHaveTextContent("STEP_2_SVX_AIRPORT");
+    // Airports as received, in both code systems.
+    expect(trace).toHaveTextContent("SSH, SVX, HESH, USSS");
+    expect(trace).toHaveTextContent("VERDICT");
+  });
+
   it("renders no badge on airport-decided EVN/SVX rows", () => {
     // RSX331/RSX121 evidence: SVX/EVN verdicts are deterministic rules, not
     // resolver guesses — unknown_resolved is false and no badge may render.

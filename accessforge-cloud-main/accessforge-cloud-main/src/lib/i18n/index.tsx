@@ -157,6 +157,10 @@ export const dict = {
     ar: "حل الحالة غير المعروفة",
     en: "Unknown resolution",
   },
+  "crew.heavy.trace": {
+    ar: "خطوات القرار",
+    en: "Decision trace",
+  },
   "crew.heavy.local_resolution_badge": {
     ar: "غير موجود في بيانات LEON للتعزيز — تم الحل بقاعدة الدوران المحلية",
     en: "Not found in LEON augmented data — resolved by local rotation rule",

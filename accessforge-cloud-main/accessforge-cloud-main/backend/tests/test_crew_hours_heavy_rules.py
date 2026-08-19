@@ -551,5 +551,116 @@ class TestPairingDirection(unittest.TestCase):
         self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
 
+# --------------------------------------------------------------------------
+# 2.6 — heavy_trace
+# --------------------------------------------------------------------------
+
+
+class TestHeavyTrace(unittest.TestCase):
+    """Every leg explains itself: steps evaluated, outcomes, and inputs used."""
+
+    def test_case_a_trace_names_the_airport_step_and_both_code_forms(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [_row(1401, "RSX331", "SSH", "SVX", crew)]
+        contexts = [
+            _context(1401, "2026-06-16T17:15:00Z", "2026-06-16T22:35:00Z", crew, "HESH", "USSS")
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX331"]
+
+        self.assertIn("STEP_2_SVX_AIRPORT", _trace_steps(flight))
+        step = _trace_step(flight, "STEP_2_SVX_AIRPORT")
+        self.assertIn("match", step.outcome)
+        # Airports as received, from both sources and in both forms.
+        airports = step.inputs["route_airports"]
+        for code in ("SSH", "SVX", "HESH", "USSS"):
+            self.assertIn(code, airports)
+        self.assertEqual(_trace_steps(flight)[-1], "VERDICT")
+        self.assertIn("Heavy", _trace_step(flight, "VERDICT").outcome)
+
+    def test_every_leg_has_a_trace_including_deterministic_ones(self):
+        crew = [("C1", "CPT"), ("C2", "FO"), ("C3", "FO2")]
+        rows = [_row(1411, "RSX500", "HRG", "SSH", crew)]
+        contexts = [
+            _context(1411, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH")
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX500"]
+        steps = _trace_steps(flight)
+
+        self.assertEqual(
+            steps[:5],
+            [
+                "LEON_AUGMENTATION",
+                "STEP_1_EVN_AIRPORT",
+                "STEP_1_EVN_TAG",
+                "STEP_2_SVX_AIRPORT",
+                "STEP_2_SVX_TAG",
+            ],
+        )
+        counts = _trace_step(flight, "STEP_3_OPERATING_COUNTS")
+        self.assertEqual(counts.inputs["operating_cockpit"], 3)
+        self.assertEqual(counts.inputs["cockpit_threshold"], 2)
+        self.assertNotIn("STEP_4_ROTATION", steps)
+
+    def test_case_b_trace_shows_the_compared_crew_sets_with_the_subject_kept(self):
+        outbound = [("C1", "CPT"), ("C2", "FO"), ("C3", "FA1")]
+        inbound = [("C1", "CPT"), ("C2", "PAD"), ("C3", "FA1")]
+        rows = [
+            _row(1421, "RSX6077", "HRG", "LIS", outbound),
+            _row(1422, "RSX6078", "LIS", "HRG", inbound),
+        ]
+        contexts = [
+            _context(1421, "2026-06-14T14:25:00Z", "2026-06-14T20:40:00Z", outbound, "HRG", "LIS"),
+            _context(1422, "2026-06-14T21:50:00Z", "2026-06-15T03:35:00Z", inbound, "LIS", "HRG"),
+        ]
+
+        flight = _legs(_response(rows, contexts), "C2")["RSX6078"]
+        neighbour = _trace_step(flight, "STEP_4_NEIGHBOUR")
+
+        self.assertEqual(neighbour.inputs["direction"], "backward")
+        self.assertIn("C2", neighbour.inputs["current_crew"])
+        self.assertIn("C2", neighbour.inputs["neighbour_crew"])
+        self.assertEqual(neighbour.inputs["break"], "1:10")
+        self.assertIn("qualifies", neighbour.outcome)
+
+    def test_case_c_trace_shows_the_out_and_back_comparison_that_failed(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1431, "RSX8891", "HRG", "SSH", crew),
+            _row(1432, "RSX6083", "SSH", "OPO", crew),
+        ]
+        contexts = [
+            _context(1431, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH"),
+            _context(1432, "2026-06-18T08:00:00Z", "2026-06-18T13:30:00Z", crew, "SSH", "OPO"),
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
+        neighbour = _trace_step(flight, "STEP_4_NEIGHBOUR")
+
+        self.assertEqual(neighbour.inputs["current_route"], ["HRG", "SSH"])
+        self.assertEqual(neighbour.inputs["neighbour_route"], ["SSH", "OPO"])
+        self.assertIn("ROTATION_MISMATCH", neighbour.outcome)
+        self.assertIn("No", _trace_step(flight, "VERDICT").outcome)
+
+    def test_case_d_trace_records_the_times_as_received(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [
+            _row(1441, "RSX6081", "HRG", "OPO", crew),
+            _row(1442, "RSX6084", "OPO", "SSH", crew),
+        ]
+        contexts = [
+            _context(1441, "2026-06-22T15:00:00Z", "2026-06-22T21:00:00Z", crew, "HRG", "OPO"),
+            _context(1442, "2026-06-23T08:00:00Z", "2026-06-23T12:00:00Z", crew, "OPO", "SSH"),
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX6081"]
+        rotation = _trace_step(flight, "STEP_4_ROTATION")
+
+        self.assertEqual(rotation.inputs["crew_code"], "C1")
+        self.assertEqual(rotation.inputs["current_start_utc"], "2026-06-22T15:00:00Z")
+        self.assertEqual(rotation.inputs["current_end_utc"], "2026-06-22T21:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

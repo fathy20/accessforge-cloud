@@ -9,6 +9,18 @@ class CrewHoursPeriod(BaseModel):
     to_date: str = Field(..., alias="to")
 
 
+class HeavyTraceStep(BaseModel):
+    """One evaluated Heavy rule, as shown on the verdict cell of every leg.
+
+    Mirrors ``statistics.crew_hours.trace.HeavyTraceStep``; the pure engine may
+    not import pydantic, so the service layer converts at the boundary.
+    """
+
+    step: str
+    outcome: str
+    inputs: Mapping[str, Any] = Field(default_factory=dict)
+
+
 class FlightItem(BaseModel):
     flight_nid: str
     flight_number: str | None = None
@@ -44,6 +56,8 @@ class FlightItem(BaseModel):
     # is diagnostic rather than a claim.
     unknown_resolved: bool = False
     unknown_resolution_reason: str | None = None
+    # Every leg explains its own verdict, resolver-decided or not.
+    heavy_trace: list[HeavyTraceStep] = []
 
 
 class CrewMemberSummary(BaseModel):

@@ -24,6 +24,7 @@ from typing import Mapping, Sequence
 
 from .crew_context import CrewContextEntry, CrewContextIndex, FlightContext
 from .positions import CREW_SET_EXCLUDED_POSITIONS, crew_set_identity
+from .trace import HeavyTraceStep, format_break, step
 
 
 # The break ceiling: two sectors count as one augmented rotation only strictly
@@ -51,6 +52,8 @@ class UnknownResolution:
     effective_heavy: bool
     resolved: bool
     reason: ResolutionReason
+    # The ordered record of what STEP 4 evaluated; see trace.HeavyTraceStep.
+    trace: tuple[HeavyTraceStep, ...] = ()
 
 
 def build_rotation_index(
@@ -84,25 +87,78 @@ def resolve_unknown_heavy(
     """Apply STEP 4 for one crew member on one flight."""
 
     if not index.available or flight_nid is None or not crew_code:
-        return UnknownResolution(False, False, "NO_FLIGHT_CONTEXT")
+        return UnknownResolution(
+            False,
+            False,
+            "NO_FLIGHT_CONTEXT",
+            (step("STEP_4_ROTATION", "no crew context index -> Heavy No"),),
+        )
     normalized_code = crew_code.strip().upper()
     current = index.contexts.get(flight_nid)
     if current is None:
-        return UnknownResolution(False, False, "NO_FLIGHT_CONTEXT")
+        return UnknownResolution(
+            False,
+            False,
+            "NO_FLIGHT_CONTEXT",
+            (
+                step(
+                    "STEP_4_ROTATION",
+                    "this leg is absent from the flight-list context -> Heavy No",
+                    crew_code=normalized_code,
+                    flight_nid=flight_nid,
+                ),
+            ),
+        )
 
     entry = _entry_for(current.entries, normalized_code)
-    # Case A — we do not know what this person was doing on the flight, so NO.
+    # Case A - we do not know what this person was doing on the flight, so NO.
     if entry is None or (entry.position is None and entry.function is None):
-        return UnknownResolution(False, True, "UNKNOWN_POSITION")
-    # Case B — a PSN passenger is never augmented crew: NO immediately, and
+        return UnknownResolution(
+            False,
+            True,
+            "UNKNOWN_POSITION",
+            (
+                step(
+                    "STEP_4_ROTATION",
+                    "no position or function for this member on this leg -> Heavy No",
+                    crew_code=normalized_code,
+                ),
+            ),
+        )
+    # Case B - a PSN passenger is never augmented crew: NO immediately, and
     # deliberately without any neighbour search.
     if _is_psn(entry.position):
-        return UnknownResolution(False, True, "PSN_POSITIONING")
+        return UnknownResolution(
+            False,
+            True,
+            "PSN_POSITIONING",
+            (
+                step(
+                    "STEP_4_ROTATION",
+                    "member is PSN on this leg -> Heavy No, no neighbour search",
+                    crew_code=normalized_code,
+                    subject_position=entry.position,
+                ),
+            ),
+        )
 
     current_start = _parse_utc(current.start_time_utc)
     current_end = _parse_utc(current.end_time_utc)
     if current_start is None or current_end is None:
-        return UnknownResolution(False, True, "MISSING_FLIGHT_TIMES")
+        return UnknownResolution(
+            False,
+            True,
+            "MISSING_FLIGHT_TIMES",
+            (
+                step(
+                    "STEP_4_ROTATION",
+                    "this leg has no usable UTC times -> Heavy No",
+                    crew_code=normalized_code,
+                    current_start_utc=current.start_time_utc,
+                    current_end_utc=current.end_time_utc,
+                ),
+            ),
+        )
 
     previous, upcoming = _previous_and_next(
         rotation_index.get(normalized_code, ()), current
@@ -111,23 +167,66 @@ def resolve_unknown_heavy(
     # earlier leg pairs BACKWARD. Forward is searched only when this leg is
     # itself first in its duty - nothing connected before it.
     first_in_duty = not _connects(current_start, current_end, previous)
-    candidates: list[FlightContext] = []
+    candidates: list[tuple[str, FlightContext]] = []
     if previous is not None:
-        candidates.append(previous)
+        candidates.append(("backward", previous))
     if upcoming is not None and first_in_duty:
-        candidates.append(upcoming)
+        candidates.append(("forward", upcoming))
+
+    direction_note = (
+        "first in duty: backward and forward"
+        if first_in_duty
+        else "mid-duty: backward only"
+    )
+    steps: list[HeavyTraceStep] = [
+        step(
+            "STEP_4_ROTATION",
+            f"{len(candidates)} neighbour(s) searched, {direction_note}",
+            crew_code=normalized_code,
+            subject_position=entry.position,
+            current_start_utc=current.start_time_utc,
+            current_end_utc=current.end_time_utc,
+            current_route=[current.departure_airport, current.arrival_airport],
+            break_limit=format_break(UNKNOWN_MAX_BREAK),
+        )
+    ]
 
     if not candidates:
-        return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT")
+        steps.append(
+            step("STEP_4_NEIGHBOUR", "no neighbouring sector for this member -> Heavy No")
+        )
+        return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT", tuple(steps))
 
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
-    for neighbour in candidates:
+    for direction, neighbour in candidates:
         neighbour_start = _parse_utc(neighbour.start_time_utc)
         neighbour_end = _parse_utc(neighbour.end_time_utc)
         current_crew, neighbour_crew = _continuity_sets(
             current, neighbour, normalized_code
         )
+
+        def record(outcome: str, break_text: str | None = None) -> None:
+            steps.append(
+                step(
+                    "STEP_4_NEIGHBOUR",
+                    outcome,
+                    direction=direction,
+                    flight_nid=neighbour.flight_nid,
+                    current_route=[current.departure_airport, current.arrival_airport],
+                    neighbour_route=[
+                        neighbour.departure_airport,
+                        neighbour.arrival_airport,
+                    ],
+                    neighbour_start_utc=neighbour.start_time_utc,
+                    neighbour_end_utc=neighbour.end_time_utc,
+                    current_crew=sorted(current_crew),
+                    neighbour_crew=sorted(neighbour_crew),
+                    **({"break": break_text} if break_text is not None else {}),
+                )
+            )
+
         if neighbour_start is None or neighbour_end is None:
+            record("MISSING_FLIGHT_TIMES: neighbour has no usable UTC times")
             reason = _weaker(reason, "MISSING_FLIGHT_TIMES")
             continue
         # Rotation continuity: a true out-and-back. Chaining onward to a third
@@ -135,11 +234,13 @@ def resolve_unknown_heavy(
         # rule is "flew out and came back". Missing airport data cannot
         # establish continuity - fail closed.
         if not _rotation_out_and_back(current, neighbour):
+            record("ROTATION_MISMATCH: not an out-and-back pair")
             reason = _weaker(reason, "ROTATION_MISMATCH")
             continue
         break_duration = _break_between(
             current_start, current_end, neighbour_start, neighbour_end
         )
+        break_text = format_break(break_duration)
         if break_duration >= UNKNOWN_MAX_BREAK:
             # Midnight-safe duty window: a short break keeps the pair in one
             # duty regardless of calendar dates, so a failed break inside the
@@ -149,15 +250,26 @@ def resolve_unknown_heavy(
                 neighbour_start.date() != current_start.date()
                 and abs(neighbour_start - current_start) > _DUTY_WINDOW_SPAN
             )
-            reason = _weaker(
-                reason, "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
+            failed = "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
+            record(
+                f"{failed}: break {break_text} is not below "
+                f"{format_break(UNKNOWN_MAX_BREAK)}",
+                break_text,
             )
+            reason = _weaker(reason, failed)
             continue
         if neighbour_crew != current_crew:
+            record("CREW_SET_CHANGED: the compared crew sets differ", break_text)
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
-        return UnknownResolution(True, True, "SAME_DAY_SHORT_BREAK_SAME_CREW")
-    return UnknownResolution(False, True, reason)
+        record(
+            "qualifies: out-and-back, break below the limit, same crew -> Heavy Yes",
+            break_text,
+        )
+        return UnknownResolution(
+            True, True, "SAME_DAY_SHORT_BREAK_SAME_CREW", tuple(steps)
+        )
+    return UnknownResolution(False, True, reason, tuple(steps))
 
 
 # Ordered least-to-most informative so the reported reason is the closest near-miss.
@@ -206,13 +318,12 @@ def _continuity_sets(
     vanished from one side only, which broke the rotation not just for them but
     for EVERY member of it (live case RSX6077/RSX6078).
 
-    The implemented rule, in full: for each leg, its OPERATING crew UNION
-    everyone present on BOTH legs in any capacity UNION the subject. A member
-    whose presence is continuous across the pair cannot be evidence of a crew
-    change, whatever they were doing on each leg. Riders present on only ONE leg
-    stay excluded - that part was always correct (RSX6081/RSX6082). The subject
-    is added explicitly because the owner ruling names them; being on both legs
-    is what made them a candidate in the first place.
+    The fix is to keep anyone present on BOTH legs, whatever they were doing on
+    each: their presence is continuous, so it cannot be evidence of a crew
+    change. Riders present on only ONE leg stay excluded - that part was always
+    correct (RSX6081/RSX6082). The subject is added explicitly on both sides,
+    which the owner ruling names directly; being on both legs is what made them
+    a candidate in the first place.
     """
 
     on_both = _crew_codes(current.entries) & _crew_codes(neighbour.entries)

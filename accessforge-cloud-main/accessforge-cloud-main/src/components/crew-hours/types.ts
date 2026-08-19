@@ -25,6 +25,16 @@ export interface FlightItem {
   is_training_function?: boolean;
   unknown_resolved?: boolean;
   unknown_resolution_reason?: string | null;
+  // Every leg explains its own verdict: the rules evaluated, in order, with the
+  // inputs each one saw. Present for deterministic verdicts too, not only
+  // resolver-decided ones.
+  heavy_trace?: HeavyTraceStep[];
+}
+
+export interface HeavyTraceStep {
+  step: string;
+  outcome: string;
+  inputs?: Record<string, unknown>;
 }
 
 export interface CrewMemberSummary {

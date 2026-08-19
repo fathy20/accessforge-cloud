@@ -19,6 +19,7 @@ from .leon_client import CrewHoursLeonClient, get_crew_hours_leon_client
 from .heavy import (
     decide_heavy,
     derive_heavy_detail,
+    derive_heavy_detail_traced,
     merge_route_airports,
     is_training_function,
     is_training_position,
@@ -33,7 +34,9 @@ from .schemas import (
     CrewHoursResponse,
     CrewMemberSummary,
     FlightItem,
+    HeavyTraceStep,
 )
+from .trace import HeavyTraceStep as TraceStep, step as _trace_step
 
 logger = logging.getLogger(__name__)
 
@@ -528,13 +531,38 @@ def _mcp_flight_item(
             join_health.crew_context_attempts += 1
             if unique_id is not None and unique_id in crew_context_index.by_flight:
                 join_health.crew_context_hits += 1
-    derived_heavy, derived_reason = derive_heavy_detail(
+    derived_heavy, derived_reason, derive_steps = derive_heavy_detail_traced(
         entries,
         _optional_string(row.get("acftType")),
         crew_context_index.tags_for(unique_id),
         route_airports=route_airports,
     )
     heavy_decision = decide_heavy(leon_heavy, derived_heavy, derived_reason)
+
+    trace: list[TraceStep] = [
+        _trace_step(
+            "LEON_AUGMENTATION",
+            (
+                "LEON is silent for this leg"
+                if leon_heavy is None
+                else f"LEON says Heavy {'Yes' if leon_heavy else 'No'}"
+            ),
+            leon_augmentation=leon_augmentation,
+            ftl_index_available=augmented_index.available,
+        ),
+        *derive_steps,
+        _trace_step(
+            "DECISION_TABLE",
+            (
+                f"source={heavy_decision.heavy_source}, "
+                f"reason={heavy_decision.heavy_reason}, "
+                f"effective={heavy_decision.effective_heavy}"
+            ),
+            leon_heavy=leon_heavy,
+            derived_heavy=heavy_decision.derived_heavy,
+            conflict=heavy_decision.heavy_conflict,
+        ),
+    ]
 
     effective_heavy = heavy_decision.effective_heavy
     heavy_source = heavy_decision.heavy_source
@@ -546,6 +574,12 @@ def _mcp_flight_item(
     if effective_heavy is None and heavy_decision.derived_heavy is True:
         effective_heavy = True
         heavy_source = "LOCAL_RULE"
+        trace.append(
+            _trace_step(
+                "COUNT_RULE_IS_FINAL",
+                "LEON silent and the operating count is over threshold -> Heavy Yes",
+            )
+        )
     # STEP 4 only runs where LEON genuinely returned no augmentation value.  When
     # the whole FTL index is unavailable we keep UNKNOWN rather than inventing a No.
     if effective_heavy is None and augmented_index.available:
@@ -564,6 +598,21 @@ def _mcp_flight_item(
         unknown_resolved = resolution.effective_heavy
         unknown_resolution_reason = resolution.reason
         heavy_source = "LOCAL_RULE"
+        trace.extend(resolution.trace)
+
+    trace.append(
+        _trace_step(
+            "VERDICT",
+            (
+                "Heavy UNKNOWN"
+                if effective_heavy is None
+                else f"Heavy {'Yes' if effective_heavy else 'No'}"
+            ),
+            heavy_source=heavy_source,
+            heavy_reason=heavy_decision.heavy_reason,
+            badge=unknown_resolved,
+        )
+    )
 
     entry = _crew_entry(entries, crew_code)
     # positioning_crew remains intentionally unused; its alignment and semantics are unverified.
@@ -595,6 +644,10 @@ def _mcp_flight_item(
         is_training_function=is_training_function(entry.function if entry else None),
         unknown_resolved=unknown_resolved,
         unknown_resolution_reason=unknown_resolution_reason,
+        heavy_trace=[
+            HeavyTraceStep(step=item.step, outcome=item.outcome, inputs=dict(item.inputs))
+            for item in trace
+        ],
     )
 
 

@@ -307,6 +307,30 @@ in its duty, since that is the only state in which both directions are searched.
 `test_the_closest_near_miss_wins_across_neighbours` was re-timed to put the
 predecessor 13h away for exactly that reason.
 
+### 6.6 — `heavy_trace`: every leg explains itself
+
+Every wrong verdict so far cost a screenshot-and-guess cycle. `FlightItem` now
+carries an ordered `heavy_trace`: each rule evaluated, its outcome, and the
+inputs it used — airports **as received** in every form and from both sources,
+times as received, the operating counts with their thresholds, and the two crew
+sets actually compared. Steps, in order:
+`LEON_AUGMENTATION`, `STEP_1_EVN_AIRPORT`, `STEP_1_EVN_TAG`,
+`STEP_2_SVX_AIRPORT`, `STEP_2_SVX_TAG`, `STEP_3_OPERATING_COUNTS`,
+`DECISION_TABLE`, then `COUNT_RULE_IS_FINAL` or `STEP_4_ROTATION` +
+`STEP_4_NEIGHBOUR` per candidate, and finally `VERDICT`. A rule that
+short-circuits ends the trace there, because the later steps were not evaluated.
+
+`heavy.py` and `unknown_resolver.py` stay pure: the step type lives in a new
+dependency-free `trace.py`, `derive_heavy_detail_traced` is the single
+implementation that `derive_heavy_detail` delegates to (so a traced verdict and
+an untraced one cannot diverge), and `UnknownResolution` carries its own steps.
+The service layer converts to the pydantic mirror at the boundary. The UI shows
+it as a `Decision trace` disclosure inside the existing verdict tooltip, for
+**every** leg — not only resolver-decided ones.
+
+`tools/heavy_cases.py` renders cases A–D offline from synthetic rows, so a
+regression prints the wrong answer instead of waiting for a screenshot.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

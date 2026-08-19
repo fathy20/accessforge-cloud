@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Literal, Sequence
 
 from .crew_context import CrewContextEntry
+from .trace import HeavyTraceStep, as_received, step
 from .positions import (
     CABIN_POS_TYPE,
     COCKPIT_POS_TYPE,
@@ -200,26 +201,117 @@ def derive_heavy_detail(
     context; a match on either source counts. Tags stay as a secondary signal.
     """
 
+    return derive_heavy_detail_traced(
+        entries, aircraft_type, flight_tags, route_airports=route_airports
+    )[:2]
+
+
+def derive_heavy_detail_traced(
+    entries: Sequence[CrewContextEntry] | None,
+    aircraft_type: str | None,
+    flight_tags: Sequence[str] | None = None,
+    *,
+    route_airports: Sequence[str | None] | None = None,
+) -> tuple[bool | None, HeavyReason, tuple[HeavyTraceStep, ...]]:
+    """derive_heavy_detail, plus the ordered record of how it decided.
+
+    The single implementation: ``derive_heavy_detail`` delegates here and drops
+    the trace, so a traced verdict and an untraced one can never diverge.
+    """
+
+    airports = as_received(route_airports)
+    tags = sorted(_normalized_tags(flight_tags) or ())
+    steps: list[HeavyTraceStep] = []
+
     # STEP 1 — EVN is an absolute exclusion and wins over every other rule,
     # including SVX. Airport first (the live rule), then the legacy tag.
-    if _route_matches(route_airports, EVN_TAG):
-        return False, "EVN_AIRPORT"
-    if is_evn_flight(flight_tags):
-        return False, "EVN_TAG"
+    evn_airport = _route_match(route_airports, EVN_TAG)
+    steps.append(
+        step(
+            "STEP_1_EVN_AIRPORT",
+            f"matched {evn_airport!r} -> Heavy No" if evn_airport else "no match",
+            route_airports=airports,
+            accepted_forms=sorted(airport_code_forms(EVN_TAG)),
+        )
+    )
+    if evn_airport:
+        return False, "EVN_AIRPORT", tuple(steps)
+
+    evn_tag = is_evn_flight(flight_tags)
+    steps.append(
+        step(
+            "STEP_1_EVN_TAG",
+            "tagged EVN -> Heavy No" if evn_tag else "no match",
+            flight_tags=tags,
+        )
+    )
+    if evn_tag:
+        return False, "EVN_TAG", tuple(steps)
+
     # STEP 2 — SVX is an absolute inclusion.
-    if _route_matches(route_airports, SVX_TAG):
-        return True, "SVX_AIRPORT"
-    if is_svx_flight(flight_tags):
-        return True, "SVX_TAG"
+    svx_airport = _route_match(route_airports, SVX_TAG)
+    steps.append(
+        step(
+            "STEP_2_SVX_AIRPORT",
+            f"matched {svx_airport!r} -> Heavy Yes" if svx_airport else "no match",
+            route_airports=airports,
+            accepted_forms=sorted(airport_code_forms(SVX_TAG)),
+        )
+    )
+    if svx_airport:
+        return True, "SVX_AIRPORT", tuple(steps)
+
+    svx_tag = is_svx_flight(flight_tags)
+    steps.append(
+        step(
+            "STEP_2_SVX_TAG",
+            "tagged SVX -> Heavy Yes" if svx_tag else "no match",
+            flight_tags=tags,
+        )
+    )
+    if svx_tag:
+        return True, "SVX_TAG", tuple(steps)
 
     # STEP 3 — operating counts, after the STEP 0 trainee exclusions.
     if entries is None or not entries:
-        return None, "UNKNOWN"
-    if operating_cockpit_count(entries) > HEAVY_COCKPIT_THRESHOLD:
-        return True, "EXTRA_COCKPIT_CREW"
-    if operating_cabin_count(entries) > HEAVY_CABIN_THRESHOLD:
-        return True, "EXTRA_CABIN_CREW"
-    return False, "NONE"
+        steps.append(
+            step(
+                "STEP_3_OPERATING_COUNTS",
+                "no crew context -> UNKNOWN, STEP 4 decides",
+                crew_entries=0,
+            )
+        )
+        return None, "UNKNOWN", tuple(steps)
+
+    cockpit = operating_cockpit_count(entries)
+    cabin = operating_cabin_count(entries)
+    if cockpit > HEAVY_COCKPIT_THRESHOLD:
+        outcome = f"cockpit {cockpit} > {HEAVY_COCKPIT_THRESHOLD} -> Heavy Yes"
+        reason: HeavyReason = "EXTRA_COCKPIT_CREW"
+        verdict: bool | None = True
+    elif cabin > HEAVY_CABIN_THRESHOLD:
+        outcome = f"cabin {cabin} > {HEAVY_CABIN_THRESHOLD} -> Heavy Yes"
+        reason = "EXTRA_CABIN_CREW"
+        verdict = True
+    else:
+        outcome = (
+            f"cockpit {cockpit} <= {HEAVY_COCKPIT_THRESHOLD} and "
+            f"cabin {cabin} <= {HEAVY_CABIN_THRESHOLD} -> Heavy No"
+        )
+        reason = "NONE"
+        verdict = False
+    steps.append(
+        step(
+            "STEP_3_OPERATING_COUNTS",
+            outcome,
+            operating_cockpit=cockpit,
+            cockpit_threshold=HEAVY_COCKPIT_THRESHOLD,
+            operating_cabin=cabin,
+            cabin_threshold=HEAVY_CABIN_THRESHOLD,
+            crew_entries=len(entries),
+        )
+    )
+    return verdict, reason, tuple(steps)
 
 
 def derive_heavy(

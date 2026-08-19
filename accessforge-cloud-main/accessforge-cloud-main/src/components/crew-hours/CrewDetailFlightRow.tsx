@@ -4,7 +4,35 @@ import { useI18n } from "@/lib/i18n";
 import { displayAircraft, displayUtcTime, displayValue } from "./format";
 import { isLocallyResolvedHeavy, localResolutionMessage } from "./messages";
 import { PositionTokenBadge } from "./PositionTokenBadge";
-import type { CrewMemberSummary, FlightItem } from "./types";
+import type { CrewMemberSummary, FlightItem, HeavyTraceStep } from "./types";
+
+function formatTraceInput(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === null ? "—" : String(item))).join(", ");
+  }
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+function HeavyTrace({ trace }: { trace: HeavyTraceStep[] }) {
+  return (
+    <ol className="mt-1 space-y-1 border-t border-border/40 pt-1">
+      {trace.map((step, index) => (
+        <li key={`${step.step}-${index}`} className="font-mono text-[10px] leading-snug">
+          <span className="font-semibold">{step.step}</span>: {step.outcome}
+          {step.inputs && Object.keys(step.inputs).length > 0 && (
+            <span className="block pl-3 text-muted-foreground">
+              {Object.entries(step.inputs)
+                .map(([key, value]) => `${key}=${formatTraceInput(value)}`)
+                .join("  ")}
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export function CrewDetailFlightRow({
   crew,
@@ -20,13 +48,18 @@ export function CrewDetailFlightRow({
       : flight.augmented_heavy === false
         ? t("crew.augmented.no")
         : t("crew.augmented.unknown");
+  // The trace is the durable answer to "why does this row say that?" — every
+  // leg carries one, so a wrong verdict is read, not guessed at from a
+  // screenshot.
+  const trace = flight.heavy_trace ?? [];
   const hasProvenance = Boolean(
     flight.heavy_source ||
     flight.heavy_reason ||
     (flight.leon_heavy !== undefined && flight.leon_heavy !== null) ||
     (flight.derived_heavy !== undefined && flight.derived_heavy !== null) ||
     flight.heavy_conflict ||
-    flight.unknown_resolved,
+    flight.unknown_resolved ||
+    trace.length > 0,
   );
   // The verdict was absent from LEON's augmented data and resolved by the
   // local rotation rule — flagged with a red badge so the provenance is
@@ -159,6 +192,14 @@ export function CrewDetailFlightRow({
                   </p>
                 )}
                 {flight.heavy_conflict && <p>{t("crew.heavy.conflict")}</p>}
+                {trace.length > 0 && (
+                  <details data-testid="heavy-trace" className="max-w-md">
+                    <summary className="cursor-pointer text-xs">
+                      {t("crew.heavy.trace")}
+                    </summary>
+                    <HeavyTrace trace={trace} />
+                  </details>
+                )}
               </div>
             ) : (
               <p>{t("crew.heavy.unavailable")}</p>

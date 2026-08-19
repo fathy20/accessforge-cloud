@@ -20,6 +20,7 @@ import pandas as pd
 from .toolkit import (
     TcmIndexer, TASK_PATTERN, MPD_PATTERN, CHECK_RELATIONS,
     build_check_regexes, ocr_page_text, group_contiguous, expand_check,
+    normalize_check_code,
 )
 
 Log = Callable[[int, str], None]
@@ -358,16 +359,30 @@ def cmp_tcm(job, input_files, workdir: Path, log: Log) -> list[str]:
         log(60, f"Error reading excel: {e}")
         return []
 
-    # Simple column 24 check for the check_code, and column 0 for the task code
+    # Column 24 holds the check code, column 0 the task code.
+    #
+    # App2 matches the check by EQUALITY on two tiers (app2.py:3247-3260, and
+    # redsea_toolkit.py:3330-3341): first the whitespace-stripped, upper-cased
+    # cell against the same form of the target, then _normalize_check_code of
+    # both sides. It is never a containment test. A substring match turns every
+    # check code into a prefix filter -- asking for "A1" silently absorbs "A10"
+    # and "A11", emitting task cards the operator never requested.
     df_str = df.astype(str)
     tasks = set()
-    for idx in range(len(df_str)):
-        if df_str.shape[1] > 24:
-            cell_val = str(df_str.iloc[idx, 24]).strip().upper()
-            if check_code in cell_val or cell_val == check_code:
-                task = str(df_str.iloc[idx, 0]).strip()
-                if task and task != "nan":
-                    tasks.add(task)
+    normalized_target = re.sub(r"\s+", "", check_code).upper()
+    normalized_target_variant = normalize_check_code(check_code)
+    if df_str.shape[1] > 24:
+        for idx in range(len(df_str)):
+            cell_raw = str(df_str.iloc[idx, 24]).strip()
+            matches = (
+                re.sub(r"\s+", "", cell_raw).upper() == normalized_target
+                or normalize_check_code(cell_raw) == normalized_target_variant
+            )
+            if not matches:
+                continue
+            task = str(df_str.iloc[idx, 0]).strip()
+            if task and task != "nan":
+                tasks.add(task)
     
     # Also add the new subtask expansion logic here to match the desktop
     expanded_tasks = set(tasks)

@@ -63,11 +63,14 @@ from alembic.config import Config
 database_url = sys.argv[1]
 operation = sys.argv[2]
 sql_mode = sys.argv[3] == "1"
+# Optional explicit revision target; absent means the operation's natural end
+# (head for upgrade, base for downgrade), preserving every existing call site.
+target = sys.argv[4] if len(sys.argv) > 4 else ""
 config = Config(str(Path.cwd() / "alembic.ini"))
 config.attributes["database_url"] = database_url
 
 if operation == "upgrade":
-    command.upgrade(config, "head", sql=sql_mode)
+    command.upgrade(config, target or "head", sql=sql_mode)
 elif operation == "upgrade_with_create_all_spy":
     from backend.database import Base
     import backend.models  # noqa: F401
@@ -133,8 +136,13 @@ def _run_programmatic_migration(
     *,
     app_env: str = "test",
     sql: bool = False,
+    target: str | None = None,
 ) -> str:
-    """Run Alembic through Config/command without invoking the CLI."""
+    """Run Alembic through Config/command without invoking the CLI.
+
+    ``target`` pins an explicit revision; omitting it keeps the historical
+    behaviour (upgrade to head, downgrade to base).
+    """
 
     if app_env == "test":
         validate_test_database_url(database_url)
@@ -147,6 +155,7 @@ def _run_programmatic_migration(
             database_url,
             operation,
             "1" if sql else "0",
+            target or "",
         ],
         cwd=REPOSITORY_ROOT,
         env=_child_environment(database_url, app_env),
@@ -362,6 +371,166 @@ class TestMigrationIntegrity(_TemporarySQLiteTestCase):
             engine.dispose()
 
         self.assertEqual(user_count, 0)
+
+    # Revision immediately before c9d0e1f2a3b4, whose upgrade() deduplicates
+    # user_roles and module_access before adding the unique indexes.
+    _PRE_DEDUPE_REVISION = "b8c9d0e1f2a3"
+
+    def _seed_conflicting_module_access(self, database_url: str) -> None:
+        """Seed one (user, module) pair holding both a denied and an enabled row.
+
+        The ENABLED row is given the lexicographically smaller id on purpose:
+        module_access.id is a String(36) UUID, so a MIN(id) survivor rule keeps
+        this row and silently grants access that was explicitly denied. The
+        owner ruling (Q-2, 2026-08-19) is that the denied row must win.
+        """
+
+        engine = create_engine(database_url)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("INSERT INTO users (id, email) VALUES ('user-1', 'dedupe@dev.local')")
+                )
+                connection.execute(
+                    text("INSERT INTO modules (id, key) VALUES ('module-1', 'crew_hours')")
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO module_access (id, user_id, module_id, enabled) "
+                        "VALUES ('00000000-aaaa', 'user-1', 'module-1', 1)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO module_access (id, user_id, module_id, enabled) "
+                        "VALUES ('ffffffff-zzzz', 'user-1', 'module-1', 0)"
+                    )
+                )
+        finally:
+            engine.dispose()
+
+    def _module_access_rows(self, database_url: str) -> list[tuple]:
+        engine = create_engine(database_url)
+        try:
+            with engine.connect() as connection:
+                return [
+                    tuple(row)
+                    for row in connection.execute(
+                        text(
+                            "SELECT id, enabled FROM module_access "
+                            "WHERE user_id = 'user-1' AND module_id = 'module-1' ORDER BY id"
+                        )
+                    ).fetchall()
+                ]
+        finally:
+            engine.dispose()
+
+    def test_module_access_dedupe_keeps_the_denied_row_over_an_enabled_duplicate(self):
+        """A migration must never grant access that was explicitly denied."""
+
+        database_url = self._temporary_sqlite_url("dedupe-restrictive.sqlite")
+        _run_programmatic_migration(
+            database_url, "upgrade", target=self._PRE_DEDUPE_REVISION
+        )
+        self._seed_conflicting_module_access(database_url)
+
+        _run_programmatic_migration(database_url, "upgrade")
+
+        rows = self._module_access_rows(database_url)
+        self.assertEqual(len(rows), 1, f"dedupe must leave exactly one row, got {rows}")
+        surviving_id, surviving_enabled = rows[0]
+        self.assertEqual(
+            bool(surviving_enabled),
+            False,
+            f"the denied row must survive; kept {surviving_id!r} with enabled={surviving_enabled!r}",
+        )
+        self.assertEqual(surviving_id, "ffffffff-zzzz")
+
+    def test_module_access_dedupe_is_deterministic_when_no_row_is_denied(self):
+        """With no conflict of intent, the survivor stays deterministic."""
+
+        database_url = self._temporary_sqlite_url("dedupe-agreeing.sqlite")
+        _run_programmatic_migration(
+            database_url, "upgrade", target=self._PRE_DEDUPE_REVISION
+        )
+        engine = create_engine(database_url)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("INSERT INTO users (id, email) VALUES ('user-1', 'dedupe@dev.local')")
+                )
+                connection.execute(
+                    text("INSERT INTO modules (id, key) VALUES ('module-1', 'crew_hours')")
+                )
+                for identifier in ("00000000-aaaa", "ffffffff-zzzz"):
+                    connection.execute(
+                        text(
+                            "INSERT INTO module_access (id, user_id, module_id, enabled) "
+                            f"VALUES ('{identifier}', 'user-1', 'module-1', 1)"
+                        )
+                    )
+        finally:
+            engine.dispose()
+
+        _run_programmatic_migration(database_url, "upgrade")
+
+        rows = self._module_access_rows(database_url)
+        self.assertEqual(rows, [("00000000-aaaa", 1)])
+
+    def test_module_access_dedupe_collapses_null_keyed_duplicates_without_deleting_them(self):
+        """NULL user_id/module_id groups must keep one row, not lose all of them.
+
+        GROUP BY treats NULLs as one group, so the original dedupe kept a
+        survivor here. A correlated rewrite using plain ``=`` would compare
+        NULL to NULL, match nothing, and delete every row in the group. The
+        NULL-safe join predicates in the migration exist for this case.
+        """
+
+        database_url = self._temporary_sqlite_url("dedupe-null-keys.sqlite")
+        _run_programmatic_migration(
+            database_url, "upgrade", target=self._PRE_DEDUPE_REVISION
+        )
+        engine = create_engine(database_url)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("INSERT INTO modules (id, key) VALUES ('module-1', 'crew_hours')")
+                )
+                # Same NULL user_id, so one group; the allow row sorts first.
+                connection.execute(
+                    text(
+                        "INSERT INTO module_access (id, user_id, module_id, enabled) "
+                        "VALUES ('00000000-aaaa', NULL, 'module-1', 1)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO module_access (id, user_id, module_id, enabled) "
+                        "VALUES ('ffffffff-zzzz', NULL, 'module-1', 0)"
+                    )
+                )
+        finally:
+            engine.dispose()
+
+        _run_programmatic_migration(database_url, "upgrade")
+
+        engine = create_engine(database_url)
+        try:
+            with engine.connect() as connection:
+                rows = [
+                    tuple(row)
+                    for row in connection.execute(
+                        text(
+                            "SELECT id, enabled FROM module_access "
+                            "WHERE user_id IS NULL AND module_id = 'module-1'"
+                        )
+                    ).fetchall()
+                ]
+        finally:
+            engine.dispose()
+
+        self.assertEqual(len(rows), 1, f"the NULL-keyed group must not be emptied, got {rows}")
+        self.assertEqual(bool(rows[0][1]), False, "the denied row must still win")
 
     def test_constraint_names_are_stable_across_two_migration_runs(self):
         first_url = self._temporary_sqlite_url("names-first.sqlite")

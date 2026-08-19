@@ -53,6 +53,24 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    PAD is untouched. Evidence: RSX6081/RSX6082 HRG↔OPO 22-06 (a cockpit PAD
    rider wrongly broke the crew-set match and inflated the count).
 
+   **The STEP-4 comparison is crew CONTINUITY, not role identity (owner ruling
+   2026-08-19, D-2).** Comparing the position-filtered sets was a symmetric set
+   equality, so a member who flew out as FO and rode home as PAD vanished from
+   one side and broke the rotation for EVERY member of it (RSX6077/RSX6078
+   HRG↔LIS 14-06). The implemented rule, in full: for each leg, that leg's
+   OPERATING crew ∪ everyone present on BOTH legs in any capacity ∪ the subject
+   member. Riders present on only ONE leg stay excluded. The owner's literal
+   wording ("operating crew of both legs plus the subject") does not reach this
+   outcome on its own; the ruled OUTCOME governs (confirmed 2026-08-19).
+
+   **KNOCK-ON — deliberate, do NOT "fix" it.** A member riding PSN on the OTHER
+   leg no longer breaks their colleagues' rotation, because they are present on
+   both legs and their presence is therefore continuous. This follows from the
+   rule above and is intended. PSN keeps its immediate NO on the leg BEING
+   JUDGED — a different rule, unchanged. Pinned by
+   `test_psn_keeps_its_immediate_no`. Anyone "restoring" the old symmetric set
+   equality to make PSN riders break rotations again would re-introduce D-2.
+
 7. **STEP 4 break gate is strict: `break >= 4h` rejects.** 3:59 connects,
    exactly 4:00 does not (parity invariant `0 <= break < 4h`). The duty window
    is midnight-safe — anchored on the first sector's UTC start date, rollover

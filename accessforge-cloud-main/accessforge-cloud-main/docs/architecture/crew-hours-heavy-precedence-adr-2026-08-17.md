@@ -229,6 +229,37 @@ The fix, in two parts:
   on whatever the context happened to copy, even though that coupling was not
   itself the bug.
 
+### 6.2 — Crew continuity, not role identity (D-2). Supersedes Decision 3's third bullet.
+
+`rotation_crew_codes` → `crew_set_identity` drops every positioning slot, and
+the STEP-4 comparison was a symmetric set equality. A member who flew out as FO
+and rode home as PAD therefore vanished from one side only — which broke the
+rotation not just for them but for **every** member of it (live case RSX6077
+HRG→LIS 14:25–20:40 / RSX6078 LIS→HRG 21:50–03:35+1).
+
+**The implemented rule, stated in full (owner-accepted 2026-08-19):** for each
+leg, the comparison set is
+
+> that leg's **operating crew** ∪ **everyone present on both legs in any
+> capacity** ∪ **the subject member**.
+
+Riders present on only ONE leg stay excluded — that part of Decision 3 was
+correct (RSX6081/RSX6082).
+
+Why not the ruling's literal wording: "the operating crew of both legs plus the
+subject member on both legs" is not on its own sufficient. For subject C1 in case
+B the two sides would still read `{C1,C2,C3}` against `{C1,C3}`, because the PAD
+rider C2 is a *different* member and is still dropped, so C1 would still break.
+The owner ruled the OUTCOME — YES on both legs for **every** member — and
+confirmed on 2026-08-19 that the outcome governs and the set description was
+imprecise. The rule above is what delivers it.
+
+**Knock-on, deliberate — do not "fix" it:** a member riding **PSN** on the other
+leg no longer breaks their colleagues' rotation either, for the same reason —
+they are present on both legs, so their presence is continuous. `PSN` keeps its
+immediate NO on the leg *being judged*, which is a different rule and unchanged.
+Pinned by `test_psn_keeps_its_immediate_no`.
+
 ## Unchanged, deliberately
 
 - Thresholds `cockpit > 2` / `cabin > 4` and the trainee sets.

@@ -280,5 +280,81 @@ class TestCaseA(unittest.TestCase):
         )
 
 
+# --------------------------------------------------------------------------
+# 2.2 — D-2: a member's own PAD slot must not break their rotation
+# --------------------------------------------------------------------------
+
+
+class TestCaseB(unittest.TestCase):
+    """Case B — RSX6077 HRG→LIS / RSX6078 LIS→HRG, one member F0 then PAD.
+
+    The subject rides PAD on the return leg. Because the crew-set identity
+    drops positioning members and the comparison was a symmetric set equality,
+    that dropped the subject from one side only and broke the rotation for
+    EVERY member of it, not just the PAD rider.
+    """
+
+    OUTBOUND = ("2026-06-14T14:25:00Z", "2026-06-14T20:40:00Z")
+    INBOUND = ("2026-06-14T21:50:00Z", "2026-06-15T03:35:00Z")
+
+    def _rotation(self, inbound_positions):
+        outbound_positions = [("C1", "CPT"), ("C2", "FO"), ("C3", "FA1")]
+        rows = [
+            _row(901, "RSX6077", "HRG", "LIS", outbound_positions),
+            _row(902, "RSX6078", "LIS", "HRG", inbound_positions),
+        ]
+        contexts = [
+            _context(901, *self.OUTBOUND, outbound_positions, "HRG", "LIS"),
+            _context(902, *self.INBOUND, inbound_positions, "LIS", "HRG"),
+        ]
+        return _response(rows, contexts)
+
+    def test_the_pad_rider_and_every_colleague_stay_yes_on_both_legs(self):
+        # C2 flew out as FO and rode home as PAD.
+        response = self._rotation([("C1", "CPT"), ("C2", "PAD"), ("C3", "FA1")])
+
+        for code in ("C1", "C2", "C3"):
+            flights = _legs(response, code)
+            for leg in ("RSX6077", "RSX6078"):
+                flight = flights[leg]
+                self.assertIs(flight.augmented_heavy, True, f"{code} {leg}")
+                self.assertEqual(
+                    flight.unknown_resolution_reason,
+                    "SAME_DAY_SHORT_BREAK_SAME_CREW",
+                    f"{code} {leg}",
+                )
+                # Resolver-established Heavy: the badge belongs on both legs.
+                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
+
+    def test_a_different_person_riding_pad_on_the_return_only(self):
+        # C4 joins the return leg as PAD and was not on the outbound at all.
+        response = self._rotation(
+            [("C1", "CPT"), ("C2", "FO"), ("C3", "FA1"), ("C4", "PAD")]
+        )
+
+        for code in ("C1", "C2", "C3"):
+            flights = _legs(response, code)
+            for leg in ("RSX6077", "RSX6078"):
+                self.assertIs(flights[leg].augmented_heavy, True, f"{code} {leg}")
+
+    def test_a_genuine_roster_change_still_breaks_the_rotation(self):
+        # The correction must not swallow a real crew change: C3 is replaced.
+        response = self._rotation([("C1", "CPT"), ("C2", "FO"), ("C9", "FA1")])
+
+        flight = _legs(response, "C1")["RSX6077"]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertEqual(flight.unknown_resolution_reason, "CREW_SET_CHANGED")
+
+    def test_psn_keeps_its_immediate_no(self):
+        # Unchanged rule: a PSN slot on the leg being judged is No at once.
+        response = self._rotation([("C1", "CPT"), ("C2", "PSN"), ("C3", "FA1")])
+
+        psn_leg = _legs(response, "C2")["RSX6078"]
+        self.assertIs(psn_leg.augmented_heavy, False)
+        self.assertEqual(psn_leg.unknown_resolution_reason, "PSN_POSITIONING")
+        # ...and it does not damage anyone else's rotation.
+        self.assertIs(_legs(response, "C1")["RSX6078"].augmented_heavy, True)
+
+
 if __name__ == "__main__":
     unittest.main()

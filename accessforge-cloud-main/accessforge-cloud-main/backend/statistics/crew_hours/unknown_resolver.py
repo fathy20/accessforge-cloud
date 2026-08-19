@@ -108,11 +108,13 @@ def resolve_unknown_heavy(
     if not neighbours:
         return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT")
 
-    current_crew = rotation_crew_codes(current.entries)
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
     for neighbour in neighbours:
         neighbour_start = _parse_utc(neighbour.start_time_utc)
         neighbour_end = _parse_utc(neighbour.end_time_utc)
+        current_crew, neighbour_crew = _continuity_sets(
+            current, neighbour, normalized_code
+        )
         if neighbour_start is None or neighbour_end is None:
             reason = _weaker(reason, "MISSING_FLIGHT_TIMES")
             continue
@@ -137,7 +139,7 @@ def resolve_unknown_heavy(
                 reason, "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
             )
             continue
-        if rotation_crew_codes(neighbour.entries) != current_crew:
+        if neighbour_crew != current_crew:
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
         return UnknownResolution(True, True, "SAME_DAY_SHORT_BREAK_SAME_CREW")
@@ -168,6 +170,35 @@ def _rotation_chained(current: FlightContext, neighbour: FlightContext) -> bool:
     return (
         _same_airport(neighbour.departure_airport, current.arrival_airport)
         or _same_airport(neighbour.arrival_airport, current.departure_airport)
+    )
+
+
+def _continuity_sets(
+    current: FlightContext,
+    neighbour: FlightContext,
+    subject_code: str,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """The two comparable crew sets - CREW CONTINUITY, not role identity.
+
+    ``crew_set_identity`` drops every positioning slot, and the comparison was a
+    symmetric set equality. So a member who flew out as FO and rode home as PAD
+    vanished from one side only, which broke the rotation not just for them but
+    for EVERY member of it (live case RSX6077/RSX6078).
+
+    The implemented rule, in full: for each leg, its OPERATING crew UNION
+    everyone present on BOTH legs in any capacity UNION the subject. A member
+    whose presence is continuous across the pair cannot be evidence of a crew
+    change, whatever they were doing on each leg. Riders present on only ONE leg
+    stay excluded - that part was always correct (RSX6081/RSX6082). The subject
+    is added explicitly because the owner ruling names them; being on both legs
+    is what made them a candidate in the first place.
+    """
+
+    on_both = _crew_codes(current.entries) & _crew_codes(neighbour.entries)
+    anchor = on_both | {subject_code}
+    return (
+        rotation_crew_codes(current.entries) | anchor,
+        rotation_crew_codes(neighbour.entries) | anchor,
     )
 
 

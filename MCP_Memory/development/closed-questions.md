@@ -34,6 +34,11 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    ways on the same flight — and comparing against the IATA literal alone lost
    every ICAO-coded leg. `classify_flight_heavy` takes `route_airports` and
    UNIONS the caller's codes with the context's; a match on any counts.
+   ONE root cause, both surfaces: the report and the Copilot failed identically
+   on the second code form. The earlier "the Copilot is structurally blind to
+   the airport rule" framing is WITHDRAWN — `_context_index_from_report` already
+   copied the row's codes into its `FlightContext`, so an IATA-coded SVX leg
+   always worked there. The `route_airports` parameter is hardening, not the fix.
 
 4. **Cabin trainee = Work Schedule Function == "SFA" ONLY.** Owner ruling
    (Q1, 2026-08-17). Never Position-only — SFA as a *position* is a normal
@@ -54,10 +59,31 @@ regression. Rationale: `accessforge-cloud-main/accessforge-cloud-main/docs/archi
    2026-08-19, D-2).** Comparing the position-filtered sets was a symmetric set
    equality, so a member who flew out as FO and rode home as PAD vanished from
    one side and broke the rotation for EVERY member of it (RSX6077/RSX6078
-   HRG↔LIS 14-06). `_continuity_sets` compares each leg's operating crew UNION
-   everyone present on BOTH legs in any capacity, plus the subject. Riders
-   present on only ONE leg stay excluded. PSN keeps its immediate NO on the leg
-   being judged.
+   HRG↔LIS 14-06). The implemented rule, in full — this is the wording to
+   preserve, not a paraphrase of it:
+
+       comparison set for a leg =
+           that leg's OPERATING crew
+           ∪ everyone present on BOTH legs in any capacity
+           ∪ the subject member
+
+   Riders present on only ONE leg stay excluded (RSX6081/RSX6082 — that part was
+   always correct). The owner's original wording, "operating crew of both legs
+   plus the subject member", does not reach the ruled outcome on its own: for a
+   COLLEAGUE of the PAD rider the two sides would still differ, because the
+   rider is a different member and is still dropped. The owner confirmed on
+   2026-08-19 that the ruled OUTCOME governs — YES on both legs for every
+   member — and that the set description was imprecise.
+
+   **KNOCK-ON — deliberate. Do NOT "fix" this.** A member riding PSN on the
+   OTHER leg no longer breaks their colleagues' rotation, because they are
+   present on both legs and their presence is therefore continuous. This follows
+   directly from the rule above and is intended. PSN keeps its immediate NO on
+   the leg BEING JUDGED — a separate rule, unchanged. Pinned by
+   `test_psn_keeps_its_immediate_no`, which asserts both halves: the PSN member
+   is No, and their colleague on the same leg is Yes. Restoring the old
+   symmetric set equality to make PSN riders break rotations again would
+   re-introduce D-2 wholesale.
 
 7. **STEP 4 break gate is strict: `break >= 4h` rejects.** 3:59 connects,
    exactly 4:00 does not (parity invariant `0 <= break < 4h`). The duty window

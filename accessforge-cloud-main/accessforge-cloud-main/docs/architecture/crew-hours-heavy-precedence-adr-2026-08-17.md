@@ -203,30 +203,35 @@ superseded text is named so the two are never read as still coexisting.
 
 ### 6.1 — Airport codes are matched on BOTH code systems (D-1)
 
-`_route_matches` compared route airports against the literal `"SVX"`/`"EVN"`,
-while `crew_context._airport_code` prefers ICAO. The flight-list context
-therefore contributed `USSS`/`UDYZ` and the airport rule could never fire from
-it. `positions.AIRPORT_CODE_ALIASES` now holds `SVX ↔ USSS` and `EVN ↔ UDYZ`,
-and matching is exact equality after trim+uppercase against **either** form —
-still never a substring, so `USSSX` and `UDYZA` do not match. Adding a third
-airport to an absolute rule means adding it to that one map.
+**Root cause, as accepted by the owner on 2026-08-19: there was ONE defect, and
+it hit both surfaces identically — neither could see the second code form of an
+airport.** `_route_matches` compared route airports against the literal
+`"SVX"`/`"EVN"`, while `crew_context._airport_code` prefers ICAO. An ICAO-coded
+leg therefore contributed `USSS`/`UDYZ`, matched nothing, and read Not Heavy —
+on the Crew Hours report and in the Copilot alike.
 
-`classify_flight_heavy` also grew a `route_airports` parameter. It previously
-passed only the context's two codes, so the Copilot facade saw whatever the
-context happened to carry and nothing else. It now UNIONS the caller's codes —
-for the report, the row's `jl_adep/jl_ades_preferred_code`; for the Copilot, the
-same row fields — with the context's, and a match on any of them counts.
-`merge_route_airports` keeps each spelling as received, so an IATA and an ICAO
-name for one airport both survive into the trace.
+An earlier framing described the Copilot facade as *structurally blind* to the
+airport rule, a second and more serious defect alongside the badge. That framing
+is **withdrawn and is not the record.**
+`copilot.local_answers._context_index_from_report` already copied the report
+row's `jl_adep/jl_ades_preferred_code` into the `FlightContext` it built, which
+is why `test_svx_route_forces_heavy_on_a_standard_crew` — an IATA-coded SVX leg
+through the Copilot — passed before any change here. There was no second defect
+to fix.
 
-Correction to the diagnosis as written: the Copilot was **not** structurally
-blind to the airport rule. `_context_index_from_report` already copied the
-report row's preferred codes into the `FlightContext` it built, which is why
-`test_svx_route_forces_heavy_on_a_standard_crew` passed. The real defect was
-narrower and still serious: neither surface could see a *second* form of the
-same airport, so an ICAO-coded SVX leg read Not Heavy on both. The alias map is
-the fix; the explicit `route_airports` argument removes the coupling that made
-the facade depend on what the context happened to copy.
+The fix, in two parts:
+
+- `positions.AIRPORT_CODE_ALIASES` holds `SVX ↔ USSS` and `EVN ↔ UDYZ`. Matching
+  is exact equality after trim+uppercase against **either** form — still never a
+  substring, so `USSSX` and `UDYZA` do not match. Adding a third airport to an
+  absolute rule means adding it to that one map. This is the part that fixes the
+  wrong verdicts.
+- `classify_flight_heavy` grew a `route_airports` parameter, and
+  `merge_route_airports` unions it with the context's codes, each spelling kept
+  as received. The report passes the row's preferred codes; the Copilot passes
+  the same row fields. This removes the coupling that left the facade dependent
+  on whatever the context happened to copy — a real fragility, but not the bug,
+  and it is recorded as hardening rather than as a fix.
 
 ### 6.2 — Crew continuity, not role identity (D-2). Supersedes Decision 3's third bullet.
 
@@ -236,11 +241,22 @@ and rode home as PAD therefore vanished from one side only — which broke the
 rotation not just for them but for **every** member of it (live case RSX6077
 HRG→LIS 14:25–20:40 / RSX6078 LIS→HRG 21:50–03:35+1).
 
-`_continuity_sets` now compares, for each leg, its operating crew UNION everyone
-present on **both** legs in any capacity, plus the subject explicitly. A member
-whose presence is continuous across the pair cannot be evidence of a crew
-change, whatever they were doing on each leg. Riders present on only ONE leg
-stay excluded — that part of Decision 3 was correct (RSX6081/RSX6082).
+**The implemented rule, stated in full (owner-accepted 2026-08-19) — preserve
+this wording, not a paraphrase of it:**
+
+> comparison set for a leg =
+>   that leg's **OPERATING crew**
+>   ∪ **everyone present on BOTH legs in any capacity**
+>   ∪ **the subject member**
+
+A member whose presence is continuous across the pair cannot be evidence of a
+crew change, whatever they were doing on each leg. Riders present on only ONE
+leg stay excluded — that part of Decision 3 was correct (RSX6081/RSX6082).
+
+Both sides are built the same way, from the same `on_both` intersection, which is
+what restores symmetry: the only thing that can now differ between the two sets
+is a member who *operated* one leg and was absent from the other — which is
+exactly what a crew change is.
 
 Note on the ruling's wording: "the operating crew of both legs plus the subject
 member on both legs" is not on its own sufficient to produce the ruled outcome.
@@ -250,9 +266,12 @@ dropped. The outcome the owner ruled — YES on both legs for **every** member �
 requires keeping anyone present on both legs, which is what is implemented. The
 ruled outcome was treated as authoritative over the literal set description.
 
-`PSN` keeps its immediate NO on the leg being judged, unchanged. A PSN rider on
-the *other* leg no longer breaks the rotation for their colleagues, because they
-are present on both.
+**Knock-on — deliberate. Do NOT "fix" it.** `PSN` keeps its immediate NO on the
+leg *being judged*, unchanged. But a PSN rider on the **other** leg no longer
+breaks the rotation for their colleagues, because they are present on both legs
+and their presence is therefore continuous. That follows directly from the rule
+above and is intended, not an oversight. `test_psn_keeps_its_immediate_no` pins
+both halves: the PSN member is No, and their colleague on the same leg is Yes.
 
 ### 6.3 — Rotation continuity is a TRUE out-and-back. Supersedes Decision 3's first bullet.
 

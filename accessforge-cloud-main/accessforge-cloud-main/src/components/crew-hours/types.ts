@@ -29,6 +29,10 @@ export interface FlightItem {
   // inputs each one saw. Present for deterministic verdicts too, not only
   // resolver-decided ones.
   heavy_trace?: HeavyTraceStep[];
+  // Member-duty allowance (owner model 2026-08-20): this leg belongs to a
+  // duty credited for THIS member. Missing/null = allowance not computed.
+  duty_credit?: boolean | null;
+  credit_source?: string | null; // LEON_AUGMENTED | OPERATE_PLUS_RIDE
 }
 
 export interface HeavyTraceStep {
@@ -50,6 +54,8 @@ export interface CrewMemberSummary {
   reference_total: string | null;
   variance_minutes: number | null;
   flight_count: number;
+  // H.C — credited heavy duties in the requested window (the allowance number).
+  heavy_credits?: number;
   flights: FlightItem[];
 }
 

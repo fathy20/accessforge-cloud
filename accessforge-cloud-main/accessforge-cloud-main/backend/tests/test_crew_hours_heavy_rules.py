@@ -356,17 +356,138 @@ class TestCaseB(unittest.TestCase):
         self.assertIs(_legs(response, "C1")["RSX6078"].augmented_heavy, True)
 
 
+class TestDeterministicVerdictsNeverReachTheResolver(unittest.TestCase):
+    """The upstream check the owner asked for before the pairing change lands.
+
+    An SVX/EVN leg is decided by the absolute airport rule and exits before
+    STEP 4 exists. If a live SVX row shows a red "!" it is therefore NOT the
+    resolver badge -- these tests make that a fact rather than a code-reading.
+    """
+
+    def _svx_leg(self, *, leon_heavy):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [_row(2001, "RSX331", "HESH", "USSS", crew)]
+        contexts = [
+            _context(2001, "2026-06-16T17:15:00Z", "2026-06-16T22:35:00Z", crew, "HESH", "USSS")
+        ]
+        totals = {code: "10:00" for code, _ in crew}
+        values = {}
+        if leon_heavy is not None:
+            values = {("C1", 2001): leon_heavy, ("C2", 2001): leon_heavy}
+        return _build_mcp_report_response(
+            OfficialMcpReport(totals, rows),
+            from_date="2026-06-01",
+            to_date="2026-06-30",
+            position="All",
+            crew_member=None,
+            augmented_index=AugmentedIndex(True, values, 0, 0, {}),
+            crew_context_index=_index(*contexts),
+        )
+
+    def test_an_svx_leg_never_carries_the_resolver_badge(self):
+        flight = _legs(self._svx_leg(leon_heavy=None), "C1")["RSX331"]
+
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_reason, "SVX_AIRPORT")
+        self.assertFalse(flight.unknown_resolved)
+        self.assertIsNone(flight.unknown_resolution_reason)
+        # The clinching evidence: no STEP-4 step exists in the trace at all.
+        self.assertNotIn("STEP_4_ROTATION", _trace_steps(flight))
+        self.assertNotIn("STEP_4_NEIGHBOUR", _trace_steps(flight))
+
+    def test_an_svx_leg_that_leon_calls_normal_sets_conflict_not_the_badge(self):
+        # This is the row most likely to LOOK badged in the UI: the verdict cell
+        # renders a PALE "!" for heavy_conflict and a SOLID "!" for the resolver
+        # badge, and only the first can ever appear on an SVX leg.
+        flight = _legs(self._svx_leg(leon_heavy=False), "C1")["RSX331"]
+
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(flight.heavy_reason, "SVX_AIRPORT")
+        self.assertTrue(flight.heavy_conflict, "the absolute rule overrode LEON")
+        self.assertFalse(flight.unknown_resolved, "still not a resolver badge")
+        self.assertNotIn("STEP_4_ROTATION", _trace_steps(flight))
+
+    def test_an_evn_leg_never_reaches_the_resolver_either(self):
+        crew = [("C1", "CPT"), ("C2", "FO")]
+        rows = [_row(2011, "RSX121", "HESH", "UDYZ", crew)]
+        contexts = [
+            _context(2011, "2026-06-20T22:05:00Z", "2026-06-21T01:00:00Z", crew, "HESH", "UDYZ")
+        ]
+
+        flight = _legs(_response(rows, contexts), "C1")["RSX121"]
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertEqual(flight.heavy_reason, "EVN_AIRPORT")
+        self.assertFalse(flight.unknown_resolved)
+        self.assertNotIn("STEP_4_ROTATION", _trace_steps(flight))
+
+
+class TestCaseBIsSymmetric(unittest.TestCase):
+    """Live defect 2026-08-20: the same rotation must resolve the same both ways.
+
+    Case B above has exactly two legs, so the outbound has no predecessor and the
+    forward search runs. A live duty is not shaped like that: RSX6077 is preceded
+    by an earlier sector the same day. That predecessor makes the outbound
+    "mid-duty", the forward search is suppressed, and the outbound reports No
+    while the inbound reports Yes -- one rotation, two verdicts.
+    """
+
+    def _live_shaped_rotation(self):
+        outbound = [("C1", "CPT"), ("C2", "FO"), ("C3", "FA1")]
+        inbound = [("C1", "CPT"), ("C2", "PAD"), ("C3", "FA1")]
+        rows = [
+            # The earlier sector of the same duty: SSH->HRG, 2:25 before RSX6077.
+            _row(900, "RSX6075", "SSH", "HRG", outbound),
+            _row(901, "RSX6077", "HRG", "LIS", outbound),
+            _row(902, "RSX6078", "LIS", "HRG", inbound),
+        ]
+        contexts = [
+            _context(900, "2026-06-14T09:00:00Z", "2026-06-14T12:00:00Z", outbound, "SSH", "HRG"),
+            _context(901, "2026-06-14T14:25:00Z", "2026-06-14T20:40:00Z", outbound, "HRG", "LIS"),
+            _context(902, "2026-06-14T21:50:00Z", "2026-06-15T03:35:00Z", inbound, "LIS", "HRG"),
+        ]
+        return _response(rows, contexts)
+
+    def test_both_legs_of_the_out_and_back_are_yes_with_a_predecessor_present(self):
+        response = self._live_shaped_rotation()
+
+        for code in ("C1", "C2", "C3"):
+            flights = _legs(response, code)
+            for leg in ("RSX6077", "RSX6078"):
+                flight = flights[leg]
+                self.assertIs(flight.augmented_heavy, True, f"{code} {leg}")
+                self.assertEqual(
+                    flight.unknown_resolution_reason,
+                    "SAME_DAY_SHORT_BREAK_SAME_CREW",
+                    f"{code} {leg}",
+                )
+                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
+
+    def test_the_earlier_sector_of_the_duty_is_heavy_too(self):
+        # RSX6075 SSH->HRG is 2:25 before RSX6077 with the same crew, so it is
+        # part of the same duty and Heavy as well. This is the owner's live
+        # ruling on RSX8860 + RSX6081 (22-06): "22 and 22 are the heavy ones".
+        # Airports do not decide, so SSH->HRG then HRG->LIS qualifies.
+        flight = _legs(self._live_shaped_rotation(), "C1")["RSX6075"]
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertTrue(flight.unknown_resolved)
+        self.assertEqual(
+            flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW"
+        )
+
+
 # --------------------------------------------------------------------------
 # 2.3 — rotation continuity is a true out-and-back
 # --------------------------------------------------------------------------
 
 
 class TestCaseC(unittest.TestCase):
-    """Case C — RSX8891 HRG→SSH then RSX6083 SSH→OPO: chain onward, not a return.
+    """Case C — RSX8891 HRG→SSH then RSX6083 SSH→OPO, both 23-06, break 0:50.
 
-    Break 0:50 and an identical roster, so every other gate passes. Only the
-    out-and-back requirement can produce the correct No here, and the reason
-    must name the rotation, not the crew or the break.
+    REVERSED on 2026-08-20 against live rows. On 2026-08-19 this pair was ruled
+    "No on both, ROTATION_MISMATCH" because it chains onward instead of
+    returning. Seeing it in the report the owner ruled the opposite: two sectors
+    of one duty with the same crew ARE the rotation, wherever they went, so both
+    legs are Heavy. Airports no longer gate anything.
     """
 
     def _response(self):
@@ -381,19 +502,21 @@ class TestCaseC(unittest.TestCase):
         ]
         return _response(rows, contexts)
 
-    def test_chain_onward_is_no_on_both_legs_for_rotation_reasons(self):
+    def test_chain_onward_is_heavy_on_both_legs(self):
         response = self._response()
 
         for code in ("C1", "C2"):
             flights = _legs(response, code)
             for leg in ("RSX8891", "RSX6083"):
                 flight = flights[leg]
-                self.assertIs(flight.augmented_heavy, False, f"{code} {leg}")
+                self.assertIs(flight.augmented_heavy, True, f"{code} {leg}")
                 self.assertEqual(
-                    flight.unknown_resolution_reason, "ROTATION_MISMATCH", f"{code} {leg}"
+                    flight.unknown_resolution_reason,
+                    "SAME_DAY_SHORT_BREAK_SAME_CREW",
+                    f"{code} {leg}",
                 )
-                # 2.4: a resolver No is not a resolver-established Heavy.
-                self.assertFalse(flight.unknown_resolved, f"{code} {leg}")
+                # Resolver-established Heavy, so the badge belongs on both.
+                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
 
     def test_the_same_pair_flown_as_an_out_and_back_is_yes(self):
         # Change only the second leg's destination back to the origin.
@@ -411,7 +534,7 @@ class TestCaseC(unittest.TestCase):
             self.assertIs(flight.augmented_heavy, True, leg)
             self.assertEqual(flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
-    def test_a_missing_airport_still_fails_closed(self):
+    def test_a_missing_airport_no_longer_blocks_the_rotation(self):
         crew = [("C1", "CPT"), ("C2", "FO")]
         rows = [
             _row(1021, "RSX8891", "HRG", None, crew),
@@ -422,9 +545,12 @@ class TestCaseC(unittest.TestCase):
             _context(1022, "2026-06-18T08:00:00Z", "2026-06-18T09:20:00Z", crew, None, "HRG"),
         ]
 
+        # Airports are not consulted, so absent airports cannot fail it closed.
         flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
-        self.assertIs(flight.augmented_heavy, False)
-        self.assertEqual(flight.unknown_resolution_reason, "ROTATION_MISMATCH")
+        self.assertIs(flight.augmented_heavy, True)
+        self.assertEqual(
+            flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -479,7 +605,14 @@ class TestBadgeMeansResolverEstablishedHeavy(unittest.TestCase):
 
 
 class TestPairingDirection(unittest.TestCase):
-    """A leg that is not first in its duty pairs backward only."""
+    """Direction orders the search; it decides nothing (owner ruling 3, 2026-08-20).
+
+    SUPERSEDES the 2026-08-19 rule "forward only when the leg is first in its
+    duty". That rule suppressed the forward search for any mid-duty leg, which is
+    what made RSX6077 report No while RSX6078 reported Yes for one rotation. The
+    duty model replaces it: every leg of a duty may pair with every other, so the
+    only thing direction affects is which near-miss reason is reported.
+    """
 
     def _index(self):
         # 14-06 HRG→LIS 14:25-20:40, then LIS→HRG 21:50-03:35(+1) — one duty,
@@ -499,19 +632,33 @@ class TestPairingDirection(unittest.TestCase):
             ),
         )
 
-    def test_the_late_leg_pairs_backward_and_not_forward(self):
+    def test_the_late_leg_pairs_with_any_qualifying_partner_in_its_duty(self):
         index = self._index()
 
         resolution = resolve_unknown_heavy(
             index, build_rotation_index(index), 1202, "C1"
         )
 
-        # Backward is the only direction considered: the roster changed on the
-        # outbound leg, so the answer is CREW_SET_CHANGED. Pairing forward with
-        # the next day's leg would have produced a spurious Yes -- that leg is a
-        # perfect out-and-back partner by airports, break arithmetic aside.
-        self.assertIs(resolution.effective_heavy, False)
-        self.assertEqual(resolution.reason, "CREW_SET_CHANGED")
+        # All three sectors are one duty (breaks 1:10 and 2:25). The backward
+        # partner fails on crew, the forward partner is a clean out-and-back with
+        # a stable roster, so the leg is Heavy. Under the retired direction gate
+        # the forward partner was invisible and this read No -- the same bug that
+        # split RSX6077 from RSX6078.
+        self.assertIs(resolution.effective_heavy, True)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+    def test_the_search_is_symmetric_for_every_qualifying_pair(self):
+        # The invariant the owner asked for: verdict(X) == verdict(Y) for a
+        # qualifying pair, whichever leg is judged first.
+        index = self._index()
+        rotation = build_rotation_index(index)
+
+        for left, right in ((1202, 1203), (1203, 1202)):
+            with self.subTest(order=(left, right)):
+                first = resolve_unknown_heavy(index, rotation, left, "C1")
+                second = resolve_unknown_heavy(index, rotation, right, "C1")
+                self.assertIs(first.effective_heavy, second.effective_heavy)
+                self.assertIs(first.effective_heavy, True)
 
     def test_a_leg_first_in_its_duty_still_pairs_forward(self):
         index = self._index()
@@ -638,10 +785,11 @@ class TestHeavyTrace(unittest.TestCase):
         flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
         neighbour = _trace_step(flight, "STEP_4_NEIGHBOUR")
 
+        # The route is still recorded on every step - it is just not judged.
         self.assertEqual(neighbour.inputs["current_route"], ["HRG", "SSH"])
         self.assertEqual(neighbour.inputs["neighbour_route"], ["SSH", "OPO"])
-        self.assertIn("ROTATION_MISMATCH", neighbour.outcome)
-        self.assertIn("No", _trace_step(flight, "VERDICT").outcome)
+        self.assertIn("qualifies", neighbour.outcome)
+        self.assertIn("Heavy", _trace_step(flight, "VERDICT").outcome)
 
     def test_case_d_trace_records_the_times_as_received(self):
         crew = [("C1", "CPT"), ("C2", "FO")]

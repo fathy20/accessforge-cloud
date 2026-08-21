@@ -155,7 +155,11 @@ class TestMidnightSafeDutyWindow(unittest.TestCase):
         self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
     def test_break_of_exactly_four_hours_is_no(self):
-        # Matrix 8: 4:00 must NOT connect — strictly below four hours.
+        # Matrix 8: 4:00 must NOT connect — strictly below four hours. The
+        # VERDICT is what this pins; the label is now DIFFERENT_DAY because the
+        # return starts on the next UTC date and DIFFERENT_DAY is "break >= 4h
+        # AND dates differ" (owner ruling 4, 2026-08-20). The old label needed
+        # >24h start-to-start as well.
         index = _out_and_back(
             return_start="2026-06-02T03:30:00Z",
             return_end="2026-06-02T07:00:00Z",
@@ -164,7 +168,7 @@ class TestMidnightSafeDutyWindow(unittest.TestCase):
         resolution = _resolve(index, 301, "C1")
 
         self.assertFalse(resolution.effective_heavy)
-        self.assertEqual(resolution.reason, "BREAK_EXCEEDS_LIMIT")
+        self.assertEqual(resolution.reason, "DIFFERENT_DAY")
 
     def test_break_of_three_fifty_nine_still_connects(self):
         index = _out_and_back(
@@ -274,23 +278,32 @@ class TestOperatingCrewComparison(unittest.TestCase):
 
 
 class TestRotationContinuity(unittest.TestCase):
-    def test_unchained_airports_are_a_rotation_mismatch(self):
-        # Matrix 10: same crew, short break, but the airports do not chain.
+    """Airports stopped deciding on 2026-08-20 (owner ruling, live rows).
+
+    Matrix 10 previously required the airports to chain. The owner reversed that
+    against RSX8891/RSX6083 and RSX8860/RSX6081: two sectors of one duty flown
+    by the same crew ARE the rotation, wherever they went.
+    """
+
+    def test_unchained_airports_no_longer_block_the_rotation(self):
+        # Same crew, short break, unrelated route: Heavy.
         index = _out_and_back(return_adep="AAA", return_ades="BBB")
 
         resolution = _resolve(index, 301, "C1")
 
-        self.assertFalse(resolution.effective_heavy)
-        self.assertEqual(resolution.reason, "ROTATION_MISMATCH")
+        self.assertTrue(resolution.effective_heavy)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
-    def test_missing_airports_fail_closed_as_rotation_mismatch(self):
-        # No airport data means continuity cannot be established: NO, never YES.
+    def test_missing_airports_do_not_block_the_rotation(self):
+        # Absent airports cannot fail a pair closed when airports are not read.
         index = _out_and_back(return_adep=None, return_ades=None)
 
         resolution = _resolve(index, 301, "C1")
 
-        self.assertFalse(resolution.effective_heavy)
-        self.assertEqual(resolution.reason, "ROTATION_MISMATCH")
+        # Airports stopped gating on 2026-08-20: an unrelated route inside the
+        # same duty, same crew, break under 4h, is Heavy.
+        self.assertTrue(resolution.effective_heavy)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
 
     def test_chain_via_previous_sector_arrival_also_counts(self):
         # neighbour.arrival == current.departure (the other chain direction).

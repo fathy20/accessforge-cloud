@@ -58,6 +58,11 @@ class FlightItem(BaseModel):
     unknown_resolution_reason: str | None = None
     # Every leg explains its own verdict, resolver-decided or not.
     heavy_trace: list[HeavyTraceStep] = []
+    # Member-duty allowance (owner model 2026-08-20, validated 54/55 against
+    # the manual July sheet): True when this leg belongs to a duty credited
+    # for THIS member. None = allowance not computed (old fixtures).
+    duty_credit: bool | None = None
+    credit_source: str | None = None  # LEON_AUGMENTED | OPERATE_PLUS_RIDE
 
 
 class CrewMemberSummary(BaseModel):
@@ -73,6 +78,9 @@ class CrewMemberSummary(BaseModel):
     reference_total: str | None = None
     variance_minutes: int | None = None
     flight_count: int = 0
+    # H.C — how many of this member's duties earned a Heavy credit in the
+    # requested window (the number the allowance sheet carries per member).
+    heavy_credits: int = 0
     flights: list[FlightItem] = []
 
 

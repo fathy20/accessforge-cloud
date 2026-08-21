@@ -353,6 +353,99 @@ describe("Crew Hours detail rendering", () => {
     expect(trace).toHaveTextContent("VERDICT");
   });
 
+  it("shows Yes on both legs of a credited duty and H.C on the header", () => {
+    // The owner complaint (Donia): FO out + PAD home used to split No / Yes.
+    // Under the member-duty allowance both legs read Yes, the swap credit
+    // carries the solid badge, and the header shows H.C 1.
+    const creditedCrew: CrewMemberSummary = {
+      ...crew,
+      heavy_credits: 1,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-out",
+          flight_number: "RSX6077",
+          augmented_heavy: false,          // old flight-level verdict said No
+          duty_credit: true,               // the credit overrides the display
+          credit_source: "OPERATE_PLUS_RIDE",
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-back",
+          flight_number: "RSX6078",
+          augmented_heavy: true,
+          duty_credit: true,
+          credit_source: "OPERATE_PLUS_RIDE",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [creditedCrew] }}
+        crews={[creditedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const verdicts = screen.getAllByLabelText(/Augmented \(Heavy\)/);
+    expect(verdicts).toHaveLength(2);
+    for (const cell of verdicts) {
+      expect(cell).toHaveTextContent("Yes");
+    }
+    expect(screen.getAllByTestId("local-resolution-marker")).toHaveLength(2);
+    expect(screen.getByText("H.C 1")).toBeInTheDocument();
+  });
+
+  it("shows No on both legs of an uncredited duty even if the old verdict split them", () => {
+    const uncreditedCrew: CrewMemberSummary = {
+      ...crew,
+      heavy_credits: 0,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-1",
+          flight_number: "RSX8891",
+          augmented_heavy: false,
+          duty_credit: false,
+          credit_source: null,
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-2",
+          flight_number: "RSX6083",
+          augmented_heavy: true,           // old flight-level Yes
+          duty_credit: false,              // no credit -> the display says No
+          credit_source: null,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [uncreditedCrew] }}
+        crews={[uncreditedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const verdicts = screen.getAllByLabelText(/Augmented \(Heavy\)/);
+    for (const cell of verdicts) {
+      expect(cell).toHaveTextContent("No");
+    }
+    expect(screen.queryByTestId("local-resolution-marker")).toBeNull();
+  });
+
   it("renders no badge on airport-decided EVN/SVX rows", () => {
     // RSX331/RSX121 evidence: SVX/EVN verdicts are deterministic rules, not
     // resolver guesses — unknown_resolved is false and no badge may render.

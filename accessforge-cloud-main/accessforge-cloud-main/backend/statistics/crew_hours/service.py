@@ -5,6 +5,7 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
 from fastapi import Depends
 
 from .augmented import AugmentedIndex
+from .allowance import AllowanceLeg, compute_member_credits
 from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
 from .domain import buffered_query_dates, is_trn_total, normalize_report_row, utc_today
 from .errors import (
@@ -359,6 +360,27 @@ def _build_mcp_report_response(
     all_crew_summaries: List[CrewMemberSummary] = []
     for code, data in crew_map.items():
         official_total = official_totals.get(code)
+        allowance = compute_member_credits(
+            [
+                AllowanceLeg(
+                    key=flight.flight_nid,
+                    flight_date=flight.flight_date,
+                    start_time=flight.start_time_utc,
+                    end_time=flight.end_time_utc,
+                    position=flight.position,
+                    leon_heavy=flight.leon_heavy,
+                    departure_airport=flight.departure_airport,
+                    arrival_airport=flight.arrival_airport,
+                )
+                for flight in data["flights"]
+            ],
+            window_start=from_date or None,
+            window_end=to_date or None,
+        )
+        for flight in data["flights"]:
+            credited, source = allowance.by_leg.get(flight.flight_nid, (False, None))
+            flight.duty_credit = credited
+            flight.credit_source = source
         all_crew_summaries.append(
             CrewMemberSummary(
                 crew_id=data["crew_id"],
@@ -373,6 +395,7 @@ def _build_mcp_report_response(
                 reference_total=None,
                 variance_minutes=None,
                 flight_count=len(data["flights"]),
+                heavy_credits=allowance.credits,
                 flights=data["flights"],
             )
         )

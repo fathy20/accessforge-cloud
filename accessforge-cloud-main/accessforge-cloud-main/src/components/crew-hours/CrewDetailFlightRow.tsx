@@ -42,10 +42,19 @@ export function CrewDetailFlightRow({
   flight: FlightItem;
 }) {
   const { t } = useI18n();
+  // The verdict column answers "did this leg's duty earn THIS member a Heavy
+  // credit?" (owner model 2026-08-20, validated 54/55 against the manual
+  // sheet). Both legs of a credited duty read Yes together — never one leg
+  // Yes and its pair No. Old payloads without the field fall back to the
+  // flight-level verdict.
+  const verdict =
+    flight.duty_credit === undefined || flight.duty_credit === null
+      ? flight.augmented_heavy
+      : flight.duty_credit;
   const augmentedLabel =
-    flight.augmented_heavy === true
+    verdict === true
       ? t("crew.augmented.yes")
-      : flight.augmented_heavy === false
+      : verdict === false
         ? t("crew.augmented.no")
         : t("crew.augmented.unknown");
   // The trace is the durable answer to "why does this row say that?" — every
@@ -64,7 +73,13 @@ export function CrewDetailFlightRow({
   // The verdict was absent from LEON's augmented data and resolved by the
   // local rotation rule — flagged with a red badge so the provenance is
   // visible at a glance, not only inside the tooltip.
-  const locallyResolved = isLocallyResolvedHeavy(flight);
+  // Solid badge: the credit came from the swap rule (operated + rode PAD in
+  // one duty) rather than from LEON's own augmentation value. Old payloads
+  // keep the resolver-badge semantics.
+  const locallyResolved =
+    flight.duty_credit === undefined || flight.duty_credit === null
+      ? isLocallyResolvedHeavy(flight)
+      : flight.credit_source === "OPERATE_PLUS_RIDE";
   const leonLabel =
     flight.leon_heavy === true
       ? t("crew.augmented.yes")

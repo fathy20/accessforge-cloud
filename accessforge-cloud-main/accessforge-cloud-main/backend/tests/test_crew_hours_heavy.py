@@ -419,11 +419,10 @@ class TestScreenshotEvidence(unittest.TestCase):
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
 
     def test_case_4_unresolvable_chain_is_no_without_badges(self):
-        # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH: the rotation never
-        # returns to HRG. Two rules changed what this case reports:
-        # rotation continuity is now a true out-and-back, so the pair fails on
-        # ROTATION_MISMATCH before the break arithmetic is even reached; and a
-        # resolver No carries no badge (owner rulings 2026-08-19).
+        # 22-06 RSX6081 HRG→OPO then 23-06 RSX6084 OPO→SSH. The 18h gap puts
+        # them in DIFFERENT DUTIES, so neither leg has a partner to judge at
+        # all: the reason names the separate duty (owner ruling 4, 2026-08-20)
+        # rather than the airports, and a resolver No carries no badge.
         rows = [
             _screenshot_row(611, "RSX6081", "HRG", "OPO", ["C1", "C2"], ["CPT", "FO"]),
             _screenshot_row(612, "RSX6084", "OPO", "SSH", ["C1", "C2"], ["CPT", "FO"]),
@@ -449,7 +448,7 @@ class TestScreenshotEvidence(unittest.TestCase):
                 self.assertFalse(flight.unknown_resolved, f"{code} {leg}")
                 self.assertEqual(flight.heavy_source, "LOCAL_RULE")
                 self.assertEqual(
-                    flight.unknown_resolution_reason, "ROTATION_MISMATCH"
+                    flight.unknown_resolution_reason, "DIFFERENT_DAY"
                 )
 
     def test_step_four_entry_does_not_flag_unknown_resolved_on_a_no(self):

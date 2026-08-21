@@ -4,16 +4,22 @@ LEON leaves ``crewAugmentation`` empty for some duties.  The approved fallback:
 a crew member is Heavy on such a flight only when they flew an immediately
 neighbouring sector that
 
-- chains airports with the current leg (an out-and-back or chained rotation),
-- follows or precedes it with a break of ``0 <= break < 4h`` (3:59 connects,
-  exactly 4:00 does not), and
-- carries the same *operating* crew (PSN passengers excluded on both legs).
+- belongs to the SAME DUTY as the current leg, and
+- sits a break of ``0 <= break < 4h`` away (3:59 connects, 4:00 does not), and
+- carries continuous crew (see ``_continuity_sets``).
 
-The pair belongs to one duty anchored on the first sector's UTC start date;
-a short break across midnight is the SAME duty, so calendar dates are never
-compared directly.  A member positioned as ``PSN`` on the current leg is No
-immediately and no neighbour search runs.  Anything we cannot establish
-resolves to NO, never to UNKNOWN.
+Airports are NOT a condition (owner ruling 2026-08-20, verified against live
+rows). Two sectors of one duty flown by the same crew are the rotation; the
+route is recorded in the trace so a verdict can be read, never judged on.
+
+A DUTY is the maximal run of consecutive sectors joined by breaks below 4h.
+The duty is built FIRST, then legs are judged inside it, and every other leg of
+the duty is a candidate regardless of direction -- so a qualifying out-and-back
+resolves identically from either end (owner rulings 2026-08-20). The duty's
+identity is the UTC date its first sector started; calendar dates are never a
+gate, only a label on an already-failed break. A member positioned as ``PSN``
+on the current leg is No immediately and no search runs. Anything we cannot
+establish resolves to NO, never to UNKNOWN.
 """
 
 from __future__ import annotations
@@ -30,10 +36,6 @@ from .trace import HeavyTraceStep, format_break, step
 # The break ceiling: two sectors count as one augmented rotation only strictly
 # below this. ``break >= UNKNOWN_MAX_BREAK`` rejects, so exactly 4:00 fails.
 UNKNOWN_MAX_BREAK = timedelta(hours=4)
-
-# A neighbour starting further than this from the current leg's start can
-# never share its duty window, whatever the break arithmetic says.
-_DUTY_WINDOW_SPAN = timedelta(hours=24)
 
 _PSN_POSITION = "psn"
 
@@ -160,42 +162,35 @@ def resolve_unknown_heavy(
             ),
         )
 
-    previous, upcoming = _previous_and_next(
-        rotation_index.get(normalized_code, ()), current
-    )
-    # Pairing direction (owner ruling 2026-08-19): a leg whose duty began on an
-    # earlier leg pairs BACKWARD. Forward is searched only when this leg is
-    # itself first in its duty - nothing connected before it.
-    first_in_duty = not _connects(current_start, current_end, previous)
-    candidates: list[tuple[str, FlightContext]] = []
-    if previous is not None:
-        candidates.append(("backward", previous))
-    if upcoming is not None and first_in_duty:
-        candidates.append(("forward", upcoming))
+    member_flights = rotation_index.get(normalized_code, ())
+    duty = _duty_legs(member_flights, current)
+    candidates = _duty_partners(duty, current)
 
-    direction_note = (
-        "first in duty: backward and forward"
-        if first_in_duty
-        else "mid-duty: backward only"
-    )
     steps: list[HeavyTraceStep] = [
         step(
             "STEP_4_ROTATION",
-            f"{len(candidates)} neighbour(s) searched, {direction_note}",
+            (
+                f"duty of {len(duty)} sector(s) anchored on {_duty_anchor_date(duty)}; "
+                f"{len(candidates)} partner(s) to judge, direction irrelevant"
+            ),
             crew_code=normalized_code,
             subject_position=entry.position,
             current_start_utc=current.start_time_utc,
             current_end_utc=current.end_time_utc,
             current_route=[current.departure_airport, current.arrival_airport],
+            duty_anchor_utc_date=_duty_anchor_date(duty),
+            duty_sectors=len(duty),
             break_limit=format_break(UNKNOWN_MAX_BREAK),
         )
     ]
 
     if not candidates:
-        steps.append(
-            step("STEP_4_NEIGHBOUR", "no neighbouring sector for this member -> Heavy No")
+        # Alone in its duty. The sector across the duty boundary is examined
+        # ONLY to explain why it is not a partner, never to pair with.
+        reason, trace = _lone_leg_reason(
+            member_flights, current, current_start, current_end, steps
         )
-        return UnknownResolution(False, True, "NO_NEIGHBOUR_FLIGHT", tuple(steps))
+        return UnknownResolution(False, True, reason, trace)
 
     reason: ResolutionReason = "NO_NEIGHBOUR_FLIGHT"
     for direction, neighbour in candidates:
@@ -229,28 +224,19 @@ def resolve_unknown_heavy(
             record("MISSING_FLIGHT_TIMES: neighbour has no usable UTC times")
             reason = _weaker(reason, "MISSING_FLIGHT_TIMES")
             continue
-        # Rotation continuity: a true out-and-back. Chaining onward to a third
-        # airport is NOT a rotation (owner ruling 2026-08-19) - the original
-        # rule is "flew out and came back". Missing airport data cannot
-        # establish continuity - fail closed.
-        if not _rotation_out_and_back(current, neighbour):
-            record("ROTATION_MISMATCH: not an out-and-back pair")
-            reason = _weaker(reason, "ROTATION_MISMATCH")
-            continue
+        # Airports do NOT gate the rotation (owner ruling 2026-08-20, verified
+        # against live rows: SSH->HRG->OPO on 22-06 and HRG->SSH->OPO on 23-06
+        # are both Heavy). Two sectors of one duty flown by the same crew ARE
+        # the rotation; where they went is recorded in the trace, not judged.
+        # This RETRACTS the 2026-08-19 out-and-back tightening.
         break_duration = _break_between(
             current_start, current_end, neighbour_start, neighbour_end
         )
         break_text = format_break(break_duration)
         if break_duration >= UNKNOWN_MAX_BREAK:
-            # Midnight-safe duty window: a short break keeps the pair in one
-            # duty regardless of calendar dates, so a failed break inside the
-            # 24h window anchored on the current leg is a break problem.
-            # DIFFERENT_DAY is reserved for genuinely disjoint days.
-            genuinely_disjoint = (
-                neighbour_start.date() != current_start.date()
-                and abs(neighbour_start - current_start) > _DUTY_WINDOW_SPAN
-            )
-            failed = "DIFFERENT_DAY" if genuinely_disjoint else "BREAK_EXCEEDS_LIMIT"
+            # The break is the ONLY gate. The date comparison picks the label
+            # and never causes the rejection (owner ruling 4, 2026-08-20).
+            failed = _break_failure_reason(current_start, neighbour_start)
             record(
                 f"{failed}: break {break_text} is not below "
                 f"{format_break(UNKNOWN_MAX_BREAK)}",
@@ -263,7 +249,7 @@ def resolve_unknown_heavy(
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
         record(
-            "qualifies: out-and-back, break below the limit, same crew -> Heavy Yes",
+            "qualifies: same duty, break below the limit, same crew -> Heavy Yes",
             break_text,
         )
         return UnknownResolution(
@@ -277,7 +263,6 @@ _REASON_RANK = (
     "NO_NEIGHBOUR_FLIGHT",
     "MISSING_FLIGHT_TIMES",
     "DIFFERENT_DAY",
-    "ROTATION_MISMATCH",
     "BREAK_EXCEEDS_LIMIT",
     "CREW_SET_CHANGED",
 )
@@ -288,22 +273,6 @@ def _weaker(current: ResolutionReason, candidate: ResolutionReason) -> Resolutio
         return candidate if _REASON_RANK.index(candidate) > _REASON_RANK.index(current) else current
     except ValueError:
         return candidate
-
-
-def _rotation_out_and_back(current: FlightContext, neighbour: FlightContext) -> bool:
-    """A rotation is a TRUE out-and-back: the pair returns where it started.
-
-    Owner ruling 2026-08-19. The previous version accepted a shared airport in
-    EITHER direction, so a chain onward (HRG->SSH then SSH->OPO) qualified and
-    any same-direction pair with a stable roster and a short break was reported
-    Heavy. Both clauses must hold now, which is symmetric: it reads the same
-    whether the neighbour precedes or follows the current leg.
-    """
-
-    return (
-        _same_airport(neighbour.departure_airport, current.arrival_airport)
-        and _same_airport(neighbour.arrival_airport, current.departure_airport)
-    )
 
 
 def _continuity_sets(
@@ -334,53 +303,173 @@ def _continuity_sets(
     )
 
 
-def _same_airport(left: str | None, right: str | None) -> bool:
-    if not isinstance(left, str) or not isinstance(right, str):
-        return False
-    normalized_left = left.strip().casefold()
-    normalized_right = right.strip().casefold()
-    return bool(normalized_left) and normalized_left == normalized_right
+def _position_of(contexts: Sequence[FlightContext], current: FlightContext) -> int | None:
+    for position, context in enumerate(contexts):
+        if context.flight_nid == current.flight_nid:
+            return position
+    return None
 
 
-def _previous_and_next(
-    contexts: Sequence[FlightContext],
-    current: FlightContext,
-) -> tuple[FlightContext | None, FlightContext | None]:
-    """The immediately previous and next flight for this crew member, in order."""
+def _consecutive_break(earlier: FlightContext, later: FlightContext) -> timedelta:
+    """The gap between two adjacent sectors, or "infinite" if either lacks times.
 
-    ordered = list(contexts)
-    for position, context in enumerate(ordered):
-        if context.flight_nid != current.flight_nid:
-            continue
-        previous = ordered[position - 1] if position > 0 else None
-        upcoming = ordered[position + 1] if position + 1 < len(ordered) else None
-        return previous, upcoming
-    return None, None
-
-
-def _connects(
-    current_start: datetime,
-    current_end: datetime,
-    neighbour: FlightContext | None,
-) -> bool:
-    """Whether a neighbour shares this leg's duty - the break gate alone.
-
-    Used only to answer "is this leg first in its duty?", which decides whether
-    the forward search runs at all. Airports and crew are deliberately not
-    consulted: a leg preceded by a connected sector is mid-duty even if that
-    sector turns out not to be a qualifying rotation partner.
+    Unparseable times break the duty rather than extending it - continuity that
+    cannot be established is never assumed.
     """
 
-    if neighbour is None:
-        return False
+    earlier_start = _parse_utc(earlier.start_time_utc)
+    earlier_end = _parse_utc(earlier.end_time_utc)
+    later_start = _parse_utc(later.start_time_utc)
+    later_end = _parse_utc(later.end_time_utc)
+    if None in (earlier_start, earlier_end, later_start, later_end):
+        return timedelta.max
+    return _break_between(earlier_start, earlier_end, later_start, later_end)
+
+
+def _duty_legs(
+    contexts: Sequence[FlightContext],
+    current: FlightContext,
+) -> tuple[FlightContext, ...]:
+    """Every sector of the duty this leg belongs to, in UTC order.
+
+    A duty is the maximal run of consecutive sectors joined by breaks strictly
+    below UNKNOWN_MAX_BREAK. Calendar dates are never consulted: a rotation
+    departing 21:50 and landing 03:35(+1) is ONE duty (owner ruling 2, 2026-08-20).
+
+    Anchoring the search on the duty rather than on the two immediate neighbours
+    is what makes it symmetric - see _duty_partners.
+    """
+
+    ordered = list(contexts)
+    position = _position_of(ordered, current)
+    if position is None:
+        return ()
+    start = position
+    while start > 0 and _consecutive_break(ordered[start - 1], ordered[start]) < UNKNOWN_MAX_BREAK:
+        start -= 1
+    end = position
+    while (
+        end + 1 < len(ordered)
+        and _consecutive_break(ordered[end], ordered[end + 1]) < UNKNOWN_MAX_BREAK
+    ):
+        end += 1
+    return tuple(ordered[start : end + 1])
+
+
+def _duty_anchor_date(duty: Sequence[FlightContext]) -> str | None:
+    """The duty's identity: the UTC date its FIRST sector started."""
+
+    if not duty:
+        return None
+    anchor = _parse_utc(duty[0].start_time_utc)
+    return anchor.date().isoformat() if anchor else None
+
+
+def _duty_partners(
+    duty: Sequence[FlightContext],
+    current: FlightContext,
+) -> tuple[tuple[str, FlightContext], ...]:
+    """Every other leg of the duty, nearest first, backward before forward.
+
+    Direction carries no authority here (owner ruling 3, 2026-08-20): it only
+    orders the search so the reported near-miss reason is the closest one, and
+    it labels the trace. Because both ends of a pair see each other as
+    candidates, a qualifying out-and-back resolves the same from either leg -
+    which is exactly what RSX6077/RSX6078 needed.
+    """
+
+    position = _position_of(list(duty), current)
+    if position is None:
+        return ()
+    partners: list[tuple[str, FlightContext]] = []
+    for offset in range(1, len(duty)):
+        for index, direction in ((position - offset, "backward"), (position + offset, "forward")):
+            if 0 <= index < len(duty) and index != position:
+                partners.append((direction, duty[index]))
+    return tuple(partners)
+
+
+def _break_failure_reason(current_start: datetime, neighbour_start: datetime) -> str:
+    """Label a break that already failed the 4h gate; it never causes failure.
+
+    DIFFERENT_DAY distinguishes "genuinely the next duty" from "same day, break
+    simply too long" (owner ruling 4, 2026-08-20).
+    """
+
+    return (
+        "DIFFERENT_DAY"
+        if neighbour_start.date() != current_start.date()
+        else "BREAK_EXCEEDS_LIMIT"
+    )
+
+
+def _adjacent_outside_duty(
+    contexts: Sequence[FlightContext],
+    current: FlightContext,
+) -> tuple[str, FlightContext] | None:
+    """The nearest sector on either side of a single-leg duty, for the reason only."""
+
+    ordered = list(contexts)
+    position = _position_of(ordered, current)
+    if position is None:
+        return None
+    options: list[tuple[timedelta, str, FlightContext]] = []
+    if position > 0:
+        options.append((_consecutive_break(ordered[position - 1], current), "backward", ordered[position - 1]))
+    if position + 1 < len(ordered):
+        options.append((_consecutive_break(current, ordered[position + 1]), "forward", ordered[position + 1]))
+    if not options:
+        return None
+    _, direction, neighbour = min(options, key=lambda option: option[0])
+    return direction, neighbour
+
+
+def _lone_leg_reason(
+    contexts: Sequence[FlightContext],
+    current: FlightContext,
+    current_start: datetime,
+    current_end: datetime,
+    steps: list[HeavyTraceStep],
+) -> tuple[ResolutionReason, tuple[HeavyTraceStep, ...]]:
+    """Why a leg alone in its duty has no rotation partner."""
+
+    adjacent = _adjacent_outside_duty(contexts, current)
+    if adjacent is None:
+        steps.append(
+            step("STEP_4_NEIGHBOUR", "this member flew no other sector at all -> Heavy No")
+        )
+        return "NO_NEIGHBOUR_FLIGHT", tuple(steps)
+
+    direction, neighbour = adjacent
     neighbour_start = _parse_utc(neighbour.start_time_utc)
     neighbour_end = _parse_utc(neighbour.end_time_utc)
     if neighbour_start is None or neighbour_end is None:
-        return False
-    return (
-        _break_between(current_start, current_end, neighbour_start, neighbour_end)
-        < UNKNOWN_MAX_BREAK
+        steps.append(
+            step(
+                "STEP_4_NEIGHBOUR",
+                "MISSING_FLIGHT_TIMES: the adjacent sector has no usable UTC times",
+                direction=direction,
+                flight_nid=neighbour.flight_nid,
+            )
+        )
+        return "MISSING_FLIGHT_TIMES", tuple(steps)
+
+    gap = _break_between(current_start, current_end, neighbour_start, neighbour_end)
+    failed = _break_failure_reason(current_start, neighbour_start)
+    steps.append(
+        step(
+            "STEP_4_NEIGHBOUR",
+            f"{failed}: the nearest {direction} sector is {format_break(gap)} away, "
+            "outside this duty -> Heavy No",
+            direction=direction,
+            flight_nid=neighbour.flight_nid,
+            neighbour_route=[neighbour.departure_airport, neighbour.arrival_airport],
+            neighbour_start_utc=neighbour.start_time_utc,
+            neighbour_end_utc=neighbour.end_time_utc,
+            **{"break": format_break(gap)},
+        )
     )
+    return failed, tuple(steps)
 
 
 def _break_between(

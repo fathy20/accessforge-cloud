@@ -102,6 +102,19 @@ _ARTIFACT_TYPES: dict[str, ArtifactType] = {
         frozenset({"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),
         _ZIP_MAGIC,
     ),
+    # .xlsb is an OPC package like .xlsx -- a ZIP whose parts are BIFF12 `.bin`
+    # blobs instead of XML -- so it shares _ZIP_MAGIC. Verified on a workbook
+    # saved by Excel 16.0 as xlExcel12: the first bytes are `PK\x03\x04` and the
+    # container holds xl/workbook.bin + xl/worksheets/sheet*.bin. The declared
+    # MIME is the one Windows registers for the extension
+    # (HKCR\.xlsb\Content Type), which is what a browser puts on the part.
+    ".xlsb": ArtifactType(
+        ".xlsb",
+        "excel",
+        "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+        frozenset({"application/vnd.ms-excel.sheet.binary.macroenabled.12"}),
+        _ZIP_MAGIC,
+    ),
     ".xls": ArtifactType(
         ".xls",
         "excel",

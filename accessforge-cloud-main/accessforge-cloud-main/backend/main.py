@@ -405,6 +405,126 @@ def download_upload(upload_id: str, db: Session = Depends(get_db), current_user:
         media_type=upload.mime,
     )
 
+
+# Column 24 of an MPD RSD sheet is free text, and app2 deliberately filters
+# nothing out of it ("باقي كل حاجة نضيفها", app2.py:3409). A crafted or merely
+# enormous workbook could therefore hold a huge number of very long distinct
+# strings and turn one dropdown fetch into a multi-megabyte response. Both caps
+# bound the RESPONSE; neither changes which codes a normal workbook yields.
+MAX_CHECK_CODES = 500
+MAX_CHECK_CODE_LENGTH = 64
+# Column 24 is the 25th column, so the sheet must be wider than 24 columns.
+CHECK_CODE_COLUMN_INDEX = 24
+
+
+def _read_mpd_rsd_frame(file_path: Path):
+    """Load the MPD RSD sheet the way the desktop app does.
+
+    Mirrors ``RedseaApp._extract_available_checks_from_excel``
+    (app2.py:3363-3387) for the no-sheet-name case: ``.xlsb`` needs the pyxlsb
+    engine and picks the first sheet whose upper-cased name contains
+    ``MPD RSD``, falling back to the first sheet; every other format is read as
+    sheet 0.
+    """
+
+    import pandas as pd
+
+    path_text = str(file_path)
+    if path_text.lower().endswith(".xlsb"):
+        workbook = pd.ExcelFile(path_text, engine="pyxlsb")
+        try:
+            sheet_names = list(workbook.sheet_names)
+        finally:
+            workbook.close()
+        if not sheet_names:
+            return None
+        target = next(
+            (name for name in sheet_names if "MPD RSD" in str(name).upper()),
+            sheet_names[0],
+        )
+        return pd.read_excel(path_text, sheet_name=target, engine="pyxlsb")
+    return pd.read_excel(path_text, sheet_name=0)
+
+
+def _extract_check_codes(file_path: Path) -> list:
+    """Distinct, sorted column-24 values, mirroring app2.py:3402-3419.
+
+    Only blank / ``nan`` / ``none`` cells are dropped -- there is no known-code
+    allow-list, because the whole point is that the operator's workbook, not a
+    hardcoded list, decides which checks exist.
+    """
+
+    try:
+        frame = _read_mpd_rsd_frame(file_path)
+    except ImportError:
+        # A missing pandas/pyxlsb is a deployment fault, not a property of the
+        # workbook. It still degrades to the hardcoded dropdown rather than a
+        # 500, but it must not be logged as if the file were simply empty --
+        # that is how a silently reinstated hardcoded list would go unnoticed.
+        logger.warning(
+            "Check-code extraction is unavailable: a spreadsheet dependency is "
+            "not installed. See backend/requirements.txt (pandas, pyxlsb).",
+            exc_info=True,
+        )
+        return []
+    except Exception:
+        # Not a readable spreadsheet, or a corrupt workbook. The desktop app
+        # logs and returns an empty list here; an empty dropdown is a
+        # legitimate answer, so this must not become a 500.
+        logger.info(
+            "Could not read a workbook for check-code extraction.",
+            exc_info=True,
+        )
+        return []
+
+    if frame is None or frame.shape[1] <= CHECK_CODE_COLUMN_INDEX:
+        return []
+
+    codes = set()
+    for value in frame.iloc[:, CHECK_CODE_COLUMN_INDEX].astype(str):
+        cleaned = str(value).strip()
+        if not cleaned or cleaned.lower() in ("nan", "none"):
+            continue
+        if len(cleaned) > MAX_CHECK_CODE_LENGTH:
+            # Skipped rather than truncated: a truncated code is not the code,
+            # and offering it would submit a check the workbook never contains
+            # -- the same silent zero-card outcome this endpoint exists to fix.
+            continue
+        codes.add(cleaned)
+        if len(codes) >= MAX_CHECK_CODES:
+            break
+    return sorted(codes)
+
+
+@app.get("/api/uploads/{upload_id}/check-codes")
+def get_upload_check_codes(
+    upload_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the check codes an uploaded MPD RSD workbook actually contains.
+
+    The desktop app repopulates its "Check:" combo from column 24 of the chosen
+    workbook the moment it is picked (``_pick_mpd_rsd_excel`` ->
+    ``_refresh_available_checks``, app2.py:2916/3288). The web UI had a
+    hardcoded list instead, so an unlisted code was unselectable and a listed
+    code the workbook lacked ran a job that produced nothing.
+
+    A missing or another user's upload is a 404; anything else -- unreadable
+    file, too-few columns, no non-empty values -- is ``{"codes": []}`` with 200.
+    """
+
+    upload = db.query(Upload).filter(Upload.id == upload_id, Upload.user_id == current_user.id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    try:
+        file_path = storage_backend.existing_artifact_path(UPLOAD_DIR, upload.storage_path)
+    except (OSError, storage_backend.StorageError):
+        raise HTTPException(status_code=404, detail="Upload not found") from None
+
+    return {"codes": _extract_check_codes(file_path)}
+
+
 # ---------------------------------------------
 # Jobs API
 # ---------------------------------------------

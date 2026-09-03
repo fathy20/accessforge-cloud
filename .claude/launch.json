@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "accessforge-cloud-main/accessforge-cloud-main"],
+      "port": 8080
+    },
+    {
+      "name": "static-build",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8081",
+        "--directory",
+        "accessforge-cloud-main/accessforge-cloud-main/dist/client"
+      ],
+      "port": 8081
+    }
+  ]
+}

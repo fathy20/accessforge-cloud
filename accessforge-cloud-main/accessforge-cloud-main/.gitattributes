@@ -1,0 +1,7 @@
+# Files that go into Linux containers must stay LF even on Windows checkouts
+# (a CRLF shebang breaks the API entrypoint; nginx templates are copied verbatim).
+deploy/** text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+.dockerignore text eol=lf

@@ -403,3 +403,8 @@ def describe_break_limit() -> str:
     """The strict limit as shown in traces (kept with format_break for parity)."""
 
     return format_break(BREAK_LIMIT)
+
+
+# Public name for the FDP model (fdp.py), which measures the same legs the
+# allowance chains and must parse them identically.
+parse_leg_start_end = _parse_leg_start_end

@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import date
 from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
@@ -5,7 +6,9 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
 from fastapi import Depends
 
 from .augmented import AugmentedIndex
-from .allowance import AllowanceLeg, compute_member_credits
+from .allowance import AllowanceLeg, DutyCredit, compute_member_credits
+from .fdp import FdpTables, assess_rotation, tables_for
+from .trace import format_break
 from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
 from .domain import buffered_query_dates, is_trn_total, normalize_report_row, utc_today
 from .errors import (
@@ -29,6 +32,7 @@ from .mcp_report import OfficialMcpReport, _format_minutes
 from .positions import LEON_POSITION_GROUPS
 from .unknown_resolver import build_rotation_index, resolve_unknown_heavy
 from .schemas import (
+    FdpShadow,
     CrewHoursPeriod,
     CrewHoursReportResponse,
     CrewHoursRequest,
@@ -365,6 +369,7 @@ def _build_mcp_report_response(
     allowance_legs_by_code = _allowance_legs_by_code(
         getattr(report, "buffered_rows", ()) or report.rows, augmented_index
     )
+    fdp_tables = tables_for(os.environ.get("CREW_HOURS_FDP_TABLES"))
 
     all_crew_summaries: List[CrewMemberSummary] = []
     for code, data in crew_map.items():
@@ -378,6 +383,17 @@ def _build_mcp_report_response(
             credited, source = allowance.by_leg.get(flight.flight_nid, (False, None))
             flight.duty_credit = credited
             flight.credit_source = source
+        # SHADOW (2026-09-03): measure each of the member's duties against the
+        # regulatory two-pilot FDP limit and paint the result beside the
+        # verdict. Same duty grouping as the allowance, so the two can be
+        # compared leg for leg. Changes nothing that is displayed as a verdict,
+        # exported, or credited.
+        _paint_fdp_shadow(
+            data["flights"],
+            allowance_legs_by_code.get(code, []),
+            allowance.duties,
+            fdp_tables,
+        )
         all_crew_summaries.append(
             CrewMemberSummary(
                 crew_id=data["crew_id"],
@@ -494,6 +510,49 @@ def _build_mcp_report_response(
         ),
         crew_members=crew_summaries,
     )
+
+
+def _paint_fdp_shadow(
+    flights: Sequence[FlightItem],
+    member_legs: Sequence[AllowanceLeg],
+    duties: Sequence[DutyCredit],
+    tables: FdpTables,
+) -> None:
+    """Attach the shadow FDP assessment of each duty to its displayed legs."""
+
+    by_key = {flight.flight_nid: flight for flight in flights}
+    for duty in duties:
+        duty_keys = set(duty.leg_keys)
+        assessment = assess_rotation(
+            [leg for leg in member_legs if leg.key in duty_keys], tables=tables
+        )
+        if assessment is None:
+            continue
+        for key in duty.leg_keys:
+            flight = by_key.get(key)
+            if flight is None:
+                continue
+            needs = assessment.needs_augmentation
+            flight.fdp_shadow = FdpShadow(
+                tables_version=assessment.tables_version,
+                table=assessment.table,
+                band=assessment.band,
+                sectors=assessment.window.sectors,
+                planned=format_break(assessment.window.planned),
+                limit=None if assessment.limit is None else format_break(assessment.limit),
+                margin=None if assessment.margin is None else format_break(assessment.margin),
+                needs_augmentation=needs,
+                agrees_with_verdict=(
+                    None
+                    if needs is None or flight.effective_heavy is None
+                    else needs == flight.effective_heavy
+                ),
+                duty_leg_keys=list(duty.leg_keys),
+            )
+            flight.heavy_trace.extend(
+                HeavyTraceStep(step=item.step, outcome=item.outcome, inputs=dict(item.inputs))
+                for item in assessment.trace
+            )
 
 
 def _allowance_legs_by_code(

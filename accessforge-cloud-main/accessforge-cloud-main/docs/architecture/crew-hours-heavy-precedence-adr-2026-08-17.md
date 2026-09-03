@@ -348,3 +348,17 @@ it as a `Decision trace` disclosure inside the existing verdict tooltip, for
 - All existing public `FlightItem`/response field names (new fields are
   additive).
 - UNKNOWN is never a final displayed verdict.
+
+
+## Pending — Decision 7 candidate: Heavy derived from the FDP tables (2026-09-03)
+
+The owner's `reference.pdf` (EgyptAir OM Chapter 7 = ECAR 121 Subpart Q =
+CAP 371) gives the mechanism behind every rule above: a rotation is Heavy
+when its planned FDP (1:30 before first departure to 0:30 after last
+landing) exceeds the Table A/B two-pilot maximum for its local start band
+and sector count; the operator then augments or carries two crews. The
+inequality reproduces all ten owner cases with times. It runs in **shadow**
+only (`fdp.py`, `FlightItem.fdp_shadow`, `FDP_SHADOW_*` trace steps) until
+the seven rulings in
+`heavy-fdp-regulatory-model-plan-2026-09-03.md` land. Nothing in Decisions
+1–6 changes meanwhile.

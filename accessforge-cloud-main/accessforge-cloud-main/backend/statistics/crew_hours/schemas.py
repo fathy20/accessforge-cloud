@@ -21,6 +21,21 @@ class HeavyTraceStep(BaseModel):
     inputs: Mapping[str, Any] = Field(default_factory=dict)
 
 
+class FdpShadow(BaseModel):
+    """Regulatory FDP assessment of the duty this leg belongs to (shadow)."""
+
+    tables_version: str
+    table: str                       # "A" | "B"
+    band: str                        # local start band, e.g. "15:00-21:59"
+    sectors: int
+    planned: str                     # H:MM
+    limit: str | None                # H:MM; None when Table B has no row
+    margin: str | None               # planned - limit, H:MM (negative = within)
+    needs_augmentation: bool | None
+    agrees_with_verdict: bool | None # vs effective_heavy, when both are known
+    duty_leg_keys: list[str] = []
+
+
 class FlightItem(BaseModel):
     flight_nid: str
     flight_number: str | None = None
@@ -58,6 +73,11 @@ class FlightItem(BaseModel):
     unknown_resolution_reason: str | None = None
     # Every leg explains its own verdict, resolver-decided or not.
     heavy_trace: list[HeavyTraceStep] = []
+    # SHADOW ONLY (2026-09-03): the regulatory FDP model measured on this
+    # leg's duty. Never drives augmented_heavy/effective_heavy, the export, or
+    # the credit — it is there to back-test the plan in
+    # docs/architecture/heavy-fdp-regulatory-model-plan-2026-09-03.md.
+    fdp_shadow: "FdpShadow | None" = None
     # Member-duty allowance (owner model 2026-08-20, validated 54/55 against
     # the manual July sheet): True when this leg belongs to a duty credited
     # for THIS member. None = allowance not computed (old fixtures).

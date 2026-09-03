@@ -138,11 +138,12 @@ class TestCheckControlPipeline(unittest.TestCase):
 
     def test_runner_success(self):
         import backend.main as bm
+        import backend.job_runner as runner  # the runner moved here with the worker split
         from backend.models import Job
         job_id = self._create_upload_and_job(self.csv_path)
 
-        with mock.patch.object(bm, "SessionLocal", self.TestSessionLocal), \
-             mock.patch.object(bm, "OUTPUT_DIR", self.output_dir):
+        with mock.patch.object(runner, "SessionLocal", self.TestSessionLocal), \
+             mock.patch.object(runner, "OUTPUT_DIR", self.output_dir):
             bm.run_job_background(job_id)
 
         with self.TestSessionLocal() as db:
@@ -157,11 +158,12 @@ class TestCheckControlPipeline(unittest.TestCase):
 
     def test_runner_failure(self):
         import backend.main as bm
+        import backend.job_runner as runner  # the runner moved here with the worker split
         from backend.models import Job
         job_id = self._create_upload_and_job(Path(self.tmpdir) / "missing.csv")
 
-        with mock.patch.object(bm, "SessionLocal", self.TestSessionLocal), \
-             mock.patch.object(bm, "OUTPUT_DIR", self.output_dir):
+        with mock.patch.object(runner, "SessionLocal", self.TestSessionLocal), \
+             mock.patch.object(runner, "OUTPUT_DIR", self.output_dir):
             bm.run_job_background(job_id)
 
         with self.TestSessionLocal() as db:

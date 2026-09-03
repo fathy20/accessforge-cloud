@@ -5,10 +5,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, HTTPException, Query
+from datetime import datetime, time, timedelta, timezone
+
+from fastapi import FastAPI, UploadFile, File, Depends, BackgroundTasks, HTTPException, Query, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -16,7 +18,7 @@ import tempfile
 from pydantic import BaseModel
 import traceback
 
-from .config import get_app_env, resolve_cors_origins, should_auto_create_schema
+from .config import get_app_env, job_execution_mode, resolve_cors_origins, should_auto_create_schema
 from .database import engine, Base, get_db
 from .models import (
     Job,
@@ -25,6 +27,7 @@ from .models import (
     ModuleAccess,
     ModuleStatus,
     Notification,
+    Project,
     Upload,
     UploadKind,
     User,
@@ -35,7 +38,7 @@ from .project_routes import router as project_router
 from .statistics.router import router as statistics_router
 from .copilot.router import router as copilot_router
 from .rbac.permissions import get_effective_permissions, record_audit
-from .rbac.registry import MODULE_REGISTRY
+from .module_visibility import module_is_visible, module_visibility_inputs
 from . import storage as storage_backend
 from .tools.sync_registry import sync_registry
 
@@ -169,7 +172,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition"],
+    expose_headers=["Content-Disposition", "X-Total-Count"],
 )
 
 app.include_router(auth_router)
@@ -221,6 +224,8 @@ def _job_payload(job: Job) -> dict:
         "created_at": job.created_at,
         "started_at": job.started_at,
         "completed_at": job.completed_at,
+        "attempt": job.attempt or 0,
+        "cancel_requested": bool(job.cancel_requested),
     }
 
 
@@ -532,191 +537,14 @@ class CreateJobRequest(BaseModel):
     module_key: str
     input_refs: dict
 
-from backend.database import SessionLocal
+from backend.database import SessionLocal  # noqa: F401 - re-exported for tests/tools
+from .job_runner import (  # noqa: F401 - re-exported names
+    MAX_JOB_LOG_ENTRIES,
+    _append_job_log,
+    run_job_background,
+)
+from .job_queue import request_cancel, requeue_for_retry
 
-# Bound the per-job log list: a chatty handler otherwise grows the JSON column
-# (rewritten wholesale on every append) without limit.
-MAX_JOB_LOG_ENTRIES = 200
-
-
-def _append_job_log(logs, entry: dict) -> list:
-    combined = list(logs or []) + [entry]
-    return combined[-MAX_JOB_LOG_ENTRIES:]
-
-
-def run_job_background(job_id: str):
-    from datetime import datetime, timezone
-
-    with SessionLocal() as db:
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if not job:
-            return
-
-        job.status = JobStatus.running
-        job.started_at = datetime.now(timezone.utc)
-        db.commit()
-
-        def log_progress(progress: int, msg: str):
-            with SessionLocal() as _db:
-                _j = _db.query(Job).filter(Job.id == job_id).first()
-                if _j:
-                    _j.progress = progress
-                    _j.logs = _append_job_log(_j.logs, {"level": progress, "msg": msg})
-                    _db.commit()
-
-        workdir = None
-        try:
-            from worker.handlers import REGISTRY
-
-            module_key = job.module_key
-            handler = REGISTRY.get(module_key)
-            if not handler:
-                raise ValueError(f"Module {module_key} not found in registry")
-
-            output_owner = db.query(User).filter(User.id == job.user_id).first()
-            module = db.query(Module).filter(Module.key == module_key).first()
-            if output_owner is None:
-                module_permitted = False
-            else:
-                permissions, disabled_module_ids = _module_visibility_inputs(db, output_owner)
-                module_permitted = _module_is_visible(
-                    module,
-                    permissions,
-                    disabled_module_ids,
-                )
-
-            if not module_permitted:
-                record_audit(
-                    db,
-                    output_owner,
-                    "job_module_denied",
-                    "job",
-                    job.id,
-                    module_key=module_key,
-                )
-                db.commit()
-                raise PermissionError("Module access denied")
-                
-            # Get input files
-            file_ids = job.input_refs.get("files", [])
-            input_files = []
-            rejected_file_count = 0
-            for fid in file_ids:
-                upload = (
-                    db.query(Upload)
-                    .filter(Upload.id == fid, Upload.user_id == job.user_id)
-                    .first()
-                )
-                if upload:
-                    input_files.append(upload.storage_path)
-                else:
-                    rejected_file_count += 1
-
-            if rejected_file_count:
-                output_owner = db.query(User).filter(User.id == job.user_id).first()
-                record_audit(
-                    db,
-                    output_owner,
-                    "job_input_rejected",
-                    "job",
-                    job.id,
-                    rejected_count=rejected_file_count,
-                )
-                db.commit()
-                raise ValueError("One or more input files are unavailable to this job")
-                    
-            if not input_files and job.input_refs.get("data_source") != "db":
-                raise ValueError("No valid input files found for job")
-                
-            # Setup workdir
-            workdir = Path(tempfile.gettempdir()) / "redsea_backend" / str(job.id)
-            (workdir / "in").mkdir(parents=True, exist_ok=True)
-            (workdir / "out").mkdir(parents=True, exist_ok=True)
-            
-            # Convert SQLAlchemy object to dict for the handler
-            job_dict = {
-                "id": str(job.id),
-                "input_refs": job.input_refs
-            }
-            
-            log_progress(10, f"Starting module {module_key} with {len(input_files)} files")
-            
-            # Execute handler
-            out_paths = handler(job_dict, input_files, workdir, log_progress)
-            
-            # Process outputs
-            output_refs = {"files": []}
-            output_artifacts = []
-            for path_str in out_paths:
-                path = Path(path_str)
-                try:
-                    artifact = storage_backend.persist_output_artifact(path, OUTPUT_DIR)
-                except FileNotFoundError:
-                    logger.warning("Generated output was not found.", extra={"job_id": str(job.id)})
-                    continue
-
-                output_artifacts.append(artifact)
-                base_url = os.getenv("BASE_URL", "http://localhost:8000")
-                output_refs["files"].append({
-                    "id": artifact.storage_name,
-                    "name": artifact.original_name,
-                    "original_name": artifact.original_name,
-                    "storage_name": artifact.storage_name,
-                    "size_bytes": artifact.size_bytes,
-                    "sha256": artifact.sha256,
-                    "mime": artifact.mime,
-                    "url": f"{base_url}/api/downloads/{artifact.storage_name}",
-                })
-
-            with SessionLocal() as _db:
-                _j = _db.query(Job).filter(Job.id == job_id).first()
-                if _j is None:
-                    # The row vanished mid-run (manual cleanup, test teardown):
-                    # nothing to publish results onto.
-                    logger.warning("Job row disappeared before completion.", extra={"job_id": job_id})
-                    return
-                _j.status = JobStatus.done
-                _j.progress = 100
-                _j.output_refs = output_refs
-                _j.completed_at = datetime.now(timezone.utc)
-                output_owner = _db.query(User).filter(User.id == job.user_id).first()
-                for artifact in output_artifacts:
-                    record_audit(
-                        _db,
-                        output_owner,
-                        "upload",
-                        "output",
-                        artifact.storage_name,
-                        artifact_type="output",
-                        original_name=artifact.original_name,
-                        size=artifact.size_bytes,
-                        size_bytes=artifact.size_bytes,
-                        sha256=artifact.sha256,
-                        mime=artifact.mime,
-                    )
-                _db.commit()
-                
-        except Exception as e:
-            with SessionLocal() as _db:
-                _j = _db.query(Job).filter(Job.id == job_id).first()
-                if _j:
-                    _j.status = JobStatus.failed
-                    # The client-facing message is bounded; the full traceback
-                    # stays in the server-side logs column, which the API never
-                    # returns.
-                    _j.error_message = str(e)[:2000]
-                    _j.completed_at = datetime.now(timezone.utc)
-                    _j.logs = _append_job_log(
-                        _j.logs, {"level": 99, "msg": traceback.format_exc()}
-                    )
-                    _db.commit()
-        finally:
-            # Clean up the temporary workspace
-            try:
-                if workdir and workdir.exists():
-                    shutil.rmtree(workdir)
-            except Exception:
-                logger.exception("Failed to clean up job workspace.", extra={"job_id": job_id})
 
 @app.post("/api/jobs")
 def create_job(
@@ -775,9 +603,12 @@ def create_job(
     db.add(job)
     db.commit()
     db.refresh(job)
-    
-    background_tasks.add_task(run_job_background, str(job.id))
-    
+
+    # inline: run in this process (development, tests). worker: the row is
+    # the queue entry; `python -m worker.runner` claims and executes it.
+    if job_execution_mode() == "inline":
+        background_tasks.add_task(run_job_background, str(job.id))
+
     return {"id": job.id, "status": job.status}
 
 def _output_entry_storage_name(job: Job, entry: dict) -> str:
@@ -877,25 +708,169 @@ def download_file(
 
 @app.get("/api/jobs")
 def get_jobs(
+    response: Response,
     module_key: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Newest-first page of the caller's jobs.
+
+    The body stays a plain list for existing clients; the page size and
+    position come from ``limit``/``offset`` and the unpaged total travels in
+    the ``X-Total-Count`` header.
+    """
     query = db.query(Job).filter(Job.user_id == current_user.id)
     if module_key:
         query = query.filter(Job.module_key == module_key)
     if status:
         query = query.filter(Job.status == status)
-    jobs = query.order_by(Job.created_at.desc()).limit(limit).all()
+    response.headers["X-Total-Count"] = str(query.count())
+    jobs = query.order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
     return [_job_payload(job) for job in jobs]
+
+
+DASHBOARD_HISTORY_DAYS = 14
+DASHBOARD_RECENT_LIMIT = 6
+DASHBOARD_TOP_MODULES = 8
+
+
+@app.get("/api/dashboard/summary")
+def get_dashboard_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Everything the dashboard shows, aggregated in SQL.
+
+    The page used to download the caller's complete job and upload lists on
+    every poll and reduce them in the browser. Grouping here means each poll
+    moves a few dozen numbers and two six-row lists regardless of history size.
+    """
+    own_jobs = db.query(Job).filter(Job.user_id == current_user.id)
+
+    by_status = {status.value: 0 for status in JobStatus}
+    for status, count in (
+        db.query(Job.status, func.count(Job.id))
+        .filter(Job.user_id == current_user.id)
+        .group_by(Job.status)
+        .all()
+    ):
+        by_status[_enum_value(status)] = count
+
+    by_module = [
+        {"module_key": module_key, "count": count}
+        for module_key, count in (
+            db.query(Job.module_key, func.count(Job.id))
+            .filter(Job.user_id == current_user.id)
+            .group_by(Job.module_key)
+            .order_by(func.count(Job.id).desc(), Job.module_key)
+            .limit(DASHBOARD_TOP_MODULES)
+            .all()
+        )
+    ]
+
+    # Daily buckets are built in Python on purpose: the window is bounded and
+    # only two columns travel, and it avoids a dialect-specific date()
+    # expression so SQLite and SQL Server produce identical results. Days are
+    # UTC calendar days.
+    today = datetime.now(timezone.utc).date()
+    first_day = today - timedelta(days=DASHBOARD_HISTORY_DAYS - 1)
+    window_start = datetime.combine(first_day, time.min, tzinfo=timezone.utc)
+    daily = {
+        (first_day + timedelta(days=offset)).isoformat(): {"done": 0, "failed": 0}
+        for offset in range(DASHBOARD_HISTORY_DAYS)
+    }
+    for created_at, status in (
+        db.query(Job.created_at, Job.status)
+        .filter(
+            Job.user_id == current_user.id,
+            Job.created_at >= window_start,
+            Job.status.in_([JobStatus.done, JobStatus.failed]),
+        )
+        .all()
+    ):
+        if created_at is None:
+            continue
+        stamp = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        bucket = daily.get(stamp.astimezone(timezone.utc).date().isoformat())
+        if bucket is not None:
+            bucket[_enum_value(status)] += 1
+
+    recent_jobs = own_jobs.order_by(Job.created_at.desc()).limit(DASHBOARD_RECENT_LIMIT).all()
+    own_uploads = db.query(Upload).filter(Upload.user_id == current_user.id)
+    recent_uploads = own_uploads.order_by(Upload.created_at.desc()).limit(DASHBOARD_RECENT_LIMIT).all()
+
+    return {
+        "jobs": {
+            "total": sum(by_status.values()),
+            "active": (by_status["queued"] + by_status["running"]) > 0,
+            "by_status": by_status,
+            "by_module": by_module,
+            "daily": [{"day": day, **counts} for day, counts in daily.items()],
+            "recent": [_job_payload(job) for job in recent_jobs],
+        },
+        "uploads": {
+            "total": own_uploads.count(),
+            "recent": [_upload_payload(upload) for upload in recent_uploads],
+        },
+        # Projects are shared workspaces, so this is the global count — the
+        # same list /api/projects returns to every authenticated user.
+        "projects": {"total": db.query(func.count(Project.id)).scalar() or 0},
+    }
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    return _job_payload(job)
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Queued jobs are cancelled at once; a running job is flagged and the
+    worker kills it at its next tick. In inline mode a running job cannot be
+    interrupted, so the flag is recorded and the job finishes on its own."""
+
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    outcome = request_cancel(job)
+    if outcome == "noop":
+        raise HTTPException(status_code=409, detail=f"Job is already {_enum_value(job.status)}")
+    record_audit(db, current_user, "job_cancel", "job", job.id, outcome=outcome)
+    db.commit()
+    db.refresh(job)
+    return _job_payload(job)
+
+
+@app.post("/api/jobs/{job_id}/retry")
+def retry_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Requeue a failed or cancelled job. Attempts keep counting across
+    retries; the inputs are re-validated by the runner, not here."""
+
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in (JobStatus.failed, JobStatus.cancelled):
+        raise HTTPException(status_code=409, detail=f"Only failed or cancelled jobs can be retried (job is {_enum_value(job.status)})")
+
+    requeue_for_retry(job)
+    record_audit(db, current_user, "job_retry", "job", job.id)
+    db.commit()
+    db.refresh(job)
+
+    if job_execution_mode() == "inline":
+        background_tasks.add_task(run_job_background, str(job.id))
     return _job_payload(job)
 
 # ---------------------------------------------
@@ -952,38 +927,10 @@ def _module_payload(module: Module, permissions: set[str]) -> dict:
     }
 
 
-def _module_visibility_inputs(db: Session, user: User) -> tuple[set[str], set[str]]:
-    permissions = get_effective_permissions(db, user)
-    disabled_module_ids = {
-        module_id
-        for (module_id,) in db.query(ModuleAccess.module_id)
-        .filter(ModuleAccess.user_id == user.id, ModuleAccess.enabled == False)  # noqa: E712
-        .all()
-    }
-    return permissions, disabled_module_ids
-
-
-def _module_is_visible(
-    module: Module | None,
-    permissions: set[str],
-    disabled_module_ids: set[str],
-) -> bool:
-    if module is None:
-        return False
-
-    registry_definition = next(
-        (definition for definition in MODULE_REGISTRY if definition.key == module.key),
-        None,
-    )
-    return (
-        registry_definition is not None
-        and module.required_view_permission == registry_definition.required_view_permission
-        and bool(module.enabled)
-        and module.module_status != ModuleStatus.hidden
-        and module.id not in disabled_module_ids
-        and bool(module.required_view_permission)
-        and registry_definition.required_view_permission in permissions
-    )
+# Shared with the job runner (backend/module_visibility.py); the private
+# names stay as aliases for existing call sites and tests.
+_module_visibility_inputs = module_visibility_inputs
+_module_is_visible = module_is_visible
 
 # App init happens in _lifespan (defined above app creation): the registry
 # projection is seeded there, replacing the deprecated on_event hook.

@@ -263,3 +263,24 @@ def resolve_cors_origins(
 APP_ENV: AppEnv = get_app_env()
 DATABASE_URL: str = resolve_database_url(APP_ENV)
 SELF_SIGNUP_ENABLED: bool = _read_flag(os.environ, "SELF_SIGNUP_ENABLED", default=True)
+
+
+JobExecutionMode = Literal["inline", "worker"]
+ALLOWED_JOB_EXECUTION_MODES: Final[tuple[JobExecutionMode, ...]] = ("inline", "worker")
+
+
+def job_execution_mode(environment: Mapping[str, str] | None = None) -> JobExecutionMode:
+    """Where jobs run after POST /api/jobs.
+
+    ``inline`` (default) executes the job in the API process as a
+    BackgroundTask — enough for one developer, and what the test suite
+    expects. ``worker`` only enqueues; ``python -m worker.runner`` claims and
+    executes rows, which is the production shape (durable across restarts,
+    cancellable, isolated from request handling).
+    """
+
+    source = os.environ if environment is None else environment
+    value = source.get("JOB_EXECUTION_MODE", "inline").strip().lower()
+    if value not in ALLOWED_JOB_EXECUTION_MODES:
+        raise _safe_configuration_error("JOB_EXECUTION_MODE", "must be one of: inline, worker")
+    return cast(JobExecutionMode, value)

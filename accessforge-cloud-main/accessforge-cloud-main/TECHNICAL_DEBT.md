@@ -6,17 +6,22 @@ SYSTEM_AUDIT.md for those.
 
 ## P1
 
-### 1. In-process job execution (durability, isolation, timeouts)
-- **Problem**: jobs run via FastAPI `BackgroundTasks` — lost on restart, no
-  cancellation, no timeout, heavy OCR can starve the API process.
-- **Impact**: reliability and DoS exposure; `queued` jobs orphan on crash.
-- **Solution (already decided, adversarially reviewed)**: SQL-backed queue on
-  the `jobs` table, separate `python -m worker.runner` process, atomic claim
-  with lease/fencing generation, heartbeat + stale reclaim, killable child
-  process per job (Windows process-tree kill), per-attempt staging + manifest
-  publish, at-least-once semantics stated honestly. Test claim/locking against
-  real SQL Server, not SQLite.
-- **Complexity**: L (its own slice; design is settled).
+### 1. In-process job execution (durability, isolation, timeouts) — LANDED 2026-09-03, one item open
+- **Was**: jobs ran via FastAPI `BackgroundTasks` — lost on restart, no
+  cancellation, no timeout, heavy OCR could starve the API process.
+- **Now**: `JOB_EXECUTION_MODE=worker` + `python -m worker.runner`
+  (migration `d1e2f3a4b5c6`). SQL-backed queue on `jobs`, atomic claim with a
+  per-claim `lease_token`, every worker write fenced on it, heartbeat + stale
+  reclaim (`JOB_MAX_ATTEMPTS` cap), killable child process per job with
+  process-tree kill on both platforms, cancel and retry endpoints, graceful
+  release on shutdown, at-least-once stated in the docs. Tests:
+  `backend/tests/test_job_queue.py`. Inline mode remains the local default.
+- **Still open**: claim/locking has only been exercised on SQLite. Run the
+  suite's queue tests and a two-worker soak against a real SQL Server before
+  relying on it in production; add `READPAST` hints only if contention shows.
+  Outputs are published after the files are persisted, so a crash in between
+  leaves orphan files (closes with #2).
+- **Complexity**: S (verification on SQL Server).
 
 ### 2. Job outputs have no relational home
 - **Problem**: outputs live inside `jobs.output_refs` JSON; download

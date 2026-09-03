@@ -50,12 +50,12 @@ class TestSqlDialectCompatibility(unittest.TestCase):
 
         user = SimpleNamespace(id="user-1")
         list_db = _CaptureDb()
-        with patch.object(main, "get_effective_permissions", return_value=set()):
+        with patch("backend.module_visibility.get_effective_permissions", return_value=set()):
             main.get_modules(db=list_db, current_user=user)
 
         detail_db = _CaptureDb(first_result=SimpleNamespace(id="module-1"))
         with (
-            patch.object(main, "get_effective_permissions", return_value=set()),
+            patch("backend.module_visibility.get_effective_permissions", return_value=set()),
             patch.object(main, "_module_is_visible", return_value=True),
             patch.object(main, "_module_payload", return_value={}),
         ):

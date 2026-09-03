@@ -357,23 +357,20 @@ def _build_mcp_report_response(
         elif is_trn_total(official_total):
             crew_map[code]["has_trn"] = True
 
+    # The allowance judges duties over the BUFFERED rows, not the displayed
+    # ones: a rotation departing on the month's last day returns inside the
+    # buffer, and only with both legs visible can the duty chain see it is one
+    # rotation (owner ruling 2026-09-02). Display never reads these — the extra
+    # legs' keys simply never match a displayed flight_nid.
+    allowance_legs_by_code = _allowance_legs_by_code(
+        getattr(report, "buffered_rows", ()) or report.rows, augmented_index
+    )
+
     all_crew_summaries: List[CrewMemberSummary] = []
     for code, data in crew_map.items():
         official_total = official_totals.get(code)
         allowance = compute_member_credits(
-            [
-                AllowanceLeg(
-                    key=flight.flight_nid,
-                    flight_date=flight.flight_date,
-                    start_time=flight.start_time_utc,
-                    end_time=flight.end_time_utc,
-                    position=flight.position,
-                    leon_heavy=flight.leon_heavy,
-                    departure_airport=flight.departure_airport,
-                    arrival_airport=flight.arrival_airport,
-                )
-                for flight in data["flights"]
-            ],
+            allowance_legs_by_code.get(code, []),
             window_start=from_date or None,
             window_end=to_date or None,
         )
@@ -497,6 +494,55 @@ def _build_mcp_report_response(
         ),
         crew_members=crew_summaries,
     )
+
+
+def _allowance_legs_by_code(
+    rows: Sequence[Mapping[str, Any]],
+    augmented_index: AugmentedIndex,
+) -> Dict[str, List[AllowanceLeg]]:
+    """Every member's legs across the buffered window, keyed by crew code.
+
+    Field provenance is identical to the displayed flights — same report
+    columns, same augmented lookup, same misalignment handling — so an
+    in-window leg here shares its ``scope_row_unique_id`` key with its
+    displayed FlightItem, which is what lets ``by_leg`` paint the display.
+    Rows inside the period are re-validated by the display loop before this
+    runs; a malformed row that exists ONLY in the buffer is skipped with a
+    warning rather than failing the whole report over out-of-window data.
+    """
+
+    legs: Dict[str, List[AllowanceLeg]] = {}
+    for row in rows:
+        key = _optional_string(row.get("scope_row_unique_id"))
+        if key is None:
+            continue
+        try:
+            normalized_row = normalize_report_row(row)
+        except LeonContractError:
+            logger.warning(
+                "Skipping malformed buffered report row %s for allowance chaining.",
+                key,
+            )
+            continue
+        for crew_slot in normalized_row.crew:
+            position = (
+                None if normalized_row.positions_misaligned else crew_slot.position
+            )
+            legs.setdefault(crew_slot.code, []).append(
+                AllowanceLeg(
+                    key=key,
+                    flight_date=_optional_string(row.get("date_STD_log_UTC")),
+                    start_time=_optional_string(row.get("JL_STD_UTC")),
+                    end_time=_optional_string(row.get("JL_STA_UTC")),
+                    position=position,
+                    leon_heavy=augmented_index.lookup(
+                        crew_slot.code, row.get("unique_id")
+                    ),
+                    departure_airport=_optional_string(row.get("jl_adep_preferred_code")),
+                    arrival_airport=_optional_string(row.get("jl_ades_preferred_code")),
+                )
+            )
+    return legs
 
 
 def _mcp_flight_item(

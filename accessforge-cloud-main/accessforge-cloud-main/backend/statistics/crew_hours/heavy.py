@@ -20,6 +20,7 @@ from .positions import (
     airport_code_forms,
     HEAVY_CABIN_THRESHOLD,
     HEAVY_COCKPIT_THRESHOLD,
+    is_domestic_airport,
     NON_OPERATING_COCKPIT_POSITIONS,
     POSITIONING_POSITIONS,
     SVX_TAG,
@@ -38,6 +39,8 @@ HeavyReason = Literal[
     "SVX_TAG",
     "EVN_AIRPORT",
     "SVX_AIRPORT",
+    # Domestic is a derived No that LEON may override — never absolute.
+    "DOMESTIC_AIRPORT",
     "EXTRA_COCKPIT_CREW",
     "EXTRA_CABIN_CREW",
     "MULTIPLE_RULES",
@@ -179,6 +182,22 @@ def _route_match(route_airports: Sequence[str | None] | None, code: str) -> str 
     return None
 
 
+def _is_domestic_route(route_airports: Sequence[str | None] | None) -> bool:
+    """Both ends inside Egypt, judged over every route code we were given.
+
+    At least two known codes are required and ALL of them must be Egyptian —
+    a missing or foreign code leaves the sector international, so incomplete
+    journey-log data can never demote a rotation to domestic.
+    """
+
+    codes = [
+        airport
+        for airport in (route_airports or ())
+        if isinstance(airport, str) and airport.strip()
+    ]
+    return len(codes) >= 2 and all(is_domestic_airport(airport) for airport in codes)
+
+
 def _route_matches(route_airports: Sequence[str | None] | None, code: str) -> bool:
     """Alias-aware exact airport match; see _route_match for the matched form."""
 
@@ -247,6 +266,24 @@ def derive_heavy_detail_traced(
     )
     if evn_tag:
         return False, "EVN_TAG", tuple(steps)
+
+    # STEP 1b — a domestic sector (every known route code Egyptian) is never
+    # Heavy by any LOCAL rule (owner ruling 2026-09-02). Deliberately NOT in
+    # ABSOLUTE_TAG_REASONS: unlike EVN/SVX this must lose to an explicit LEON
+    # crewAugmentation value, so decide_heavy treats it as an ordinary derived
+    # No that LEON may override.
+    domestic = _is_domestic_route(route_airports)
+    steps.append(
+        step(
+            "STEP_1_DOMESTIC",
+            "domestic sector (both ends Egyptian) -> Heavy No"
+            if domestic
+            else "no match",
+            route_airports=airports,
+        )
+    )
+    if domestic:
+        return False, "DOMESTIC_AIRPORT", tuple(steps)
 
     # STEP 2 — SVX is an absolute inclusion.
     svx_airport = _route_match(route_airports, SVX_TAG)

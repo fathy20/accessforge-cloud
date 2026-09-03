@@ -138,7 +138,7 @@ describe("Crew Hours detail rendering", () => {
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 
-  it("shows Heavy provenance in the tooltip and marks LEON/local conflicts", async () => {
+  it("keeps Heavy provenance in the tooltip without a conflict marker", async () => {
     const provenanceCrew: CrewMemberSummary = {
       ...crew,
       flights: [
@@ -166,11 +166,15 @@ describe("Crew Hours detail rendering", () => {
       />,
     );
 
-    const marker = screen.getByRole("img", { name: "Conflict: LEON takes precedence" });
-    expect(marker).toBeInTheDocument();
-    const trigger = marker.closest("[tabindex='0']");
-    expect(trigger).not.toBeNull();
-    fireEvent.focus(trigger as HTMLElement);
+    // The red conflict marker is gone (owner ruling 2026-09-02): the
+    // member-duty allowance is the verdict now, so the old flight-level
+    // LEON-vs-derived disagreement is provenance detail, not a warning.
+    expect(
+      screen.queryByRole("img", { name: "Conflict: LEON takes precedence" }),
+    ).not.toBeInTheDocument();
+
+    const trigger = screen.getAllByLabelText(/Augmented \(Heavy\)/)[0];
+    fireEvent.focus(trigger);
 
     await waitFor(() => {
       expect(screen.getAllByText("Source: LEON").length).toBeGreaterThan(0);
@@ -180,7 +184,7 @@ describe("Crew Hours detail rendering", () => {
     });
   });
 
-  it("renders the conflict marker in Arabic RTL", () => {
+  it("renders no conflict marker in Arabic RTL either", () => {
     const provenanceCrew: CrewMemberSummary = {
       ...crew,
       flights: [{ ...crew.flights[0], heavy_conflict: true }],
@@ -199,7 +203,9 @@ describe("Crew Hours detail rendering", () => {
       "ar",
     );
 
-    expect(screen.getByRole("img", { name: "تعارض: LEON له الأولوية" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "تعارض: LEON له الأولوية" }),
+    ).not.toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 

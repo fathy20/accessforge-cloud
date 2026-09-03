@@ -165,8 +165,9 @@ class TestHeavyCrossConsistency(unittest.TestCase):
         # single-day fetch trims the return leg out. The Copilot's STEP 4 then
         # never saw the neighbour and answered No while the month-window
         # report answered Yes. The widened Copilot fetch window closes this.
+        # The outbound runs 5:00 so the pair is rotation-scale (2026-09-02).
         report = _report([
-            _row(701, "RSX6081", "22-06-2026", "20:00", "23:30", "HRG", "OPO",
+            _row(701, "RSX6081", "22-06-2026", "18:30", "23:30", "HRG", "OPO",
                  [("C1", "CPT"), ("C2", "FO"), ("P1", "PAD")]),
             _row(702, "RSX6082", "23-06-2026", "00:30", "04:00", "OPO", "HRG",
                  [("C1", "CPT"), ("C2", "FO")]),

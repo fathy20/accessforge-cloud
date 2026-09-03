@@ -250,7 +250,9 @@ class TestHeavyFromMcp(unittest.TestCase):
                 "unique_id": 601,
                 "flightNo": "RSX6081",
                 "date_STD_log_UTC": "22-06-2026",
-                "JL_STD_UTC": "20:00",
+                # 5:00 outbound: the rotation minimum (2026-09-02) needs one
+                # sector of the pair over 4:00.
+                "JL_STD_UTC": "18:30",
                 "JL_STA_UTC": "23:30",
                 "jl_adep_preferred_code": "HRG",
                 "jl_ades_preferred_code": "OPO",
@@ -258,7 +260,7 @@ class TestHeavyFromMcp(unittest.TestCase):
                 "crew_names": ["Crew C1", "Crew C2", "Rider P1"],
                 "crew_position_names": ["CPT", "FO", "PAD"],
                 "acftType": "B738 - 737-800",
-                "blockTimeJourneyLog": "03:30",
+                "blockTimeJourneyLog": "05:00",
             },
             {
                 "scope_row_unique_id": "602",

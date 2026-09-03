@@ -1,10 +1,11 @@
 """STEP 4 UNKNOWN-resolver contract: the approved rotation rules.
 
-Characterization tests for the 2026-08 rule set:
+Characterization tests for the 2026-08 rule set, extended 2026-09-02:
 
 - ``PSN`` on the current leg is an immediate NO (never a rotation search).
-- Rotation continuity: a neighbour must chain airports with the current leg.
+- A DOMESTIC current leg (both ends Egyptian) is an immediate NO.
 - Break gate: ``0 <= break < 4h`` strictly — 3:59 connects, 4:00 does not.
+- Rotation minimum: a qualifying pair must contain a sector over 4:00.
 - Midnight-safe duty window: the pair belongs to one duty anchored on the
   first sector's UTC start date; a short break across midnight is the SAME
   duty. ``DIFFERENT_DAY`` is reserved for genuinely disjoint days.
@@ -88,13 +89,14 @@ def _out_and_back(
     return_adep: str | None = "XYZ",
     return_ades: str | None = "HRG",
 ) -> CrewContextIndex:
-    """Matrix scenario 7: HRG→XYZ late evening, XYZ→HRG after midnight."""
+    """Matrix scenario 7: HRG→XYZ late evening (4:30 — clears the rotation
+    minimum), XYZ→HRG after midnight."""
 
     crew = (_entry("C1"), _entry("C2", position="FO"))
     return _index(
         _context(
             301,
-            "2026-06-01T20:00:00Z",
+            "2026-06-01T19:00:00Z",
             "2026-06-01T23:30:00Z",
             crew,
             adep="HRG",
@@ -116,7 +118,7 @@ class TestPsnShortCircuit(unittest.TestCase):
         # The neighbour would qualify on every gate; PSN must never reach it.
         crew = (_entry("C1", position="PSN"), _entry("C2"))
         index = _index(
-            _context(301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
+            _context(301, "2026-06-01T19:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
             _context(302, "2026-06-02T00:30:00Z", "2026-06-02T04:00:00Z", crew, adep="XYZ", ades="HRG"),
         )
 
@@ -223,7 +225,7 @@ class TestOperatingCrewComparison(unittest.TestCase):
         crew = (_entry("C1"), _entry("C2", position="FO"))
         index = _index(
             _context(
-                301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z",
+                301, "2026-06-01T19:00:00Z", "2026-06-01T23:30:00Z",
                 (*crew, _entry("P1", position="PAD")),
                 adep="HRG", ades="XYZ",
             ),
@@ -267,7 +269,7 @@ class TestOperatingCrewComparison(unittest.TestCase):
         # own qualifying rotation resolves through the normal neighbour rule.
         crew = (_entry("C1", position="PAD"), _entry("C2"))
         index = _index(
-            _context(301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
+            _context(301, "2026-06-01T19:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
             _context(302, "2026-06-02T00:30:00Z", "2026-06-02T04:00:00Z", crew, adep="XYZ", ades="HRG"),
         )
 
@@ -310,13 +312,72 @@ class TestRotationContinuity(unittest.TestCase):
         crew = (_entry("C1"), _entry("C2", position="FO"))
         index = _index(
             _context(300, "2026-06-01T16:00:00Z", "2026-06-01T18:30:00Z", crew, adep="XYZ", ades="HRG"),
-            _context(301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
+            _context(301, "2026-06-01T19:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
         )
 
         resolution = _resolve(index, 301, "C1")
 
         self.assertTrue(resolution.effective_heavy)
         self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+
+class TestDomesticAndMinimum(unittest.TestCase):
+    """Owner rulings 2026-09-02: domestic is never Heavy; a rotation needs a
+    sector over 4:00."""
+
+    def test_a_domestic_subject_is_no_immediately(self):
+        # Even with a fully qualifying international partner, the domestic
+        # shuttle itself reads No — the owner's 23-06 shape.
+        crew = (_entry("C1"), _entry("C2", position="FO"))
+        index = _index(
+            _context(301, "2026-06-01T05:30:00Z", "2026-06-01T06:10:00Z", crew, adep="HRG", ades="SSH"),
+            _context(302, "2026-06-01T07:00:00Z", "2026-06-01T13:00:00Z", crew, adep="SSH", ades="OPO"),
+        )
+
+        resolution = _resolve(index, 301, "C1")
+
+        self.assertFalse(resolution.effective_heavy)
+        self.assertTrue(resolution.resolved)
+        self.assertEqual(resolution.reason, "DOMESTIC_LEG")
+
+    def test_the_international_partner_of_a_domestic_shuttle_is_still_yes(self):
+        # ...judged from the other end, the 6:00 OPO sector qualifies through
+        # the shuttle (crew continuity), exactly as the owner ruled.
+        crew = (_entry("C1"), _entry("C2", position="FO"))
+        index = _index(
+            _context(301, "2026-06-01T05:30:00Z", "2026-06-01T06:10:00Z", crew, adep="HRG", ades="SSH"),
+            _context(302, "2026-06-01T07:00:00Z", "2026-06-01T13:00:00Z", crew, adep="SSH", ades="OPO"),
+        )
+
+        resolution = _resolve(index, 302, "C1")
+
+        self.assertTrue(resolution.effective_heavy)
+        self.assertEqual(resolution.reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+
+    def test_icao_spelled_domestic_airports_are_domestic_too(self):
+        crew = (_entry("C1"),)
+        index = _index(
+            _context(301, "2026-06-01T05:30:00Z", "2026-06-01T06:40:00Z", crew, adep="HEGN", ades="HESH"),
+        )
+
+        resolution = _resolve(index, 301, "C1")
+
+        self.assertEqual(resolution.reason, "DOMESTIC_LEG")
+
+    def test_a_rotation_of_two_short_sectors_is_below_the_minimum(self):
+        # Same crew, short break — but neither sector exceeds 4:00, so the
+        # pair is repositioning, not augmentation.
+        crew = (_entry("C1"), _entry("C2", position="FO"))
+        index = _index(
+            _context(301, "2026-06-01T20:00:00Z", "2026-06-01T23:30:00Z", crew, adep="HRG", ades="XYZ"),
+            _context(302, "2026-06-02T00:30:00Z", "2026-06-02T03:00:00Z", crew, adep="XYZ", ades="HRG"),
+        )
+
+        resolution = _resolve(index, 301, "C1")
+
+        self.assertFalse(resolution.effective_heavy)
+        self.assertTrue(resolution.resolved)
+        self.assertEqual(resolution.reason, "ROTATION_BELOW_MINIMUM")
 
 
 class TestReasonRanking(unittest.TestCase):

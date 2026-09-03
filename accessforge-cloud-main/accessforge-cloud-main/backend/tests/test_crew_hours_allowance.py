@@ -61,12 +61,16 @@ class TestSwapCredit(unittest.TestCase):
     def test_operate_both_legs_without_riding_is_no_credit(self):
         # The 23-06 pair the owner asked about (RSX8891+RSX6083): the sheet
         # gave the all-operating member nothing for the identical July shape.
+        # An operated leg CAN partner another operated leg (owner ruling
+        # 2026-09-02) -- but this one's only neighbour, HRG->SSH, is domestic,
+        # and a domestic leg is never a valid partner. No genuine return
+        # exists in this duty, so it stays uncredited.
         result = compute_member_credits([
             leg("a", "23-06-2026", "05:30", "06:10", "FO", adep="HRG", ades="SSH"),
             leg("b", "23-06-2026", "07:00", "13:00", "FO", adep="SSH", ades="OPO"),
         ])
         self.assertEqual(result.credits, 0)
-        self.assertIn("no PAD leg", result.duties[0].reason)
+        self.assertIn("no other leg", result.duties[0].reason)
 
     def test_pad_only_duty_is_no_credit(self):
         result = compute_member_credits([
@@ -74,6 +78,47 @@ class TestSwapCredit(unittest.TestCase):
         ])
         self.assertEqual(result.credits, 0)
         self.assertIn("rode PAD only", result.duties[0].reason)
+
+    def test_an_operated_round_trip_with_no_ride_is_one_credit_on_both_legs(self):
+        # The owner's governing example, verbatim: Cairo to a place in Russia
+        # and back. Both legs are OPERATED -- nobody rides -- and both are
+        # Heavy anyway, because the credit is about a genuine return, not
+        # about who happened to be a passenger on it (owner ruling
+        # 2026-09-02).
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "11:30", "FO", adep="CAI", ades="VKO"),
+            leg("b", "12-07-2026", "13:00", "18:30", "FO", adep="VKO", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.duties[0].source, CREDIT_SWAP)
+        self.assertEqual(result.by_leg["a"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["b"], (True, CREDIT_SWAP))
+
+    def test_23_06_becomes_heavy_once_a_genuine_return_leg_exists(self):
+        # The exact 23-06 duty (HRG->SSH shuttle, SSH->OPO 6:00), continued:
+        # the owner's own follow-up to that case -- "you'll see the one after
+        # it, he returns too" -- adds an OPO->SSH return within the link
+        # break. The shuttle stays No (domestic); the two international legs
+        # of the genuine out-and-back are both Heavy.
+        result = compute_member_credits([
+            leg("shuttle", "23-06-2026", "05:30", "06:10", "FO", adep="HRG", ades="SSH"),
+            leg("out", "23-06-2026", "07:00", "13:00", "FO", adep="SSH", ades="OPO"),
+            leg("back", "23-06-2026", "14:15", "20:00", "FO", adep="OPO", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["shuttle"], (False, None))
+        self.assertEqual(result.by_leg["out"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["back"], (True, CREDIT_SWAP))
+
+    def test_two_short_operated_legs_neither_over_the_minimum_is_no_credit(self):
+        # Karim Fekry's shape, generalized: even with a genuine (non-domestic)
+        # partner nearby, neither operated leg exceeds the sector minimum, so
+        # there is no qualifying anchor to credit from either direction.
+        result = compute_member_credits([
+            leg("a", "11-07-2026", "09:40", "12:50", "FO", adep="SSH", ades="KRR"),
+            leg("b", "11-07-2026", "15:00", "18:20", "FO", adep="KRR", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 0)
 
 
 class TestLeonCredit(unittest.TestCase):
@@ -140,6 +185,135 @@ class TestNeutralSlots(unittest.TestCase):
         self.assertEqual(result.credits, 0)
 
 
+class TestDomesticVeto(unittest.TestCase):
+    """Owner ruling 2026-09-02: inside Egypt is never Heavy, and its hours
+    never add up to reach the sector minimum."""
+
+    def test_a_long_domestic_sector_with_a_ride_is_not_heavy(self):
+        # CAI->SSH is domestic: over 4h and paired with a ride, still nothing.
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "10:30", "FO", adep="CAI", ades="SSH"),
+            leg("b", "12-07-2026", "12:00", "16:30", "PAD", adep="SSH", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 0)
+
+    def test_domestic_hours_never_accumulate_to_reach_the_minimum(self):
+        # Three domestic sectors totalling 9:00 in one duty — still nothing.
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "09:00", "FO", adep="CAI", ades="SSH"),
+            leg("b", "12-07-2026", "10:00", "13:00", "FO", adep="SSH", ades="HRG"),
+            leg("c", "12-07-2026", "14:00", "17:00", "PAD", adep="HRG", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 0)
+
+    def test_the_icao_spelling_of_an_egyptian_airport_is_domestic_too(self):
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "10:30", "FO", adep="HECA", ades="HESH"),
+            leg("b", "12-07-2026", "12:00", "16:30", "PAD", adep="HESH", ades="HECA"),
+        ])
+        self.assertEqual(result.credits, 0)
+
+    def test_cairo_to_russia_and_back_is_heavy(self):
+        # The owner's governing example: one end outside Egypt makes it a
+        # rotation, and it clears the sector minimum.
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "11:30", "FO", adep="CAI", ades="VKO"),
+            leg("b", "12-07-2026", "13:00", "18:30", "PAD", adep="VKO", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.duties[0].source, CREDIT_SWAP)
+
+    def test_a_domestic_hop_inside_a_credited_duty_is_painted_no(self):
+        # The owner's 23-06 shape, completed with a ride: the shuttle reads No,
+        # the international legs of the same credited duty read Yes.
+        result = compute_member_credits([
+            leg("shuttle", "23-06-2026", "05:30", "06:10", "FO", adep="HRG", ades="SSH"),
+            leg("out", "23-06-2026", "07:00", "13:00", "FO", adep="SSH", ades="OPO"),
+            leg("back", "23-06-2026", "14:15", "20:00", "PAD", adep="OPO", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["shuttle"], (False, None))
+        self.assertEqual(result.by_leg["out"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["back"], (True, CREDIT_SWAP))
+
+    def test_a_leon_credited_domestic_leg_keeps_painting_yes(self):
+        # LEON's own value is authoritative — the domestic carve-out only
+        # applies to the local swap rule, never to CREDIT_LEON.
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "06:40", "CPT2", leon=True,
+                adep="CAI", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["a"], (True, CREDIT_LEON))
+
+    def test_a_missing_airport_never_demotes_a_sector_to_domestic(self):
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "11:30", "FO", adep="CAI", ades=None),
+            leg("b", "12-07-2026", "13:00", "18:30", "PAD", adep=None, ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 1)
+
+
+class TestSectorMinimum(unittest.TestCase):
+    def test_an_international_sector_at_exactly_four_hours_does_not_qualify(self):
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "10:00", "FO", adep="CAI", ades="VKO"),
+            leg("b", "12-07-2026", "11:00", "15:00", "PAD", adep="VKO", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 0)
+
+    def test_one_minute_over_four_hours_qualifies(self):
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "10:01", "FO", adep="CAI", ades="VKO"),
+            leg("b", "12-07-2026", "11:00", "15:00", "PAD", adep="VKO", ades="CAI"),
+        ])
+        self.assertEqual(result.credits, 1)
+
+    def test_leon_augmented_ignores_the_sector_minimum_and_the_domestic_veto(self):
+        # LEON's own value is authoritative and is never re-judged locally
+        # (owner ruling 2026-09-02: "LEON pulls it correctly").
+        result = compute_member_credits([
+            leg("a", "12-07-2026", "06:00", "06:40", "CPT2", leon=True,
+                adep="CAI", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.duties[0].source, CREDIT_LEON)
+
+
+class TestMonthBoundary(unittest.TestCase):
+    """A rotation that straddles a month end is heavy on BOTH sheets, but is
+    counted once — against the month of its first sector."""
+
+    LEGS = [
+        leg("out", "31-07-2026", "20:00", "01:30", "FO", adep="CAI", ades="VKO"),
+        leg("back", "01-08-2026", "03:00", "08:30", "PAD", adep="VKO", ades="CAI"),
+    ]
+
+    def test_both_legs_read_heavy_when_the_window_is_the_departing_month(self):
+        result = compute_member_credits(
+            self.LEGS, window_start="2026-07-01", window_end="2026-07-31"
+        )
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["out"][0], True)
+        self.assertEqual(result.by_leg["back"][0], True)
+
+    def test_both_legs_still_read_heavy_on_the_following_month_sheet(self):
+        result = compute_member_credits(
+            self.LEGS, window_start="2026-08-01", window_end="2026-08-31"
+        )
+        self.assertEqual(result.by_leg["out"][0], True)
+        self.assertEqual(result.by_leg["back"][0], True)
+
+    def test_the_credit_is_counted_once_in_the_departing_month_only(self):
+        july = compute_member_credits(
+            self.LEGS, window_start="2026-07-01", window_end="2026-07-31"
+        )
+        august = compute_member_credits(
+            self.LEGS, window_start="2026-08-01", window_end="2026-08-31"
+        )
+        self.assertEqual((july.credits, august.credits), (1, 0))
+
+
 class TestEvnVeto(unittest.TestCase):
     def test_evn_legs_contribute_nothing_in_either_role(self):
         # Operated + PAD across EVN sectors: still nothing (owner absolute).
@@ -168,10 +342,22 @@ class TestDutyBoundaries(unittest.TestCase):
         self.assertEqual(len(result.duties), 2)
 
     def test_a_359_break_keeps_one_duty(self):
+        # 3:59 is inside the 4h duty limit, so this is ONE duty — but the ride
+        # sits further than SWAP_LINK_BREAK from the operated sector, so the
+        # duty earns nothing. One duty, no credit.
         result = compute_member_credits([
-            leg("a", "10-07-2026", "08:00", "10:00", "FO"),
-            leg("b", "10-07-2026", "13:59", "16:00", "PAD"),
+            leg("a", "10-07-2026", "08:00", "14:30", "FO", adep="HRG", ades="LIS"),
+            leg("b", "10-07-2026", "18:29", "23:00", "PAD", adep="LIS", ades="HRG"),
         ])
+        self.assertEqual(len(result.duties), 1)
+        self.assertEqual(result.credits, 0)
+
+    def test_a_ride_within_three_hours_of_the_operated_sector_credits(self):
+        result = compute_member_credits([
+            leg("a", "10-07-2026", "08:00", "14:30", "FO", adep="HRG", ades="LIS"),
+            leg("b", "10-07-2026", "17:29", "22:00", "PAD", adep="LIS", ades="HRG"),
+        ])
+        self.assertEqual(len(result.duties), 1)
         self.assertEqual(result.credits, 1)
 
     def test_crossing_midnight_is_one_duty_not_two_days(self):
@@ -193,7 +379,11 @@ class TestDutyBoundaries(unittest.TestCase):
             window_end="2026-07-31",
         )
         self.assertEqual(result.credits, 0)
-        self.assertIn("outside the requested window", result.duties[0].reason)
+        self.assertIn("outside this window", result.duties[0].reason)
+        # ...but the rotation IS heavy, so both legs read Yes on their sheets —
+        # the July sheet simply does not pay the credit (owner ruling 2026-09-02).
+        self.assertEqual(result.by_leg["a"][0], True)
+        self.assertEqual(result.by_leg["b"][0], True)
 
     def test_a_duty_anchored_on_the_last_day_of_the_window_counts(self):
         result = compute_member_credits(
@@ -208,8 +398,10 @@ class TestDutyBoundaries(unittest.TestCase):
 
     def test_iso_timestamps_are_accepted_too(self):
         result = compute_member_credits([
-            leg("a", None, "2026-06-10T14:25:00Z", "2026-06-10T20:40:00Z", "FO"),
-            leg("b", None, "2026-06-10T21:50:00Z", "2026-06-11T03:35:00Z", "PAD"),
+            leg("a", None, "2026-06-10T14:25:00Z", "2026-06-10T20:40:00Z", "FO",
+                adep="HRG", ades="LIS"),
+            leg("b", None, "2026-06-10T21:50:00Z", "2026-06-11T03:35:00Z", "PAD",
+                adep="LIS", ades="HRG"),
         ])
         self.assertEqual(result.credits, 1)
 
@@ -225,7 +417,13 @@ class TestDutyBoundaries(unittest.TestCase):
 class TestServiceWiring(unittest.TestCase):
     """The report response carries H.C and paints both legs of a credited duty."""
 
-    def _response(self, rows):
+    def _response(
+        self,
+        rows,
+        buffered_rows=None,
+        from_date="2026-06-01",
+        to_date="2026-06-30",
+    ):
         from backend.statistics.crew_hours.augmented import AugmentedIndex
         from backend.statistics.crew_hours.crew_context import CrewContextIndex
         from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
@@ -233,9 +431,9 @@ class TestServiceWiring(unittest.TestCase):
 
         totals = {code: "10:00" for row in rows for code in row["crew_codes"]}
         return _build_mcp_report_response(
-            OfficialMcpReport(totals, rows),
-            from_date="2026-06-01",
-            to_date="2026-06-30",
+            OfficialMcpReport(totals, rows, buffered_rows=buffered_rows),
+            from_date=from_date,
+            to_date=to_date,
             position="All",
             crew_member=None,
             augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
@@ -276,6 +474,35 @@ class TestServiceWiring(unittest.TestCase):
         for number in ("RSX6077", "RSX6078"):
             self.assertIs(by_number[number].duty_credit, True, number)
             self.assertEqual(by_number[number].credit_source, "OPERATE_PLUS_RIDE")
+
+    def test_a_month_straddling_rotation_paints_the_new_month_leg(self):
+        # The 31-07 outbound is narrowed out of an August pull's DISPLAYED rows
+        # but survives in buffered_rows, so the duty chain still sees the whole
+        # rotation: the 01-08 return paints Yes while the credit stays July's.
+        outbound = self._row(920, "RSX6077", "HRG", "LIS", "31-07-2026",
+                             "20:00", "02:15", ["DON"], ["FO"])
+        ride_home = self._row(921, "RSX6078", "LIS", "HRG", "01-08-2026",
+                              "03:30", "09:15", ["DON"], ["PAD"])
+
+        august = self._response(
+            [ride_home],
+            buffered_rows=[outbound, ride_home],
+            from_date="2026-08-01",
+            to_date="2026-08-31",
+        ).crew_members[0]
+        self.assertEqual(august.flight_count, 1)  # display shows August only
+        self.assertEqual(august.heavy_credits, 0)  # the credit belongs to July
+        self.assertIs(august.flights[0].duty_credit, True)
+        self.assertEqual(august.flights[0].credit_source, "OPERATE_PLUS_RIDE")
+
+        july = self._response(
+            [outbound],
+            buffered_rows=[outbound, ride_home],
+            from_date="2026-07-01",
+            to_date="2026-07-31",
+        ).crew_members[0]
+        self.assertEqual(july.heavy_credits, 1)
+        self.assertIs(july.flights[0].duty_credit, True)
 
     def test_the_owner_complaint_all_operating_pair_is_uncredited_for_both(self):
         # 23-06 RSX8891 + RSX6083: operated both, no PAD, LEON silent ->

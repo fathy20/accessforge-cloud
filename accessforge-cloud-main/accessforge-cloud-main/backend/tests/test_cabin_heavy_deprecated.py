@@ -48,7 +48,10 @@ class TestDeprecatedWrappers(unittest.TestCase):
 
     def test_cabin_wrapper_uses_the_function_sfa_trainee_rule(self):
         # Ruling Q1: Function=='SFA' excludes; position alone never does.
-        flight = CabinFlight(adep="SSH", ades="HRG")
+        # International route: the shim shares the single engine, so the
+        # domestic veto (2026-09-02) sits ahead of the cabin count rule and a
+        # domestic sector would never reach the trainee arithmetic under test.
+        flight = CabinFlight(adep="SSH", ades="VKO")
         crew = [CabinCrewMember(f"A{i}", f"FA{i}") for i in range(1, 5)]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

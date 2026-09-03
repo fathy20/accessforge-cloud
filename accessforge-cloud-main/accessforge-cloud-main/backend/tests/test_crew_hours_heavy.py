@@ -773,8 +773,10 @@ class TestUnknownResolution(unittest.TestCase):
         )
 
     def test_same_day_short_break_and_same_crew_is_yes(self):
+        # The outbound runs 5:00 so the pair is rotation-scale (owner ruling
+        # 2026-09-02: a qualifying rotation needs a sector over 4:00).
         index = _unknown_index(
-            _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1", "C2")),
+            _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T11:00:00Z", ("C1", "C2")),
             _flight_context(
                 202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1", "C2"),
                 adep="XYZ", ades="HRG",
@@ -806,7 +808,7 @@ class TestUnknownResolution(unittest.TestCase):
         # UTC date and may roll past midnight; the old calendar-date equality
         # check wrongly resolved this out-and-back as DIFFERENT_DAY.
         index = _unknown_index(
-            _flight_context(201, "2026-06-01T22:00:00Z", "2026-06-01T23:00:00Z", ("C1", "C2")),
+            _flight_context(201, "2026-06-01T18:00:00Z", "2026-06-01T23:00:00Z", ("C1", "C2")),
             _flight_context(
                 202, "2026-06-02T01:00:00Z", "2026-06-02T03:00:00Z", ("C1", "C2"),
                 adep="XYZ", ades="HRG",
@@ -923,7 +925,7 @@ class TestUnknownResolution(unittest.TestCase):
             # Available index, but neither sector carries a value for C1.
             augmented_index=AugmentedIndex(True, {}, 0, 0, {}),
             crew_context_index=_unknown_index(
-                _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T09:00:00Z", ("C1",)),
+                _flight_context(201, "2026-06-01T06:00:00Z", "2026-06-01T11:00:00Z", ("C1",)),
                 _flight_context(
                     202, "2026-06-01T12:00:00Z", "2026-06-01T15:00:00Z", ("C1",),
                     adep="XYZ", ades="HRG",
@@ -1020,8 +1022,10 @@ class TestClassifyFlightHeavy(unittest.TestCase):
             end_time_utc=None,
             flight_tags=(),
             entries=(_entry(crew_code="C1"), _entry(crew_code="C2"), _entry(crew_code="C3")),
+            # International: the domestic veto is evaluated ahead of the count
+            # rule, so a domestic sector never reaches it (2026-09-02).
             departure_airport="SSH",
-            arrival_airport="HRG",
+            arrival_airport="VKO",
         )
         index = self._index(context)
 
@@ -1159,8 +1163,9 @@ class TestCabinTraineeDetectionMetadata(unittest.TestCase):
             end_time_utc="2026-06-25T11:00:00Z",
             flight_tags=(),
             entries=(_entry(crew_code="C1"), _entry(crew_code="C2"), _entry(crew_code="C3")),
+            # International, so the count rule is reachable (see above).
             departure_airport="SSH",
-            arrival_airport="HRG",
+            arrival_airport="VKO",
         )
         response = _build_mcp_report_response(
             report,

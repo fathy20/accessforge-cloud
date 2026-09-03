@@ -28,8 +28,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Sequence
 
+from .allowance import SECTOR_MINIMUM
 from .crew_context import CrewContextEntry, CrewContextIndex, FlightContext
-from .positions import CREW_SET_EXCLUDED_POSITIONS, crew_set_identity
+from .positions import CREW_SET_EXCLUDED_POSITIONS, crew_set_identity, is_domestic_sector
 from .trace import HeavyTraceStep, format_break, step
 
 
@@ -143,6 +144,23 @@ def resolve_unknown_heavy(
                 ),
             ),
         )
+    # Case C - a domestic sector (both ends Egyptian) is never Heavy: the local
+    # rule fills LEON's silence only for rotation-scale international flying
+    # (owner ruling 2026-09-02), so NO immediately, without a neighbour search.
+    if is_domestic_sector(current.departure_airport, current.arrival_airport):
+        return UnknownResolution(
+            False,
+            True,
+            "DOMESTIC_LEG",
+            (
+                step(
+                    "STEP_4_ROTATION",
+                    "domestic sector (both ends Egyptian) -> Heavy No, no neighbour search",
+                    crew_code=normalized_code,
+                    current_route=[current.departure_airport, current.arrival_airport],
+                ),
+            ),
+        )
 
     current_start = _parse_utc(current.start_time_utc)
     current_end = _parse_utc(current.end_time_utc)
@@ -248,8 +266,25 @@ def resolve_unknown_heavy(
             record("CREW_SET_CHANGED: the compared crew sets differ", break_text)
             reason = _weaker(reason, "CREW_SET_CHANGED")
             continue
+        # The rotation must be rotation-SCALE: one of its two sectors has to
+        # exceed the sector minimum (owner ruling 2026-09-02 — a pair of short
+        # hops is repositioning, not augmentation). The subject may be the
+        # short half: the 23-06 SSH->OPO 6:00 leg qualifies its 0:40 partner's
+        # duty, judged from either end.
+        if (
+            current_end - current_start <= SECTOR_MINIMUM
+            and neighbour_end - neighbour_start <= SECTOR_MINIMUM
+        ):
+            record(
+                "ROTATION_BELOW_MINIMUM: neither sector exceeds "
+                f"{format_break(SECTOR_MINIMUM)}",
+                break_text,
+            )
+            reason = _weaker(reason, "ROTATION_BELOW_MINIMUM")
+            continue
         record(
-            "qualifies: same duty, break below the limit, same crew -> Heavy Yes",
+            "qualifies: same duty, break below the limit, same crew, "
+            "rotation-scale sector -> Heavy Yes",
             break_text,
         )
         return UnknownResolution(
@@ -265,6 +300,7 @@ _REASON_RANK = (
     "DIFFERENT_DAY",
     "BREAK_EXCEEDS_LIMIT",
     "CREW_SET_CHANGED",
+    "ROTATION_BELOW_MINIMUM",
 )
 
 

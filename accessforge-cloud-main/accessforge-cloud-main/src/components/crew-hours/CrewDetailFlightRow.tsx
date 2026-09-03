@@ -142,16 +142,6 @@ export function CrewDetailFlightRow({
               aria-label={`${t("crew.table.augmented_heavy")}: ${augmentedLabel}`}
             >
               <Badge variant="outline">{augmentedLabel}</Badge>
-              {flight.heavy_conflict && (
-                <span
-                  role="img"
-                  aria-label={t("crew.heavy.conflict")}
-                  data-testid="heavy-conflict-marker"
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-destructive/15 text-[10px] font-bold text-destructive"
-                >
-                  !
-                </span>
-              )}
               {locallyResolved && (
                 <span
                   role="img"

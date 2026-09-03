@@ -463,16 +463,15 @@ class TestCaseBIsSymmetric(unittest.TestCase):
                 self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
 
     def test_the_earlier_sector_of_the_duty_is_heavy_too(self):
-        # RSX6075 SSH->HRG is 2:25 before RSX6077 with the same crew, so it is
-        # part of the same duty and Heavy as well. This is the owner's live
-        # ruling on RSX8860 + RSX6081 (22-06): "22 and 22 are the heavy ones".
-        # Airports do not decide, so SSH->HRG then HRG->LIS qualifies.
+        # SUPERSEDED by the 2026-09-02 owner ruling: a domestic sector (both
+        # ends Egyptian) is never Heavy, regardless of what duty it belongs
+        # to. RSX6075 SSH->HRG is domestic, so it now reads No even though
+        # it would otherwise chain to RSX6077 -- the 23-06 shape (HRG->SSH
+        # shuttle No, SSH->OPO leg of the same duty Yes) is the same rule.
         flight = _legs(self._live_shaped_rotation(), "C1")["RSX6075"]
-        self.assertIs(flight.augmented_heavy, True)
-        self.assertTrue(flight.unknown_resolved)
-        self.assertEqual(
-            flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW"
-        )
+        self.assertIs(flight.augmented_heavy, False)
+        self.assertFalse(flight.unknown_resolved)
+        self.assertEqual(flight.unknown_resolution_reason, "DOMESTIC_LEG")
 
 
 # --------------------------------------------------------------------------
@@ -502,24 +501,35 @@ class TestCaseC(unittest.TestCase):
         ]
         return _response(rows, contexts)
 
-    def test_chain_onward_is_heavy_on_both_legs(self):
+    def test_the_domestic_shuttle_is_no_and_its_international_leg_is_yes(self):
+        # The owner's 23-06 ruling, verbatim: the HRG->SSH shuttle reads No
+        # (domestic), the SSH->OPO leg of the same duty reads Yes (5:30 of
+        # international flying). One duty, two different verdicts -- and that
+        # is correct, because Heavy is a property of the sector, not the duty.
         response = self._response()
 
         for code in ("C1", "C2"):
             flights = _legs(response, code)
-            for leg in ("RSX8891", "RSX6083"):
-                flight = flights[leg]
-                self.assertIs(flight.augmented_heavy, True, f"{code} {leg}")
-                self.assertEqual(
-                    flight.unknown_resolution_reason,
-                    "SAME_DAY_SHORT_BREAK_SAME_CREW",
-                    f"{code} {leg}",
-                )
-                # Resolver-established Heavy, so the badge belongs on both.
-                self.assertTrue(flight.unknown_resolved, f"{code} {leg}")
 
-    def test_the_same_pair_flown_as_an_out_and_back_is_yes(self):
-        # Change only the second leg's destination back to the origin.
+            shuttle = flights["RSX8891"]
+            self.assertIs(shuttle.augmented_heavy, False, code)
+            self.assertEqual(shuttle.unknown_resolution_reason, "DOMESTIC_LEG", code)
+            self.assertFalse(shuttle.unknown_resolved, code)
+
+            rotation = flights["RSX6083"]
+            self.assertIs(rotation.augmented_heavy, True, code)
+            self.assertEqual(
+                rotation.unknown_resolution_reason,
+                "SAME_DAY_SHORT_BREAK_SAME_CREW",
+                code,
+            )
+            # Resolver-established Heavy, so the badge belongs on this one.
+            self.assertTrue(rotation.unknown_resolved, code)
+
+    def test_a_domestic_out_and_back_is_no_on_both_legs(self):
+        # The owner's counter-example: Cairo->Sharm and back, however often it
+        # is flown, is never Heavy -- and the hours never add up to the
+        # minimum either. Both legs are domestic, so both stop at the veto.
         crew = [("C1", "CPT"), ("C2", "FO")]
         rows = [
             _row(1011, "RSX8891", "HRG", "SSH", crew),
@@ -531,10 +541,14 @@ class TestCaseC(unittest.TestCase):
         ]
 
         for leg, flight in _legs(_response(rows, contexts), "C1").items():
-            self.assertIs(flight.augmented_heavy, True, leg)
-            self.assertEqual(flight.unknown_resolution_reason, "SAME_DAY_SHORT_BREAK_SAME_CREW")
+            self.assertIs(flight.augmented_heavy, False, leg)
+            self.assertEqual(flight.unknown_resolution_reason, "DOMESTIC_LEG", leg)
+            self.assertFalse(flight.unknown_resolved, leg)
 
     def test_a_missing_airport_no_longer_blocks_the_rotation(self):
+        # One end of each leg is unknown, so neither leg can be PROVEN
+        # domestic -- incomplete journey-log data must never demote a rotation
+        # (the partner carries 5:00, clearing the sector minimum for the pair).
         crew = [("C1", "CPT"), ("C2", "FO")]
         rows = [
             _row(1021, "RSX8891", "HRG", None, crew),
@@ -542,7 +556,7 @@ class TestCaseC(unittest.TestCase):
         ]
         contexts = [
             _context(1021, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", None),
-            _context(1022, "2026-06-18T08:00:00Z", "2026-06-18T09:20:00Z", crew, None, "HRG"),
+            _context(1022, "2026-06-18T08:00:00Z", "2026-06-18T13:00:00Z", crew, None, "HRG"),
         ]
 
         # Airports are not consulted, so absent airports cannot fail it closed.
@@ -587,10 +601,12 @@ class TestBadgeMeansResolverEstablishedHeavy(unittest.TestCase):
         self.assertEqual(flight.unknown_resolution_reason, "NO_FLIGHT_CONTEXT")
 
     def test_a_count_rule_verdict_carries_no_badge(self):
+        # International route: the domestic veto sits ahead of the count rule
+        # (owner ruling 2026-09-02), so a domestic sector never reaches it.
         crew = [("C1", "CPT"), ("C2", "FO"), ("C3", "FO2")]
-        rows = [_row(1121, "RSX500", "HRG", "SSH", crew)]
+        rows = [_row(1121, "RSX500", "HRG", "VKO", crew)]
         contexts = [
-            _context(1121, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH")
+            _context(1121, "2026-06-18T06:00:00Z", "2026-06-18T12:10:00Z", crew, "HRG", "VKO")
         ]
 
         flight = _legs(_response(rows, contexts), "C1")["RSX500"]
@@ -673,20 +689,22 @@ class TestPairingDirection(unittest.TestCase):
         self.assertEqual(resolution.reason, "CREW_SET_CHANGED")
 
     def test_forward_pairing_survives_when_the_predecessor_is_a_separate_duty(self):
-        # A 10h gap before the leg means the leg IS first in its own duty, so
-        # the forward partner must still be reachable.
+        # A 14h gap before the leg means the leg IS first in its own duty, so
+        # the forward partner must still be reachable. Routes are
+        # international and the subject clears 4:00, so only the pairing
+        # direction is under test here.
         index = _index(
             _context(
                 1301, "2026-06-14T02:00:00Z", "2026-06-14T04:00:00Z",
                 [("C1", "CPT"), ("C2", "FO")], "HRG", "SSH",
             ),
             _context(
-                1302, "2026-06-14T18:00:00Z", "2026-06-14T20:00:00Z",
-                [("C1", "CPT"), ("C2", "FO")], "HRG", "SSH",
+                1302, "2026-06-14T18:00:00Z", "2026-06-14T22:15:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "HRG", "LIS",
             ),
             _context(
-                1303, "2026-06-14T21:00:00Z", "2026-06-14T23:00:00Z",
-                [("C1", "CPT"), ("C2", "FO")], "SSH", "HRG",
+                1303, "2026-06-14T23:15:00Z", "2026-06-15T01:15:00Z",
+                [("C1", "CPT"), ("C2", "FO")], "LIS", "HRG",
             ),
         )
 
@@ -727,20 +745,23 @@ class TestHeavyTrace(unittest.TestCase):
 
     def test_every_leg_has_a_trace_including_deterministic_ones(self):
         crew = [("C1", "CPT"), ("C2", "FO"), ("C3", "FO2")]
-        rows = [_row(1411, "RSX500", "HRG", "SSH", crew)]
+        rows = [_row(1411, "RSX500", "HRG", "VKO", crew)]
         contexts = [
-            _context(1411, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH")
+            _context(1411, "2026-06-18T06:00:00Z", "2026-06-18T12:10:00Z", crew, "HRG", "VKO")
         ]
 
         flight = _legs(_response(rows, contexts), "C1")["RSX500"]
         steps = _trace_steps(flight)
 
         self.assertEqual(
-            steps[:5],
+            steps[:6],
             [
                 "LEON_AUGMENTATION",
                 "STEP_1_EVN_AIRPORT",
                 "STEP_1_EVN_TAG",
+                # The domestic veto is evaluated on every leg and recorded even
+                # when it does not fire, so the trace shows it was considered.
+                "STEP_1_DOMESTIC",
                 "STEP_2_SVX_AIRPORT",
                 "STEP_2_SVX_TAG",
             ],
@@ -771,7 +792,7 @@ class TestHeavyTrace(unittest.TestCase):
         self.assertEqual(neighbour.inputs["break"], "1:10")
         self.assertIn("qualifies", neighbour.outcome)
 
-    def test_case_c_trace_shows_the_out_and_back_comparison_that_failed(self):
+    def _case_c_response(self):
         crew = [("C1", "CPT"), ("C2", "FO")]
         rows = [
             _row(1431, "RSX8891", "HRG", "SSH", crew),
@@ -781,15 +802,34 @@ class TestHeavyTrace(unittest.TestCase):
             _context(1431, "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z", crew, "HRG", "SSH"),
             _context(1432, "2026-06-18T08:00:00Z", "2026-06-18T13:30:00Z", crew, "SSH", "OPO"),
         ]
+        return _response(rows, contexts)
 
-        flight = _legs(_response(rows, contexts), "C1")["RSX8891"]
+    def test_case_c_trace_records_the_routes_of_the_comparison_it_made(self):
+        # Judged from the international end: the domestic partner is still a
+        # valid rotation neighbour, and both routes are recorded even though
+        # the airports themselves decide nothing.
+        flight = _legs(self._case_c_response(), "C1")["RSX6083"]
         neighbour = _trace_step(flight, "STEP_4_NEIGHBOUR")
 
-        # The route is still recorded on every step - it is just not judged.
-        self.assertEqual(neighbour.inputs["current_route"], ["HRG", "SSH"])
-        self.assertEqual(neighbour.inputs["neighbour_route"], ["SSH", "OPO"])
+        self.assertEqual(neighbour.inputs["current_route"], ["SSH", "OPO"])
+        self.assertEqual(neighbour.inputs["neighbour_route"], ["HRG", "SSH"])
         self.assertIn("qualifies", neighbour.outcome)
         self.assertIn("Heavy", _trace_step(flight, "VERDICT").outcome)
+
+    def test_the_domestic_veto_records_its_own_step_and_skips_the_search(self):
+        # The early-out must still leave a trace: a verdict that explains
+        # itself is the whole point of STEP 4's record, and a silent return
+        # would leave the row unexplainable.
+        flight = _legs(self._case_c_response(), "C1")["RSX8891"]
+        steps = _trace_steps(flight)
+        rotation = _trace_step(flight, "STEP_4_ROTATION")
+
+        self.assertIn("domestic", rotation.outcome)
+        self.assertEqual(rotation.inputs["current_route"], ["HRG", "SSH"])
+        # No neighbour was compared, because none needed to be.
+        self.assertNotIn("STEP_4_NEIGHBOUR", steps)
+        self.assertEqual(steps[-1], "VERDICT")
+        self.assertIn("Heavy No", _trace_step(flight, "VERDICT").outcome)
 
     def test_case_d_trace_records_the_times_as_received(self):
         crew = [("C1", "CPT"), ("C2", "FO")]

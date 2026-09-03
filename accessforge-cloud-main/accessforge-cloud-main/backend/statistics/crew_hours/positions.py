@@ -126,6 +126,50 @@ def airport_code_forms(code: str) -> frozenset[str]:
     normalized = code.strip().upper()
     return AIRPORT_CODE_ALIASES.get(normalized, frozenset({normalized}))
 
+
+# --- Domestic (inside Egypt) ---
+# A sector flown between two of these never earns a Heavy allowance, and its
+# hours never combine with anything to reach the sector minimum (owner ruling
+# 2026-09-02: "CAI->SSH repeated is not Heavy however many hours it adds up
+# to"). Both code systems are listed for the same reason as the aliases above:
+# LEON names one airport IATA on the report row and ICAO on the flight list.
+# Every Egyptian ICAO code begins "HE", but the prefix is NOT used as the test
+# — an exact match on a named airport keeps a foreign code that happens to
+# start with those letters (HEL, Helsinki) from being read as domestic.
+DOMESTIC_AIRPORTS = frozenset(
+    {
+        "CAI", "HECA",   # Cairo
+        "SSH", "HESH",   # Sharm el-Sheikh
+        "HRG", "HEGN",   # Hurghada
+        "HBE", "HEBA",   # Alexandria / Borg el-Arab
+        "LXR", "HELX",   # Luxor
+        "ASW", "HESN",   # Aswan
+        "RMF", "HEMA",   # Marsa Alam
+        "SPX", "HESX",   # Sphinx
+        "ATZ", "HEAT",   # Asyut
+        "MUH", "HEMM",   # Marsa Matruh
+        "TCP", "HETB",   # Taba
+        "AAC", "HEAR",   # El Arish
+        "PSD", "HEPS",   # Port Said
+        "DBB", "HEAL",   # El Alamein
+        "SEW", "HESG",   # Sohag
+    }
+)
+
+
+def is_domestic_airport(code: str | None) -> bool:
+    return isinstance(code, str) and code.strip().upper() in DOMESTIC_AIRPORTS
+
+
+def is_domestic_sector(departure: str | None, arrival: str | None) -> bool:
+    """True only when BOTH ends are inside Egypt.
+
+    One unknown end is enough to leave the sector international: a missing
+    journey-log airport must never silently demote a rotation to domestic.
+    """
+
+    return is_domestic_airport(departure) and is_domestic_airport(arrival)
+
 # --- Heavy Thresholds (strictly-greater) ---
 # cockpit_count > HEAVY_COCKPIT_THRESHOLD → Heavy
 # cabin_count   > HEAVY_CABIN_THRESHOLD   → Heavy

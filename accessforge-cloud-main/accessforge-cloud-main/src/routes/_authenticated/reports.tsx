@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { format, subDays } from "date-fns";
 import { ApiClient } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n";
@@ -72,12 +73,10 @@ function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{ar ? "التقارير" : "Reports"}</h1>
-        <p className="text-sm text-muted-foreground">
-          {ar ? "تصدير بيانات النظام بصيغة CSV." : "Export system data as CSV files."}
-        </p>
-      </div>
+      <PageHeader
+        title={ar ? "التقارير" : "Reports"}
+        description={ar ? "تصدير بيانات النظام بصيغة CSV." : "Export system data as CSV files."}
+      />
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">{ar ? "نطاق التاريخ" : "Date range"}</CardTitle></CardHeader>

@@ -83,7 +83,9 @@ function TaskExtractorResults() {
       const jobs = await ApiClient.fetch("/jobs?module_key=task_extractor&status=done&limit=1");
       return jobs;
     },
-    refetchInterval: 3000,
+    // The results panel only changes when a new job finishes; the module's
+    // own job list already polls fast while something is running.
+    refetchInterval: 15_000,
   });
 
   const latestJob = latestJobs && latestJobs.length > 0 ? latestJobs[0] : null;

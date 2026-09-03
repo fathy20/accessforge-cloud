@@ -3,6 +3,7 @@ import { z } from "zod";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search as SearchIcon, FileText, ListTodo, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { ApiClient } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n";
 import { Input } from "@/components/ui/input";
@@ -59,12 +60,10 @@ function SearchPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{ar ? "البحث الشامل" : "Global Search"}</h1>
-        <p className="text-sm text-muted-foreground">
-          {ar ? "بحث نصي كامل عبر الملفات والمهام." : "Full-text + fuzzy search across uploads and tasks."}
-        </p>
-      </div>
+      <PageHeader
+        title={ar ? "البحث الشامل" : "Global Search"}
+        description={ar ? "بحث نصي كامل عبر الملفات والمهام." : "Full-text + fuzzy search across uploads and tasks."}
+      />
 
       <div className="relative">
         <SearchIcon className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />

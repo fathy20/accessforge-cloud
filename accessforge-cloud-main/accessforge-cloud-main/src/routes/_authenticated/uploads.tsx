@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Upload as UploadIcon, FileText, Trash2, Download, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { useI18n } from "@/lib/i18n";
@@ -99,20 +100,18 @@ function UploadsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{ar ? "الملفات" : "Uploads"}</h1>
-          <p className="text-sm text-muted-foreground">
-            {ar ? "اسحب وأفلت ملفات PDF / Excel / DOCX. يتم التحقق من التكرار تلقائياً عبر SHA-256." : "Drag & drop PDF / Excel / DOCX. Duplicates detected via SHA-256."}
-          </p>
-        </div>
-        <Input
-          placeholder={ar ? "تصفية بالاسم…" : "Filter by name…"}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="w-full sm:w-72"
-        />
-      </div>
+      <PageHeader
+        title={ar ? "الملفات" : "Uploads"}
+        description={ar ? "اسحب وأفلت ملفات PDF / Excel / DOCX. يتم التحقق من التكرار تلقائياً عبر SHA-256." : "Drag & drop PDF / Excel / DOCX. Duplicates detected via SHA-256."}
+        actions={
+          <Input
+            placeholder={ar ? "تصفية بالاسم…" : "Filter by name…"}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full sm:w-72"
+          />
+        }
+      />
 
       <Card
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}

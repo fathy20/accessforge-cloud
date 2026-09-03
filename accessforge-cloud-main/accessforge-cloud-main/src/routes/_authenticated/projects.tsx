@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2, FolderKanban, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
@@ -77,14 +78,10 @@ function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{ar ? "المشاريع" : "Projects"}</h1>
-          <p className="text-sm text-muted-foreground">
-            {ar ? "تجميع الملفات والمهام تحت طائرة / محطة / فحص." : "Group uploads, jobs, and tasks under aircraft / station / check."}
-          </p>
-        </div>
-        {canCreate && (
+      <PageHeader
+        title={ar ? "المشاريع" : "Projects"}
+        description={ar ? "تجميع الملفات والمهام تحت طائرة / محطة / فحص." : "Group uploads, jobs, and tasks under aircraft / station / check."}
+        actions={canCreate && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="size-4 me-1.5" />{ar ? "مشروع جديد" : "New project"}</Button>
@@ -112,7 +109,7 @@ function ProjectsPage() {
             </DialogContent>
           </Dialog>
         )}
-      </div>
+      />
 
       {isLoading ? (
         <div className="p-10 grid place-items-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>

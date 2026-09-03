@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Save, KeyRound, User as UserIcon } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
@@ -97,12 +98,10 @@ function ProfilePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{ar ? "الملف الشخصي" : "Profile"}</h1>
-        <p className="text-sm text-muted-foreground">
-          {ar ? "إدارة بياناتك وكلمة المرور." : "Manage your account details and password."}
-        </p>
-      </div>
+      <PageHeader
+        title={ar ? "الملف الشخصي" : "Profile"}
+        description={ar ? "إدارة بياناتك وكلمة المرور." : "Manage your account details and password."}
+      />
 
       {isLoading ? (
         <div className="p-10 grid place-items-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>

@@ -79,7 +79,3 @@ export function getModuleLabel(module: ModuleRegistryItem, t: Translate): string
 export function getReadinessLabel(module: ModuleRegistryItem, t: Translate): string {
   return t(`mod.readiness.${module.readiness}` as DictKey);
 }
-
-export function getBusinessAreaLabel(area: ModuleBusinessArea, t: Translate): string {
-  return t(`mod.area.${area}` as DictKey);
-}

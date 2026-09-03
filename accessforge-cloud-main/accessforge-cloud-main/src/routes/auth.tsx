@@ -114,7 +114,9 @@ function AuthPage() {
         backgroundPosition: "center",
       }}
     >
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+      {/* A flat tint, not backdrop-blur: blurring a viewport-sized photo is a
+          full-screen GPU filter on every frame for a purely cosmetic effect. */}
+      <div className="absolute inset-0 bg-background/85" />
       <div className="w-full max-w-md relative z-10">
         <Link
           to="/"

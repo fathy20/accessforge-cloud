@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, ShieldCheck, Download } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import { ApiClient } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,14 +34,11 @@ function AuditLog() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <ShieldCheck className="size-5 text-primary" /> Audit Log
-          </h1>
-          <p className="text-sm text-muted-foreground">Recent sensitive actions across the system.</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={ShieldCheck}
+        title="Audit Log"
+        description="Recent sensitive actions across the system."
+        actions={<>
           <div className="relative w-72">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Filter by action, entity, user…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
@@ -61,8 +59,8 @@ function AuditLog() {
           >
             <Download className="size-4" /> Export CSV
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       <Card>
         <CardHeader className="pb-3">

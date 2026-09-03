@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Mail, Trash2, Loader2, Send } from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
 import {
   listInvitations,
   revokeInvitation,
@@ -65,12 +66,7 @@ function InvitationsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Mail className="size-5 text-primary" /> Invitations
-        </h1>
-        <p className="text-sm text-muted-foreground">Send and manage email invitations.</p>
-      </div>
+      <PageHeader icon={Mail} title="Invitations" description="Send and manage email invitations." />
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Send new invitation</CardTitle></CardHeader>

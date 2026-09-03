@@ -1,4 +1,3 @@
-import { FlightPathBackground } from "@/components/FlightPathBackground/FlightPathBackground";
 import { DEFAULT_MODULE_ICON, MODULE_ICONS } from "@/lib/modules/icons";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -40,6 +39,39 @@ const modules = [
   { key: "cover_merge", title: "Cover Merge", desc: "Merge cover pages onto task cards, cleanly and reproducibly." },
   { key: "mail_merge", title: "Mail Merge", desc: "Populate DOCX templates with per-task merge fields." },
 ];
+
+/**
+ * Static hero art: a faint grid, a brand glow, and three flight arcs drawn
+ * as SVG paths. It replaced a WebGL globe (three.js + an 18 MB earth texture
+ * + a 5 MB route dataset) that made the public landing page the heaviest
+ * route in the app for a purely decorative effect.
+ */
+function HeroBackdrop() {
+  return (
+    <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:56px_56px] opacity-25 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_75%)]" />
+      <div className="absolute left-1/2 top-1/2 size-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-3xl" />
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox="0 0 1200 600"
+        preserveAspectRatio="xMidYMid slice"
+        fill="none"
+      >
+        <g stroke="var(--primary)" strokeWidth="1.5" strokeDasharray="6 10" opacity="0.45">
+          <path d="M-40 420 C 260 120, 620 120, 900 300 S 1180 420, 1260 380" />
+          <path d="M-40 520 C 300 260, 700 240, 1240 480" opacity="0.6" />
+          <path d="M60 640 C 420 330, 780 380, 1140 100" opacity="0.35" />
+        </g>
+        <g fill="var(--chart-3)" opacity="0.8">
+          <circle cx="260" cy="238" r="3" />
+          <circle cx="900" cy="300" r="3" />
+          <circle cx="620" cy="292" r="3" />
+          <circle cx="1140" cy="100" r="3" />
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 function RegistryModuleIcon({ moduleKey }: { moduleKey: string }) {
   const Icon = MODULE_ICONS[moduleKey] ?? DEFAULT_MODULE_ICON;
@@ -106,22 +138,20 @@ function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <FlightPathBackground />
-        <div className="absolute inset-0 bg-black/20 z-0 pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.5)_0%,transparent_60%)] z-0 pointer-events-none" />
+      <section className="relative overflow-hidden surface-gradient">
+        <HeroBackdrop />
         <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32 text-center z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-card/40 text-xs text-muted-foreground mb-6 backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-card/40 text-xs text-muted-foreground mb-6">
             <span className="size-1.5 rounded-full bg-success animate-pulse" />
             Production-ready · v0.1
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight max-w-4xl mx-auto drop-shadow-lg">
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight max-w-4xl mx-auto">
             Aviation maintenance,{" "}
-            <span className="bg-clip-text text-transparent brand-gradient drop-shadow-sm">
+            <span className="bg-clip-text text-transparent brand-gradient">
               streamlined end-to-end
             </span>
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto drop-shadow-md">
+          <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
             REDSEA turns your maintenance PDFs, task cards and effectivity sheets into a
             structured, searchable, auditable workflow — with role-based access and background
             processing that scales.

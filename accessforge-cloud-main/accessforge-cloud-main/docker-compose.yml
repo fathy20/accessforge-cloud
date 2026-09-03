@@ -1,0 +1,86 @@
+# Local/staging stack: nginx (static SPA + /api proxy) in front of the API.
+#
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Defaults run APP_ENV=development on a SQLite file inside the `data` volume.
+# For production point DATABASE_URL at SQL Server and set APP_ENV=production;
+# the API refuses SQLite in production and Alembic then owns the schema.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_MSSQL_DRIVER: "${INSTALL_MSSQL_DRIVER:-1}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      # Deliberately NOT ${DATABASE_URL}: the developer .env in this folder
+      # points at a host-relative SQLite file that would land outside the
+      # volume inside the container. Override with COMPOSE_DATABASE_URL.
+      # (db_bootstrap refuses a file literally named redsea.db by policy.)
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-sqlite:////data/app.db}
+      ARTIFACT_STORAGE_DIR: /data/storage
+      # Same-origin deployment: the browser never calls the API cross-origin,
+      # so this only matters for tools hitting :8000 directly.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+      # The API only enqueues; the worker service below executes.
+      JOB_EXECUTION_MODE: worker
+    volumes:
+      - data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  # Same image, different entrypoint: claims jobs from the `jobs` table and
+  # runs each in a killable child process. Scale with `--scale worker=N`;
+  # claims are atomic so replicas never run the same job concurrently.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_MSSQL_DRIVER: "${INSTALL_MSSQL_DRIVER:-1}"
+    entrypoint: ["python", "-m", "worker.runner"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-sqlite:////data/app.db}
+      ARTIFACT_STORAGE_DIR: /data/storage
+      JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-120}
+      JOB_HEARTBEAT_SECONDS: ${JOB_HEARTBEAT_SECONDS:-30}
+      JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-3600}
+      JOB_MAX_ATTEMPTS: ${JOB_MAX_ATTEMPTS:-3}
+    volumes:
+      - data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      API_UPSTREAM: http://api:8000
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  data:

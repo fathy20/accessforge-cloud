@@ -1,0 +1,37 @@
+# REDSEA web image: the static SPA build served by nginx, which also proxies
+# /api to the API container so the browser only ever sees one origin.
+
+FROM node:22-bookworm-slim AS build
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+# package-lock.json was generated on Windows, and npm only records the native
+# binding for the platform that ran `npm install` (npm/cli#4828). Install the
+# Linux bindings for the three native packages at the exact locked versions.
+# Regenerating the lockfile on Linux/CI makes this step a no-op.
+RUN set -eu; \
+    ARCH="$(node -p process.arch)"; \
+    PKGS="$(node -e " \
+      const l = require('./package-lock.json').packages; \
+      const map = { rolldown: '@rolldown/binding-linux-${ARCH}-gnu', '@tailwindcss/oxide': '@tailwindcss/oxide-linux-${ARCH}-gnu', lightningcss: 'lightningcss-linux-${ARCH}-gnu' }; \
+      console.log(Object.entries(map).filter(([k]) => l['node_modules/' + k]).map(([k, v]) => v + '@' + l['node_modules/' + k].version).join(' ')); \
+    ")"; \
+    echo "native bindings: $PKGS"; \
+    [ -z "$PKGS" ] || npm install --no-save --no-audit --no-fund --no-package-lock $PKGS
+COPY tsconfig.json vite.config.ts components.json ./
+COPY public ./public
+COPY src ./src
+# VITE_API_URL is intentionally NOT baked in: the client uses the relative
+# /api path and nginx forwards it. Override at build time only when the API
+# lives on another origin.
+RUN npx vite build
+
+FROM nginx:1.27-alpine
+# nginx's entrypoint renders *.template with envsubst into conf.d at start.
+COPY deploy/web/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /src/dist/client /usr/share/nginx/html
+ENV API_UPSTREAM=http://api:8000 \
+    CLIENT_MAX_BODY_SIZE=120m
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1

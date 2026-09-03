@@ -1,0 +1,26 @@
+# Keep the build context to source only.
+node_modules
+dist
+.output
+.tanstack
+.wrangler
+backend/venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+backend/.pytest_cache
+local_storage
+backend/local_storage
+*.db
+*.db.bak-*
+# Secrets never enter the build context — at any depth (backend/.env, .envpython).
+.env
+.env.*
+**/.env
+**/.env.*
+**/.envpython
+!.env.example
+docs
+*.md
+.git
+.claude

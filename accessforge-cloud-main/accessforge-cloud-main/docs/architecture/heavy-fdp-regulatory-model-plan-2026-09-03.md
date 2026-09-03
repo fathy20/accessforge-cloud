@@ -192,3 +192,50 @@ R6. Is the compliance view (over-limit legs with no augmentation/swap) wanted, a
 R7. The scan is missing OM pages 7.1-5 to 7.1-9 (sections 2-2 augmentation, 2-3 split duty, 2-6 commander's discretion, 3 rest, 4 standby, 5–6 cumulative limits). Please scan them; ECAR 2016 was used to fill the gap and R1 decides whether that is acceptable.
 
 Sources: the owner's `reference.pdf`; [ECAR Part 121 Subpart Q (2016)](https://crewscheduling.wordpress.com/wp-content/uploads/2015/03/ecar-121-subpart-q-2016.pdf); [UK CAA CAP 371, 4th edition](https://understandingeasa2016ftl.wordpress.com/wp-content/uploads/2016/06/cap371_20041.pdf).
+
+
+## 8. Verification against LEON's own FTL engine (2026-09-03, June 2026)
+
+`ftl.dutyList` exposes what LEON computed per member-duty: `fdpStartTime`,
+`fdpEndTime`, `fdpLength`, `maxFdpLength`, `fdpExtension`, `splitDutyTime`,
+`discretionLength`, `sectorCount`, `isAcclimated`, `localTimeOffset`,
+`lastAcclimatisationOffset`, `restFacility`, `crewAugmentation`,
+`isCabinCrew`, and per sector `reportingTime`. Tool:
+`backend/statistics/crew_hours/tools/fdp_leon_compare.py`; results outside
+the repo in `E:\work\REDSEA\web\Heavy_FDP_Report\leon_compare\`.
+
+| Check (1,562 flown member-duties) | Result |
+|---|---|
+| Our Table A limit == LEON `maxFdpLength` (cockpit, no extension) | **524 / 547 (96%)**; the 23 others are split duty (+½ ground rest, e.g. 3:20 → 14:55), commander's discretion (+2:00 → 13:30), augmentation cap (15:00), or a band taken in another acclimatisation zone (Lisbon +1 after LPPT) |
+| Table version LEON is configured with | **OM 2009 values** (12:30 for 3 sectors in 08:00–14:59, not ECAR's 11:45) → answers R1 |
+| Cabin limit | cockpit + 1:00, confirmed (14:00, 12:00, 14:15, 11:15) |
+| Augmented maximum, rest facility SEAT | 15:00 cockpit / 16:00 cabin (1,321 duties SEAT, 8 BUNK, 233 NONE) |
+| FDP start vs first block-off | **not a constant**: 1:30 (272), 1:25 (185), 1:40 (155), 1:35, 1:20, 1:15 … per station/flight (HECA 2:25, LPPT 2:20, LPPR 2:00); FDP start == first sector `reportingTime` in 1,553/1,562 |
+| FDP end vs last block-on | **0:00** — Red Sea's configuration ends the FDP at on-blocks; the OM's 0:30 is not added |
+| Acclimatisation | `isAcclimated` True for all 1,562; Table B unused in June |
+| `crewAugmentation` | NORMAL 783, AUGMENTED 39, DOUBLED 740 (cabin double complement on the Moscow/St Petersburg legs) |
+| Our inequality vs LEON flag | agree 824; ours-No/LEON-Yes 730 (600 = cabin DOUBLED single-sector duties, FDP 7:00–8:00; 4 = cockpit ENGM augmented at 12:45 < 13:15 — augmentation is a planning decision with margin); ours-Yes/LEON-No 8 (all split duty or discretion, legal in LEON) |
+
+Consequences for the design:
+
+1. **LEON's FTL values are the primary source** for regulatory Heavy: the
+   `crewAugmentation` flag (already used) plus `fdpLength`/`maxFdpLength`
+   for the margin. They embody Red Sea's approved configuration, including
+   per-flight report times, the on-blocks FDP end, split duty, discretion,
+   and acclimatisation zones that a local recomputation cannot know.
+2. **The local model becomes a validator/fallback**, fed with LEON's inputs
+   (first-sector `reportingTime` instead of 1:30; post-flight 0:00 under this
+   configuration; band from `lastAcclimatisationOffset`), and raises a
+   disagreement instead of overriding. With these two corrections the EVN
+   night pair of 02/03-06 measures 10:15 exactly, not 10:45 — inside the
+   limit, agreeing with the owner's rule.
+3. **The allowance is a policy layer** over both: who is paid (cockpit,
+   cabin), the unit (rotation vs duty — a cabin member on a doubled Moscow
+   flight has one duty per leg while the cockpit has one rotation), and the
+   documented exceptions (SVX, EVN, domestic). Cabin DOUBLED legs are genuine
+   augmentation in LEON's data, not an artefact; whether they earn one credit
+   per leg is ruling R8.
+
+New rulings from this section: **R1 is answered by the data (OM 2009)**;
+**R9** — adopt LEON FTL fields as the primary regulatory source and demote
+the fixed 1:30/0:30 constants to a fallback (recommended).

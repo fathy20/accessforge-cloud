@@ -9,9 +9,15 @@ owner's `reference.pdf` → the FDP model). That work runs in *shadow* and is
 allowed to fail. If it does, or if the owner rejects it, **this document is
 the state to return to** — no reconstruction from memory, no guessing.
 
-**Git anchor:** `b47172d` on `fix/crew-hours-heavy-airport-rules`.
-Everything below is live at that commit. The FDP work added on top of it
-changes nothing described here.
+**Two anchors, deliberately distinct** (on `fix/crew-hours-heavy-airport-rules`):
+
+| Anchor | What it is |
+|---|---|
+| `708574e` | **Pre-FDP baseline.** The last commit before any of the regulatory-FDP work. Reverting to here removes the shadow model entirely. |
+| `b47172d` | **Behaviour baseline.** The FDP work is present but shadow-only, so every verdict, credit, and export cell is identical to `708574e`. This is the state the sections below describe. |
+
+The distinction matters: the *behaviour* to preserve exists at both, but the
+*code* to restore is `708574e`. Section 6 gives the exact procedure.
 
 ---
 
@@ -177,7 +183,8 @@ The two read-only tools that produced the evidence:
 
 ## 6. How to restore this state
 
-The FDP work sits in three commits on top of the anchor:
+The regulatory-FDP work sits in three commits **on top of `708574e`**, newest
+first. `b47172d` is one of them, not a point that precedes them:
 
 ```
 b47172d  fdp_leon_compare tool + LEON verification
@@ -185,19 +192,34 @@ b47172d  fdp_leon_compare tool + LEON verification
 38dee99  regulatory FDP model in shadow mode + plan
 ```
 
-To return to the pre-PDF logic:
+Revert in reverse dependency order — newest first, or the middle revert
+conflicts on files the newest one also touched:
 
 ```bash
-git revert --no-commit b47172d 62e8ca3 38dee99 && git commit -m "revert(crew-hours): drop the shadow FDP model, return to LOGIC v2"
+git revert --no-commit b47172d && git revert --no-commit 62e8ca3 && git revert --no-commit 38dee99
+git commit -m "revert(crew-hours): drop the shadow FDP model, return to LOGIC v2"
 ```
+
+Anything committed **after** `f99ac1c` (this document) must be reverted first
+and in the same newest-first order; check `git log --oneline 708574e..HEAD`
+before starting, because later work may import `fdp.py` and a bare revert
+would then leave dangling imports. `git diff 708574e -- backend/ worker/`
+must come back empty when the revert is complete.
 
 Nothing else has to be undone: no migration, no schema change to the crew
 tables, no verdict or credit was ever routed through the shadow model.
 
-**Verification after restoring:** the backend suite must pass (723 at the
-anchor, 694 before the FDP tests existed), and `test_crew_hours_allowance.py`,
-`test_crew_hours_heavy_rules.py`, `test_heavy_cross_consistency.py` must all
-be green — those are the tests that pin sections 1 and 2 of this document.
+**Verification after restoring**, in this order:
+
+1. `git diff 708574e --stat -- backend/ worker/` → empty.
+2. Full backend suite green. Expect **694** tests, not 723: the 29 in
+   `test_crew_hours_fdp.py` go away with the model they pin.
+3. `test_crew_hours_allowance.py`, `test_crew_hours_heavy_rules.py`,
+   `test_heavy_cross_consistency.py` green — these pin sections 1 and 2.
+4. Re-run the report for June and July and confirm each member's
+   `heavy_credits` matches the pre-revert values. **Restoring the code is not
+   the same as restoring the numbers**: LEON's own data and configuration can
+   move underneath us, so the credit comparison is the real check.
 
 ---
 

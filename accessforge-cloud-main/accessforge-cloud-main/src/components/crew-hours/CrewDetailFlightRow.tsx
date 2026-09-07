@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useI18n } from "@/lib/i18n";
+import { dict, useI18n, type DictKey } from "@/lib/i18n";
 import { displayAircraft, displayUtcTime, displayValue } from "./format";
 import { isLocallyResolvedHeavy, localResolutionMessage } from "./messages";
 import { PositionTokenBadge } from "./PositionTokenBadge";
@@ -57,6 +57,23 @@ export function CrewDetailFlightRow({
       : verdict === false
         ? t("crew.augmented.no")
         : t("crew.augmented.unknown");
+  // The engines speak in enum codes (UNKNOWN, NO_NEIGHBOUR_FLIGHT, ...).
+  // Translate them, and fall back to the raw code rather than hiding a value
+  // the dictionary has not caught up with yet.
+  const readable = (prefix: string, code: string | null | undefined) => {
+    if (!code) return null;
+    const key = `crew.heavy.${prefix}.${code}`;
+    return Object.prototype.hasOwnProperty.call(dict, key) ? t(key as DictKey) : code;
+  };
+  const resolutionText = readable("resolution", flight.unknown_resolution_reason);
+  // "UNKNOWN" means no direct rule decided it — true, but useless on its own
+  // when the rotation search then reached a conclusion. Promote that
+  // conclusion to the headline and drop the empty word.
+  const resolutionIsHeadline = flight.heavy_reason === "UNKNOWN" && Boolean(resolutionText);
+  const reasonText = resolutionIsHeadline
+    ? resolutionText
+    : readable("reason", flight.heavy_reason);
+
   // The trace is the durable answer to "why does this row say that?" — every
   // leg carries one, so a wrong verdict is read, not guessed at from a
   // screenshot.
@@ -162,9 +179,12 @@ export function CrewDetailFlightRow({
                     {t("crew.heavy.source")}: {flight.heavy_source}
                   </p>
                 )}
-                {flight.heavy_reason && (
+                {/* A leg the rotation search decided reports THAT search's
+                    finding. Showing "UNKNOWN" alongside it read as "the system
+                    does not know", when in fact it looked and concluded. */}
+                {reasonText && (
                   <p>
-                    {t("crew.heavy.reason")}: {flight.heavy_reason}
+                    {t("crew.heavy.reason")}: {reasonText}
                   </p>
                 )}
                 {flight.leon_heavy !== undefined && flight.leon_heavy !== null && (
@@ -179,9 +199,9 @@ export function CrewDetailFlightRow({
                 )}
                 {/* Shown whenever STEP 4 ran, badge or not: the reason is
                     diagnostic, while the badge is a claim about the verdict. */}
-                {flight.unknown_resolution_reason && (
+                {resolutionText && !resolutionIsHeadline && (
                   <p>
-                    {t("crew.heavy.unknown_resolution")}: {flight.unknown_resolution_reason}
+                    {t("crew.heavy.unknown_resolution")}: {resolutionText}
                   </p>
                 )}
                 {locallyResolved && <p>{localResolutionMessage(t)}</p>}
@@ -199,9 +219,7 @@ export function CrewDetailFlightRow({
                 {flight.heavy_conflict && <p>{t("crew.heavy.conflict")}</p>}
                 {trace.length > 0 && (
                   <details data-testid="heavy-trace" className="max-w-md">
-                    <summary className="cursor-pointer text-xs">
-                      {t("crew.heavy.trace")}
-                    </summary>
+                    <summary className="cursor-pointer text-xs">{t("crew.heavy.trace")}</summary>
                     <HeavyTrace trace={trace} />
                   </details>
                 )}

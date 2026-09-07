@@ -178,7 +178,10 @@ describe("Crew Hours detail rendering", () => {
 
     await waitFor(() => {
       expect(screen.getAllByText("Source: LEON").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Reason: EXTRA_COCKPIT_CREW").length).toBeGreaterThan(0);
+      // Reason codes are rendered as sentences, not as the engine's enum name.
+      expect(screen.getAllByText("Reason: More than two operating pilots").length).toBeGreaterThan(
+        0,
+      );
       expect(screen.getAllByText("LEON value: No").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Derived value: Yes").length).toBeGreaterThan(0);
     });
@@ -203,9 +206,7 @@ describe("Crew Hours detail rendering", () => {
       "ar",
     );
 
-    expect(
-      screen.queryByRole("img", { name: "تعارض: LEON له الأولوية" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "تعارض: LEON له الأولوية" })).not.toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 
@@ -250,6 +251,53 @@ describe("Crew Hours detail rendering", () => {
     expect(totalCells?.[2]?.textContent).toBe("");
   });
 
+  it("replaces the empty UNKNOWN reason with what the rotation search actually found", async () => {
+    // A leg whose rotation search concluded used to report two lines:
+    // "Reason: UNKNOWN" and then the real finding. The first read as "the
+    // system does not know" when in fact it looked and reached an answer.
+    const searchedCrew = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "UNKNOWN",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: false,
+          unknown_resolution_reason: "NO_NEIGHBOUR_FLIGHT",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [searchedCrew] }}
+        crews={[searchedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const cell = screen.getAllByLabelText(/Augmented/i)[0];
+    const trigger = cell.closest("[tabindex='0']") ?? cell;
+    fireEvent.focus(trigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Reason: No neighbouring leg in the same duty").length,
+      ).toBeGreaterThan(0);
+    });
+    // The bare code and the empty word are both gone, and the finding is not
+    // repeated on a second line.
+    expect(screen.queryByText(/UNKNOWN/)).toBeNull();
+    expect(screen.queryByText(/NO_NEIGHBOUR_FLIGHT/)).toBeNull();
+    expect(screen.queryByText(/Unknown resolution:/)).toBeNull();
+  });
+
   it("marks locally-resolved rows with a red exclamation badge and reason tooltip", async () => {
     const locallyResolvedCrew: CrewMemberSummary = {
       ...crew,
@@ -289,12 +337,11 @@ describe("Crew Hours detail rendering", () => {
 
     await waitFor(() => {
       expect(
-        screen.getAllByText("Unknown resolution: SAME_DAY_SHORT_BREAK_SAME_CREW").length,
+        screen.getAllByText("Unknown resolution: Same day, short break, same crew").length,
       ).toBeGreaterThan(0);
       expect(
-        screen.getAllByText(
-          "Not found in LEON augmented data — resolved by local rotation rule",
-        ).length,
+        screen.getAllByText("Not found in LEON augmented data — resolved by local rotation rule")
+          .length,
       ).toBeGreaterThan(0);
     });
   });
@@ -372,8 +419,8 @@ describe("Crew Hours detail rendering", () => {
           ...crew.flights[0],
           flight_nid: "leg-out",
           flight_number: "RSX6077",
-          augmented_heavy: false,          // old flight-level verdict said No
-          duty_credit: true,               // the credit overrides the display
+          augmented_heavy: false, // old flight-level verdict said No
+          duty_credit: true, // the credit overrides the display
           credit_source: "OPERATE_PLUS_RIDE",
         },
         {
@@ -426,8 +473,8 @@ describe("Crew Hours detail rendering", () => {
           ...crew.flights[1],
           flight_nid: "leg-2",
           flight_number: "RSX6083",
-          augmented_heavy: true,           // old flight-level Yes
-          duty_credit: false,              // no credit -> the display says No
+          augmented_heavy: true, // old flight-level Yes
+          duty_credit: false, // no credit -> the display says No
           credit_source: null,
         },
       ],

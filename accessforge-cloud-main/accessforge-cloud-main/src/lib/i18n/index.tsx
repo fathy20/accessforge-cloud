@@ -99,7 +99,10 @@ export const dict = {
   "jobs.count": { ar: "المهام ({count})", en: "Jobs ({count})" },
   "jobs.module_count": { ar: "مهام هذا الموديول ({count})", en: "Jobs for this module ({count})" },
   "jobs.empty": { ar: "لا توجد مهام.", en: "No jobs." },
-  "jobs.module_empty": { ar: "لا توجد مهام لهذا الموديول بعد.", en: "No jobs for this module yet." },
+  "jobs.module_empty": {
+    ar: "لا توجد مهام لهذا الموديول بعد.",
+    en: "No jobs for this module yet.",
+  },
   "jobs.loading": { ar: "جاري تحميل المهام...", en: "Loading jobs..." },
   "jobs.status.queued": { ar: "في الانتظار", en: "Queued" },
   "jobs.status.running": { ar: "قيد التنفيذ", en: "Running" },
@@ -133,7 +136,10 @@ export const dict = {
     ar: "{arabicParts} من أفراد الطاقم خارج هذا التبويب غير معروضين.",
     en: "{englishParts} crew members are not shown in this tab.",
   },
-  "crew.flight_count_filtered": { ar: "{visible} من {total} رحلة", en: "{visible} of {total} flights" },
+  "crew.flight_count_filtered": {
+    ar: "{visible} من {total} رحلة",
+    en: "{visible} of {total} flights",
+  },
   "crew.flight_count": { ar: "{count} رحلة", en: "{count} flights" },
   "crew.official_total": { ar: "الإجمالي الرسمي", en: "Official total" },
   "crew.unavailable": { ar: "غير متاح", en: "Unavailable" },
@@ -163,6 +169,104 @@ export const dict = {
   "crew.augmented.no": { ar: "لا", en: "No" },
   "crew.augmented.unknown": { ar: "غير معروف", en: "Unknown" },
   "crew.heavy.source": { ar: "المصدر", en: "Source" },
+  // Heavy reason codes, rendered as sentences. The engine's enum names
+  // (UNKNOWN, NO_NEIGHBOUR_FLIGHT, ...) were being shown raw, so a leg whose
+  // rotation search simply found nothing read as "the system does not know".
+  "crew.heavy.reason.LEON_AUGMENTED": {
+    ar: "LEON سجّل الرحلة بطاقم معزَّز",
+    en: "LEON recorded an augmented crew",
+  },
+  "crew.heavy.reason.EVN_AIRPORT": {
+    ar: "مطار يريفان (EVN) — لا تُحتسب Heavy",
+    en: "Yerevan (EVN) — never Heavy",
+  },
+  "crew.heavy.reason.EVN_TAG": {
+    ar: "وسم EVN على الرحلة — لا تُحتسب Heavy",
+    en: "EVN flight tag — never Heavy",
+  },
+  "crew.heavy.reason.SVX_AIRPORT": {
+    ar: "مطار يكاترينبرج (SVX) — تُحتسب Heavy دائمًا",
+    en: "Yekaterinburg (SVX) — always Heavy",
+  },
+  "crew.heavy.reason.SVX_TAG": {
+    ar: "وسم SVX على الرحلة — تُحتسب Heavy دائمًا",
+    en: "SVX flight tag — always Heavy",
+  },
+  "crew.heavy.reason.DOMESTIC_AIRPORT": {
+    ar: "قطاع داخلي بين مطارين مصريين",
+    en: "Domestic sector, both ends in Egypt",
+  },
+  "crew.heavy.reason.EXTRA_COCKPIT_CREW": {
+    ar: "طاقم قيادة أكثر من اثنين",
+    en: "More than two operating pilots",
+  },
+  "crew.heavy.reason.EXTRA_CABIN_CREW": {
+    ar: "طاقم ضيافة أكثر من أربعة",
+    en: "More than four operating cabin crew",
+  },
+  "crew.heavy.reason.MULTIPLE_RULES": {
+    ar: "LEON وقاعدة محلية اتفقا",
+    en: "LEON and a local rule agreed",
+  },
+  "crew.heavy.reason.NONE": { ar: "لم تنطبق أي قاعدة", en: "No rule applied" },
+  "crew.heavy.reason.UNKNOWN": { ar: "لم تحسمها قاعدة مباشرة", en: "No direct rule decided it" },
+  // STEP 4 outcomes — what the rotation search actually found.
+  "crew.heavy.resolution.STEP_4_ROTATION": {
+    ar: "دوران ذهاب وعودة مكتمل بنفس الطاقم",
+    en: "A complete out-and-back rotation with the same crew",
+  },
+  "crew.heavy.resolution.STEP_4_NEIGHBOUR": {
+    ar: "رحلة مجاورة في نفس فترة العمل",
+    en: "A neighbouring leg in the same duty",
+  },
+  "crew.heavy.resolution.NO_NEIGHBOUR_FLIGHT": {
+    ar: "لا توجد رحلة مجاورة في نفس فترة العمل",
+    en: "No neighbouring leg in the same duty",
+  },
+  "crew.heavy.resolution.ROTATION_MISMATCH": {
+    ar: "الرحلة المجاورة ليست عودة لنفس المطار",
+    en: "The neighbouring leg is not a return to the same airport",
+  },
+  "crew.heavy.resolution.ROTATION_BELOW_MINIMUM": {
+    ar: "الدوران أقصر من الحد الأدنى",
+    en: "The rotation is below the minimum",
+  },
+  "crew.heavy.resolution.BREAK_EXCEEDS_LIMIT": {
+    ar: "الفاصل بين الرحلتين 4 ساعات أو أكثر",
+    en: "The break between the legs is 4 hours or more",
+  },
+  "crew.heavy.resolution.CREW_SET_CHANGED": {
+    ar: "الطاقم اختلف بين الرحلتين",
+    en: "The crew differs between the two legs",
+  },
+  "crew.heavy.resolution.DIFFERENT_DAY": {
+    ar: "الرحلة المجاورة في فترة عمل أخرى",
+    en: "The neighbouring leg belongs to another duty",
+  },
+  "crew.heavy.resolution.SAME_DAY_SHORT_BREAK_SAME_CREW": {
+    ar: "نفس اليوم وفاصل قصير وطاقم واحد",
+    en: "Same day, short break, same crew",
+  },
+  "crew.heavy.resolution.PSN_POSITIONING": {
+    ar: "العضو منقول (PSN) في هذه الرحلة",
+    en: "The member is positioning (PSN) on this leg",
+  },
+  "crew.heavy.resolution.DOMESTIC_LEG": {
+    ar: "قطاع داخلي لا يُبنى عليه دوران",
+    en: "A domestic sector cannot carry a rotation",
+  },
+  "crew.heavy.resolution.MISSING_FLIGHT_TIMES": {
+    ar: "أوقات الرحلة ناقصة",
+    en: "Flight times are missing",
+  },
+  "crew.heavy.resolution.NO_FLIGHT_CONTEXT": {
+    ar: "بيانات الرحلة غير متاحة",
+    en: "Flight data unavailable",
+  },
+  "crew.heavy.resolution.UNKNOWN_POSITION": {
+    ar: "مركز العضو غير معروف",
+    en: "The member's position is unknown",
+  },
   "crew.heavy.reason": { ar: "السبب", en: "Reason" },
   "crew.heavy.leon": { ar: "قيمة LEON", en: "LEON value" },
   "crew.heavy.derived": { ar: "القيمة المشتقة", en: "Derived value" },
@@ -232,7 +336,10 @@ export const dict = {
   "crew.table.official_total": { ar: "الإجمالي الرسمي (Official total)", en: "Official total" },
   "crew.table.source": { ar: "المصدر (Source)", en: "Source" },
   "crew.total": { ar: "الإجمالي", en: "Total" },
-  "crew.empty.tab": { ar: "لا يوجد أفراد طاقم في هذا التبويب.", en: "No crew members are in this tab." },
+  "crew.empty.tab": {
+    ar: "لا يوجد أفراد طاقم في هذا التبويب.",
+    en: "No crew members are in this tab.",
+  },
   "crew.server_total.cockpit": {
     ar: "إجمالي مجموعة قمرة القيادة المحسوب من الخادم:",
     en: "Server-computed Cockpit group total:",
@@ -393,7 +500,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("ar");
 
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) as Lang | null;
+    const stored = (typeof window !== "undefined" &&
+      localStorage.getItem(STORAGE_KEY)) as Lang | null;
     if (stored === "ar" || stored === "en") setLangState(stored);
   }, []);
 
@@ -406,7 +514,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    try { localStorage.setItem(STORAGE_KEY, l); } catch { /* noop */ }
+    try {
+      localStorage.setItem(STORAGE_KEY, l);
+    } catch {
+      /* noop */
+    }
   };
 
   const t: Translate = (key, params) => {

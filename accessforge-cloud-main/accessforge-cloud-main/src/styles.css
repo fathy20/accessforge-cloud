@@ -20,7 +20,7 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --text-display: var(--type-display-size);
@@ -136,21 +136,19 @@
   --color-copilot-spark: var(--copilot-spark);
   --color-copilot-resolved: var(--copilot-resolved);
 
-  --shadow-glow: 0 0 0 1px oklch(0.55 0.22 25 / 0.25), 0 8px 32px -8px oklch(0.55 0.22 25 / 0.45);
+  --shadow-glow: var(--glow-shadow);
   --shadow-copilot-panel: var(--copilot-panel-shadow);
-  --shadow-panel: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px -12px oklch(0 0 0 / 0.5);
+  --shadow-panel: var(--panel-shadow);
   --shadow-surface-base: var(--surface-base-shadow);
   --shadow-surface-raised: var(--surface-raised-shadow);
   --shadow-surface-overlay: var(--surface-overlay-shadow);
 
-  --gradient-brand: linear-gradient(135deg, #f45b49 0%, #f0907d 35%, #4baaa9 75%, #175270 100%);
-  --gradient-surface: linear-gradient(180deg, oklch(0.21 0.03 250) 0%, oklch(0.17 0.025 250) 100%);
+  --gradient-brand: linear-gradient(135deg, #38b6b6 0%, #eed2a8 38%, #ee5446 72%, #0e4670 100%);
+  --gradient-surface: var(--surface-gradient);
 }
 
-:root,
-.dark {
+:root {
   --radius: 0.625rem;
-
   --type-display-size: 2rem;
   --type-display-line-height: 2.5rem;
   --type-display-weight: 700;
@@ -175,7 +173,6 @@
   --type-numeric-size: 0.75rem;
   --type-numeric-line-height: 1.125rem;
   --type-numeric-weight: 500;
-
   --space-shell-padding: clamp(0.75rem, 2vw, 1.5rem);
   --space-page-gutter: clamp(1rem, 3vw, 2rem);
   --space-section-rhythm: clamp(1rem, 2vw, 1.5rem);
@@ -183,102 +180,343 @@
   --space-table-compact-y: 0.5rem;
   --layout-content-max: 80rem;
 
-  --background: #0a2634;
-  --foreground: oklch(0.96 0.01 250);
-  --card: #0f394e;
-  --card-foreground: oklch(0.96 0.01 250);
-  --popover: #0f394e;
-  --popover-foreground: oklch(0.96 0.01 250);
-  --primary: #f45b49;
-  --primary-foreground: #ffffff;
-  --secondary: #144963;
-  --secondary-foreground: oklch(0.96 0.01 250);
-  --muted: #144963;
-  --muted-foreground: oklch(0.7 0.02 250);
-  --accent: #175270;
-  --accent-foreground: oklch(0.96 0.01 250);
-  --destructive: oklch(0.62 0.22 27);
-  --destructive-foreground: oklch(0.99 0.005 250);
-  --success: oklch(0.68 0.16 155);
-  --success-foreground: oklch(0.1 0.02 250);
-  --warning: oklch(0.78 0.16 75);
-  --warning-foreground: oklch(0.15 0.03 60);
-  --info: oklch(0.68 0.14 230);
-  --info-foreground: oklch(0.1 0.02 250);
-  --border: #144963;
-  --input: #144963;
-  --ring: #f45b49;
-
-  --chart-1: #f45b49;
-  --chart-2: #f4d6b4;
-  --chart-3: #3ebab8;
-  --chart-4: #175270;
-  --chart-5: oklch(0.62 0.18 290);
-
-  --sidebar: #0f394e;
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: #f45b49;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #175270;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #144963;
-  --sidebar-ring: #f45b49;
-
+  /* ---- Derived aliases: track the per-theme tokens, never duplicated into
+   * :root/.dark (duplicating would freeze them against one palette). ------ */
   --surface-base: var(--background);
   --surface-base-border: var(--border);
   --surface-raised: var(--card);
   --surface-raised-border: var(--border);
   --surface-overlay: var(--secondary);
   --surface-overlay-border: var(--sidebar-accent);
-  --surface-base-shadow: none;
-  --surface-raised-shadow: none;
-  --surface-overlay-shadow: 0 12px 32px -20px oklch(0 0 0 / 0.7);
 
-  --fg-primary: oklch(0.96 0.01 250);
-  --fg-secondary: oklch(0.82 0.015 250);
-  --fg-muted: oklch(0.7 0.02 250);
-  --fg-disabled: oklch(0.58 0.015 250);
-
-  --status-success-foreground: oklch(0.86 0.12 155);
-  --status-success-background: oklch(0.68 0.16 155 / 0.12);
-  --status-success-border: oklch(0.68 0.16 155 / 0.45);
-  --status-warning-foreground: oklch(0.88 0.14 75);
-  --status-warning-background: oklch(0.78 0.16 75 / 0.12);
-  --status-warning-border: oklch(0.78 0.16 75 / 0.45);
-  --status-danger-foreground: oklch(0.83 0.13 27);
-  --status-danger-background: oklch(0.62 0.22 27 / 0.12);
-  --status-danger-border: oklch(0.62 0.22 27 / 0.45);
-  --status-info-foreground: oklch(0.84 0.09 230);
-  --status-info-background: oklch(0.68 0.14 230 / 0.12);
-  --status-info-border: oklch(0.68 0.14 230 / 0.45);
-  --status-neutral-foreground: var(--fg-secondary);
-  --status-neutral-background: oklch(0.7 0.02 250 / 0.1);
-  --status-neutral-border: oklch(0.7 0.02 250 / 0.35);
-
-  --interactive-hover: oklch(0.96 0.01 250 / 0.08);
-  --interactive-active: oklch(0.96 0.01 250 / 0.13);
-  --interactive-selected: var(--sidebar-accent);
-  --interactive-focus: var(--ring);
-  --interactive-disabled: oklch(0.96 0.01 250 / 0.04);
-  --brand-subtle: color-mix(in oklab, var(--primary) 15%, transparent);
-
-  /*
-   * Copilot-only primitives.  Scoped to the assistant surface by convention:
-   * the spark amber marks "AI" so it never competes with coral (primary action),
-   * and the teal is the logo's middle wave, reused rather than a fifth hue.
-   * The panel is the product's single floating layer, so it carries the only
-   * shadow heavier than --surface-overlay-shadow.
-   */
-  --copilot-spark: #f4c244;
-  --copilot-resolved: var(--chart-3);
-  --copilot-panel-shadow: 0 24px 64px -12px oklch(0 0 0 / 0.75), 0 2px 8px oklch(0 0 0 / 0.4);
-  --selection-background: oklch(0.62 0.22 25 / 0.35);
   --focus-ring-color: var(--ring);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+
+  /* ---- Motion primitives: theme-independent, so shared. Components consume
+   * these; never a raw ms literal. Exits are always faster than entrances and
+   * nothing inside the authenticated app exceeds 320ms. ------------------- */
+  --motion-duration-instant: 90ms;
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 180ms;
+  --motion-duration-moderate: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-duration-hero: 400ms;
+  --motion-duration-exit: 120ms;
+  --motion-delay-spinner: 400ms;
+  --motion-stagger-step: 30ms;
+  --motion-travel-sm: 4px;
+  --motion-travel-md: 8px;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-out: cubic-bezier(0, 0, 0, 1);
+  --motion-ease-inout: cubic-bezier(0.45, 0, 0.25, 1);
+
+  /* Hero-scoped only: the logo's navy and sand blades, which have no semantic
+   * role in the app palette. Kept out of the general token families on purpose. */
+  --hero-blade-1: var(--primary);
+  --hero-blade-2: #0e4670;
+  --hero-blade-3: #b08d55;
+  --hero-blade-ink: var(--foreground);
+
+  /* ---- Hero stage: its own warm ground and the logo's full four-colour
+   * wave stack. Scoped to the hero so the app's cool Reef Command surfaces are
+   * untouched, and so coral can be brand here while staying alert-only inside
+   * the product. -------------------------------------------------------- */
+  --hero-ground: #faf3e8;
+  --hero-ink: #12384a;
+  --hero-eyebrow: #a9702f;
+  --hero-sub: #4f6a70;
+  --hero-coral: #e8563f;
+  --hero-teal: #16a39c;
+  --hero-sandwave: #eec9a0;
+  --hero-navy: #10495f;
+  --wave-sand: #f0dcbe;
+  --wave-coral: #e8563f;
+  --wave-navy: #10495f;
+  --wave-teal: #2bb3ad;
+
+  /* ================= Reef Command — LIGHT =================================
+   * Teal-led, derived from the REDSEA mark (navy #0e4670, coral #ee5446,
+   * teal #38b6b6, sand #eed2a8). Teal carries primary action; coral is
+   * reserved for alerts and destructive intent, following flight-deck
+   * convention where red means WARNING.
+   *
+   * :root MUST come before .dark — both are specificity (0,1,0), so on an
+   * <html class="dark"> element the later rule wins the tie.
+   * ====================================================================== */
+  --background: #f4f8f8;
+  --foreground: #08272a;
+  --card: #ffffff;
+  --card-foreground: #08272a;
+  --popover: #ffffff;
+  --popover-foreground: #08272a;
+  --primary: #0c6f6b;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f0f0;
+  --secondary-foreground: #08272a;
+  --muted: #edf3f3;
+  --muted-foreground: #4d6a6b;
+  --accent: #e4eeee;
+  --accent-foreground: #08272a;
+  --destructive: #b3271a;
+  --destructive-foreground: #ffffff;
+  --success: #16704a;
+  --success-foreground: #ffffff;
+  --warning: #7d5100;
+  --warning-foreground: #ffffff;
+  --info: #12587f;
+  --info-foreground: #ffffff;
+  /* --border is decorative (dividers, card edges); --input carries the
+   * WCAG 1.4.11 3:1 requirement for real control boundaries. */
+  --border: #d6e2e2;
+  --input: #749390;
+  --ring: #0c6f6b;
+
+  --chart-1: #12a09a;
+  --chart-2: #e8503a;
+  --chart-3: #2f8ee8;
+  --chart-4: #a765d6;
+  --chart-5: #2f9536;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #08272a;
+  --sidebar-primary: #0c6f6b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f0f0;
+  --sidebar-accent-foreground: #08272a;
+  --sidebar-border: #d6e2e2;
+  --sidebar-ring: #0c6f6b;
+
+  /* Light has no lightness headroom to separate surfaces, so elevation must
+   * come from shadow. Leaving these at "none" merges every card into the page. */
+  --surface-base-shadow: none;
+  --surface-raised-shadow: 0 1px 2px rgb(8 39 42 / 0.05), 0 1px 3px rgb(8 39 42 / 0.06);
+  --surface-overlay-shadow: 0 12px 32px -16px rgb(8 39 42 / 0.22);
+  --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 8px 24px -12px rgb(8 39 42 / 0.16);
+  --glow-shadow: 0 0 0 1px rgb(12 111 107 / 0.22), 0 8px 32px -8px rgb(12 111 107 / 0.30);
+  --surface-gradient: linear-gradient(180deg, #ffffff 0%, #eef5f5 100%);
+
+  --fg-primary: #08272a;
+  --fg-secondary: #2d4f51;
+  --fg-muted: #4d6a6b;
+  --fg-disabled: #8aa3a4;
+
+  --status-success-foreground: #0f5637;
+  --status-success-background: rgb(22 112 74 / 0.10);
+  --status-success-border: rgb(22 112 74 / 0.38);
+  --status-warning-foreground: #644100;
+  --status-warning-background: rgb(125 81 0 / 0.10);
+  --status-warning-border: rgb(125 81 0 / 0.38);
+  --status-danger-foreground: #8f1f14;
+  --status-danger-background: rgb(179 39 26 / 0.10);
+  --status-danger-border: rgb(179 39 26 / 0.38);
+  --status-info-foreground: #0e4665;
+  --status-info-background: rgb(18 88 127 / 0.10);
+  --status-info-border: rgb(18 88 127 / 0.38);
+  --status-neutral-foreground: var(--fg-secondary);
+  --status-neutral-background: rgb(8 39 42 / 0.06);
+  --status-neutral-border: rgb(8 39 42 / 0.22);
+
+  /* The interactive scrim must FLIP to black in light — merely lowering a
+   * white overlay's alpha makes hover invisible on a white card. */
+  --interactive-hover: rgb(8 39 42 / 0.05);
+  --interactive-active: rgb(8 39 42 / 0.09);
+  --interactive-selected: var(--sidebar-accent);
+  --interactive-focus: var(--ring);
+  --interactive-disabled: rgb(8 39 42 / 0.03);
+  --brand-subtle: color-mix(in oklab, var(--primary) 12%, transparent);
+
+  --copilot-spark: #8a5a00;
+  --copilot-resolved: var(--chart-1);
+  --copilot-panel-shadow: 0 24px 64px -12px rgb(8 39 42 / 0.18), 0 2px 8px rgb(8 39 42 / 0.10);
+  --selection-background: rgb(12 111 107 / 0.22);
+}
+
+.dark {
+
+  --hero-blade-1: var(--primary);
+  --hero-blade-2: #2b7fa6;
+  --hero-blade-3: #eed2a8;
+  --hero-blade-ink: var(--foreground);
+
+  --hero-ground: #061c22;
+  --hero-ink: #eaf4f2;
+  --hero-eyebrow: #d3a163;
+  --hero-sub: #9fb7b6;
+  --hero-coral: #ff7a68;
+  --hero-teal: #45cfc6;
+  --hero-sandwave: #eed2a8;
+  --hero-navy: #2b7fa6;
+
+  /* The four --wave-* band colours are deliberately NOT overridden here:
+   * the bottom wave stack uses the same vivid palette in both themes. */
+
+  /* ================= Reef Command — DARK ==================================
+   * Same four logo colours on a near-black teal ground, for hangar and
+   * line-station use in variable light. Primary keeps a vivid teal fill with
+   * dark ink on top (8.25:1) rather than forcing white onto it.
+   * ====================================================================== */
+  --background: #04161a;
+  --foreground: #e6f2f1;
+  --card: #0a2429;
+  --card-foreground: #e6f2f1;
+  --popover: #0a2429;
+  --popover-foreground: #e6f2f1;
+  --primary: #37c2b9;
+  --primary-foreground: #04191c;
+  --secondary: #123239;
+  --secondary-foreground: #e6f2f1;
+  --muted: #123239;
+  --muted-foreground: #96aeb0;
+  --accent: #163c44;
+  --accent-foreground: #e6f2f1;
+  --destructive: #ff6f5e;
+  --destructive-foreground: #2e0a05;
+  --success: #45cf94;
+  --success-foreground: #04291a;
+  --warning: #edbb5e;
+  --warning-foreground: #331f00;
+  --info: #63bdf0;
+  --info-foreground: #03222f;
+  --border: #17343a;
+  --input: #4a7674;
+  --ring: #37c2b9;
+
+  --chart-1: #37c2b9;
+  --chart-2: #ff6f5e;
+  --chart-3: #63bdf0;
+  --chart-4: #b78ae8;
+  --chart-5: #6dc46a;
+
+  --sidebar: #0a2429;
+  --sidebar-foreground: #dcecea;
+  --sidebar-primary: #37c2b9;
+  --sidebar-primary-foreground: #04191c;
+  --sidebar-accent: #163c44;
+  --sidebar-accent-foreground: #e6f2f1;
+  --sidebar-border: #17343a;
+  --sidebar-ring: #37c2b9;
+
+  /* Dark separates surfaces by lightness, so it needs no elevation shadow. */
+  --surface-base-shadow: none;
+  --surface-raised-shadow: none;
+  --surface-overlay-shadow: 0 12px 32px -20px rgb(0 0 0 / 0.7);
+  --panel-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --glow-shadow: 0 0 0 1px rgb(55 194 185 / 0.25), 0 8px 32px -8px rgb(55 194 185 / 0.40);
+  --surface-gradient: linear-gradient(180deg, #0a2429 0%, #04161a 100%);
+
+  --fg-primary: #e6f2f1;
+  --fg-secondary: #bcd3d2;
+  --fg-muted: #96aeb0;
+  --fg-disabled: #64807f;
+
+  --status-success-foreground: #8ce4bb;
+  --status-success-background: rgb(69 207 148 / 0.12);
+  --status-success-border: rgb(69 207 148 / 0.45);
+  --status-warning-foreground: #f5d491;
+  --status-warning-background: rgb(237 187 94 / 0.12);
+  --status-warning-border: rgb(237 187 94 / 0.45);
+  --status-danger-foreground: #ffa79b;
+  --status-danger-background: rgb(255 111 94 / 0.12);
+  --status-danger-border: rgb(255 111 94 / 0.45);
+  --status-info-foreground: #a3d7f5;
+  --status-info-background: rgb(99 189 240 / 0.12);
+  --status-info-border: rgb(99 189 240 / 0.45);
+  --status-neutral-foreground: var(--fg-secondary);
+  --status-neutral-background: rgb(230 242 241 / 0.10);
+  --status-neutral-border: rgb(230 242 241 / 0.35);
+
+  --interactive-hover: rgb(230 242 241 / 0.08);
+  --interactive-active: rgb(230 242 241 / 0.13);
+  --interactive-selected: var(--sidebar-accent);
+  --interactive-focus: var(--ring);
+  --interactive-disabled: rgb(230 242 241 / 0.04);
+  --brand-subtle: color-mix(in oklab, var(--primary) 15%, transparent);
+
+  --copilot-spark: #f4c244;
+  --copilot-resolved: var(--chart-1);
+  --copilot-panel-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.75), 0 2px 8px rgb(0 0 0 / 0.4);
+  --selection-background: rgb(55 194 185 / 0.32);
+}
+
+
+/* ---- Hero stage animation ------------------------------------------------
+ * Transform-only, so every layer stays on the compositor. The bands translate
+ * exactly one tile (600px); because the tile repeats, the loop point cannot be
+ * seen. Under reduced motion the bands hold still but stay visible — the shape
+ * is the composition, not the movement.
+ * ------------------------------------------------------------------------ */
+/* ---- Chart entrance -------------------------------------------------------
+ * Recharts' own mount animation does not fire in this app: measured across 324
+ * samples at 25ms, each chart's clip rect holds a single width and the pie
+ * sector's `d` never changes, even with isAnimationActive and a 4s duration.
+ * The likely cause is ResponsiveContainer rendering at zero size first, so the
+ * animation elapses before the chart has dimensions. This gives the cards a
+ * dependable entrance that does not rely on library internals.
+ * ------------------------------------------------------------------------ */
+@keyframes chart-enter {
+  from { opacity: 0; transform: translate3d(0, var(--motion-travel-md), 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.chart-enter {
+  opacity: 0;
+  animation: chart-enter var(--motion-duration-slow) var(--motion-ease-out) 60ms forwards;
+}
+.chart-enter--2 { animation-delay: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* resolve instantly rather than leaving the cards at opacity 0 */
+  .chart-enter { opacity: 1; animation: none !important; }
+}
+
+@keyframes seaband-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-600px, 0, 0); }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translate3d(0, var(--motion-travel-md), 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes wavemark-bob {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50%      { transform: translate3d(0, -2.5px, 0) rotate(-1.4deg); }
+}
+
+.hero-rise {
+  opacity: 0;
+  animation: hero-rise var(--motion-duration-hero) var(--motion-ease-out) forwards;
+}
+
+.wavemark-ribbon {
+  transform-origin: 50% 50%;
+  animation: wavemark-bob 5s var(--motion-ease-inout) infinite;
+}
+.wavemark-ribbon--front { animation-delay: -1.6s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .seaband { animation: none !important; }
+  .wavemark-ribbon { animation: none !important; }
+  /* Entrance still resolves, just instantly, so nothing is left at opacity 0. */
+  .hero-rise { opacity: 1; animation: none !important; }
 }
 
 @layer base {
+  /* Reduced means reduced, not removed: strip travel, scale and loops, but keep
+   * short colour/opacity cross-fades because they carry state meaning and cause
+   * no vestibular response. A blanket `animation: none` would also delete the
+   * only "we are working" affordance, which is a worse outcome. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: var(--motion-duration-fast) !important;
+      transition-property: color, background-color, border-color, fill, stroke, opacity !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   * {
     border-color: var(--color-border);
   }

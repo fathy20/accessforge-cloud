@@ -1,0 +1,2306 @@
+بص كدا
+
+عاوز افكر علشان عاوز اعمل سيستم قوي ويعمل funaction الي مطلوبه 
+
+لشركه  طيران 
+
+وعاوز تراجع ليا الدنيا وتقولي صح ولالا  ونظبط الدانيا انت العقل المفكر تقولي اي الي هتحله 
+
+انا في الاول اشتغلت فب اول فتره علي سيستم
+
+بتاع app2 لصيانه للمهندسين واشتغلو بيه 
+
+it الشركه كلموني عاوز اكبر سيستم 
+
+ويبتعمل ويب سايت واعمل داتا بيز وعملت last_v01 وهيتحط فيها كل سيستم وهيبقي مودويلز 
+
+كلها زي بتاع app2 بظبط يقدم نفس كل حاجه بس ويب
+
+ونزود عليه كام مودويل 
+
+بتاع المخازن بس وقفته شويه
+
+ودخلت علي crew dayes 
+
+ده الي عاوز اشتغله دلوقتي 
+
+وابني استراشكر صح لسيستم حاجه قويه جدا
+
+هو انا معايا api مين leon هاخذه 
+
+واخذي بيه السيستم بتاعي واسحب crew dayes or اسحب Hrs Report
+
+وعاوز احوله 6-Jun 26 Hrs.xlsx
+
+زي كدا هتلافيه في في v2
+
+___
+
+ويراعي لو الطيار
+
+وهو راجع وعدي الساعه 12 في الشهر جديد تتحسب لشهر الي فيه القديم الاول والشهر جديد متيحسبس حاجه مثلا
+
+او وهو ذهاب وعوده ودخل في جديد لا يتحط في القديم بس لو في جاب كبير يوم مثلا لا تتحسب جديده او crew مختلف لازم نفس الشخص
+
+___
+
+وهتلاقي كل الداتا
+
+__
+
+                                                                statistics
+
+                                                                __________
+
+phase_1(CREW HOURS)
+
+report --->(HRS OLNY)--->EXTRACT PDF AND COPY  IN THE EXL AND SPARITED 
+
+_____
+
+BEFOR
+
+THIS THE DATA RESORS AND I NEED TAKE THE DATA IN THE API FOR leon.aero AND I HAVE ACSS IN THE API KEY IN THE leon.aero
+
+_____
+
+Position type	Name	Surname	Date ADEP [JL][UTC]	Aircraft type	Aircraft	Flight number	ADEP preferred code [JL]	ADES preferred code [JL]	OFF	ON	Block time [JL]
+
+Cockpit	Mostafa	Hussein	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cabin	Lubna	Abdrabu	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cabin	Neveen	Osama	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cabin	Aysar	Mohamed	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cockpit	Donia	Hatem	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cabin	Mahmoud	Elkhouly	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Maintenance	Mark	Maher	2026-06-01	737-800	SURSD	RSX324	LED	HRG	1:00	6:25	5:25
+
+Cabin	Dina	Ramadan	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Maintenance	Nader	Gamal	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cockpit	Omar	Saber	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cabin	Mariam	Nabil	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cabin	Marwan	Tarek	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cockpit	Mina	Nashed	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cabin	Bahaa	Ayman	2026-06-01	737-800	SURSA	RSX328	LED	SSH	3:00	8:30	5:30
+
+Cabin	Tuqa	Magdy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Cabin	Bahaaeldin	Ibrahim	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Maintenance	Mohamed	Magdy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Cabin	Philip	Dahabiy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Cockpit	Salah	Hesham	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Cockpit	Mohamed	Elwy	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+Cabin	Adham	Tarek	2026-06-01	737-800	SURSB	RSX338	VKO	SSH	7:40	13:10	5:30
+
+
+
+____
+
+____AFTER
+
+												
+
+Position type	Name	Surname	Date	Aircraft	Flight number	ADEP 	ADES	OFF	ON	Block time		
+
+Cockpit	Sherif	Laz	2026-06-05	SURSB	RSX311	SSH	VKO	15:35	21:25	5:50	No	
+
+Cockpit	Sherif	Laz	2026-06-06	SURSB	RSX334	VKO	SSH	13:40	19:25	5:45	No	
+
+Cockpit	Sherif	Laz	2026-06-07	SURSB	RSX337	SSH	VKO	22:15	4:10	5:55	No	
+
+Cockpit	Sherif	Laz	2026-06-09	SURSA	RSX316	VKO	SSH	3:55	9:40	5:45	No	
+
+Cockpit	Sherif	Laz	2026-06-09	SURSC	RSX123	SSH	EVN	23:20	2:15	2:55	No	
+
+Cockpit	Sherif	Laz	2026-06-10	SURSC	RSX124	EVN	SSH	3:30	6:55	3:25	No	
+
+Cockpit	Sherif	Laz	2026-06-14	SURSD	RSX323	HRG	LED	17:45	23:35	5:50	No	
+
+Cockpit	Sherif	Laz	2026-06-17	SURSD	RSX322	LED	HRG	22:05	3:40	5:35	No	
+
+Cockpit	Sherif	Laz	2026-06-19	SURSD	RSX321	HRG	LED	16:50	22:40	5:50	No	
+
+Cockpit	Sherif	Laz	2026-06-22	SURSA	RSX328	LED	SSH	2:25	8:05	5:40	No	
+
+Cockpit	Sherif	Laz	2026-06-26	SURSB	RSX321	HRG	LED	16:40	22:20	5:40	No	
+
+Cockpit	Sherif	Laz	2026-06-29	SURSA	RSX328	LED	SSH	2:10	7:35	5:25	No	
+
+Not-Active	Sherif	Laz	2026-06-30	SURSB	RSX331	SSH	SVX	17:20	23:05	5:45	PAD	
+
+Cockpit	Sherif	Laz	2026-06-30	SURSB	RSX332	SVX	SSH	23:55	5:40	5:45	No	
+
+Sherif	Laz		Jun-26					Total		75:05		
+
+__
+
+	Cockpit HRS.Jun.26		
+
+	Name		Block time
+
+	Amro	Nasef	
+
+1	Abdullah	Elshershaby	57:35
+
+2	Abdulrahman	alabbas	TRN
+
+3	Adel	Refay	88:30
+
+	Ahmed	Adawy	TRN
+
+4	Ahmed	Elmahdy	75:30
+
+5	Ahmed	Farag	68:55
+
+6	Ahmed	Kamel	94:40
+
+7	Ahmed	Okba	63:20
+
+8	AHMED	SAMY	79:30
+
+
+
+___
+
+every one people
+
+and i nedd a summery 
+
+total hr
+
+__
+
+and inedd extract the EXL cockpit |Cockpit Summary |Cabin |Cabin Summary
+
+____
+
+THIS THE DATA RESORS AND I NEED TAKE THE DATA IN THE API FOR leon.aero AND I HAVE ACSS IN THE API KEY IN THE leon.aero | AND  I NEED CARETE A DASHBORD MODULE AS WEB AND  INEED ADD THE MODULE A A BIG SYSTEM THE 
+
+AND MY IDEA I NEED BIG SYSTEM IN THE SYSTEM MULTE SECTOR EX: statistics| ENGINRING | INVERTOY |......
+
+AND I NEED Future ADD A MOUDULE IN THE SECTOR  OR MOUDEL .
+
+AND  I NEED GOOD IDEA IN TEH MOUDEL IN THE MOUDLE MULTE PHASE -->FRIST PHASE statistics DASHBORD TAKE THE API IN THE LEON AND I NEED 
+
+FORMAT LIKE THIS  extract the EXL cockpit |Cockpit Summary |Cabin |Cabin Summary
+
+AND FINSH THE FRIST PHASE---> WELL DO THE NEXT PHASE AND THIS INDEE OVER VIEW IN THE SYSEM AND STONG structures AND I NEED ARCTHER A VERY STRONG.
+
+__
+
+and i have scend idea i need take api in the Crew Days 
+
+DASHBORD date men kam to kam 
+
+ extract the EXL cockpit |Cockpit Summary |Cabin |Cabin Summary
+
+
+
+
+
+i need comper between 2 idea
+
+__
+
+filter:
+
+From*
+
+To*
+
+Aircraft
+
+10-07-2026
+
+30-07-2026
+
+—Select— v
+
+Show deleted users O
+
+Crew
+
+Crew labels
+
+Crew positions
+
+Show
+
+__
+
+api:1370e225ae9e1443177673f324080fe911be6a79d3d118e40fb5d4c66a3c63ffaef7166f
+
+__
+
+# AccessForge Crew Hours — Full System Context and Architecture Review
+
+
+
+You are joining this project as a senior software architect and technical lead.
+
+
+
+You have access to the entire repository and all files. Before changing anything, inspect the actual implementation, Git state, tests, documentation, backend, frontend, and existing Crew Hours module.
+
+
+
+Do not rely only on this prompt. Treat the repository as the source of truth and verify every statement against the code.
+
+
+
+Do not modify code in the first pass.
+
+Do not commit or push.
+
+Do not start implementation until you return a complete technical assessment and execution plan.
+
+
+
+====================================================
+
+1. PROJECT OVERVIEW
+
+====================================================
+
+
+
+Project name:
+
+
+
+AccessForge Cloud
+
+
+
+Repository:
+
+
+
+E:\work\REDSEA\web\last_V01\accessforge-cloud-main\accessforge-cloud-main
+
+
+
+Active branch:
+
+
+
+codex/backend-dependency-manifest
+
+
+
+Current known HEAD:
+
+
+
+3d363fa
+
+fix: stabilize crew hours end-to-end demo
+
+
+
+There may currently be uncommitted backend/parser/test changes. Inspect and preserve them. Do not reset, discard, stash, or overwrite anything before classifying the current workspace.
+
+
+
+AccessForge is an existing application, not a new greenfield project.
+
+
+
+The application already provides:
+
+
+
+- authentication and authorization;
+
+- authenticated frontend layout;
+
+- sidebar and module navigation;
+
+- FastAPI backend;
+
+- React/TanStack frontend;
+
+- API client conventions;
+
+- database infrastructure;
+
+- module registration;
+
+- tests;
+
+- existing operational modules.
+
+
+
+Crew Hours must remain a module inside AccessForge.
+
+
+
+Do not create a separate application or duplicate:
+
+
+
+- authentication;
+
+- navigation;
+
+- layout;
+
+- API infrastructure;
+
+- environment configuration;
+
+- deployment;
+
+- LEON authentication.
+
+
+
+====================================================
+
+2. BUSINESS GOAL
+
+====================================================
+
+
+
+REDSEA Operations currently prepares a monthly Cockpit Hours report manually.
+
+
+
+Example summary:
+
+
+
+Name                   Block Time
+
+Ahmed Kamel            94:40
+
+Amr Hussien            90:20
+
+Khaled Ismail          0:00
+
+Abdulrahman Alabbas    TRN
+
+
+
+TRN means:
+
+
+
+Training
+
+
+
+The manual report usually includes:
+
+
+
+1. A summary sheet:
+
+   - Crew member name
+
+   - Monthly Block Time
+
+   - TRN status where applicable
+
+   - Grand total
+
+
+
+2. A detailed section for each crew member:
+
+   - Position type
+
+   - Name
+
+   - Date
+
+   - Aircraft
+
+   - Flight number
+
+   - ADEP
+
+   - ADES
+
+   - OFF
+
+   - ON
+
+   - Block Time
+
+
+
+The required product is a professional Crew Hours module that replaces most of this manual process.
+
+
+
+The user should be able to:
+
+
+
+1. Open `/modules/crew-hours`.
+
+2. Select From date.
+
+3. Select To date.
+
+4. Select Position:
+
+   - All
+
+   - Cockpit
+
+   - Cabin
+
+5. Optionally filter by crew member.
+
+6. Click Load Report.
+
+7. View official LEON crew-hours data.
+
+8. View crew members grouped professionally.
+
+9. View official Block Time.
+
+10. Expand a crew member and view flight details.
+
+
+
+Future phases may include:
+
+
+
+- Excel export;
+
+- PDF/print;
+
+- persistent TRN status;
+
+- reference comparison;
+
+- variance workflow;
+
+- manual adjustment with audit trail;
+
+- Crew Days.
+
+
+
+These future features must not be mixed into the current stabilization task.
+
+
+
+====================================================
+
+3. CRITICAL BUSINESS DECISION
+
+====================================================
+
+
+
+We do not want to calculate aviation hours from local assumptions.
+
+
+
+The system must not calculate official Block Time using:
+
+
+
+- OFF minus ON;
+
+- startTimeUTC minus endTimeUTC;
+
+- flight duration;
+
+- duty duration;
+
+- guessed REDSEA rules.
+
+
+
+We want to consume official values from LEON and then:
+
+
+
+- normalize them;
+
+- group them;
+
+- summarize them;
+
+- display them;
+
+- export them later.
+
+
+
+The official duration field identified in LEON is:
+
+
+
+blockTimeJourneyLog
+
+
+
+This comes through LEON Report Wizard.
+
+
+
+The system may sum official per-flight `blockTimeJourneyLog` values per crew code because this is report aggregation, not recreating the aviation duration from timestamps.
+
+
+
+====================================================
+
+4. LEON AUTHENTICATION
+
+====================================================
+
+
+
+LEON uses a generated API key as a refresh token.
+
+
+
+Token flow:
+
+
+
+POST:
+
+{LEON_BASE_URL}/access_token/refresh/
+
+
+
+Form field:
+
+
+
+refresh_token=<LEON_REFRESH_TOKEN>
+
+
+
+Observed live behavior:
+
+
+
+- HTTP 200
+
+- Access token returned as plain text, not necessarily JSON
+
+- Access token is then used as:
+
+
+
+Authorization: Bearer <access_token>
+
+
+
+GraphQL endpoint:
+
+
+
+https://rsx.leon.aero/api/graphql/
+
+
+
+MCP endpoint:
+
+
+
+https://rsx.mcpserver.leon.aero/mcp
+
+
+
+Local ignored environment:
+
+
+
+backend/.env
+
+
+
+Expected variables:
+
+
+
+LEON_BASE_URL=https://rsx.leon.aero
+
+LEON_MCP_URL=https://rsx.mcpserver.leon.aero/mcp
+
+LEON_REFRESH_TOKEN=<secret>
+
+LEON_TIMEOUT_SECONDS=30
+
+
+
+Never display or commit the token.
+
+
+
+The existing token provider already includes:
+
+
+
+- caching;
+
+- expiry handling;
+
+- locking;
+
+- typed errors;
+
+- plain-text token support;
+
+- safe secret handling.
+
+
+
+Inspect it and reuse it. Do not create a second authentication implementation.
+
+
+
+====================================================
+
+5. LEON GRAPHQL DISCOVERY
+
+====================================================
+
+
+
+GraphQL introspection is available.
+
+
+
+Previous live discovery found:
+
+
+
+- 3,369 schema types;
+
+- 134 root query fields;
+
+- `flightList` available;
+
+- Journey Log available;
+
+- `duty.dutyList` available;
+
+- Report Wizard available after scope update;
+
+- MCP server available.
+
+
+
+Previously missing scopes included:
+
+
+
+- GRAPHQL_CREW_MEMBER
+
+- GRAPHQL_FTL
+
+- REPORT_WIZARD_SEE
+
+- GRAPHQL_DUTY_DETAILS
+
+
+
+The API key scopes were later updated.
+
+
+
+However, GraphQL flight-list calls may currently take too long or time out in the local environment.
+
+
+
+GraphQL must therefore not be a required dependency for showing the official Crew Hours report.
+
+
+
+GraphQL may be used later as:
+
+
+
+- optional enrichment;
+
+- diagnostics;
+
+- reference data;
+
+- fallback only if explicitly safe.
+
+
+
+====================================================
+
+6. LEON MCP DISCOVERY
+
+====================================================
+
+
+
+The LEON MCP server was successfully initialized.
+
+
+
+MCP details:
+
+
+
+- Endpoint:
+
+  https://rsx.mcpserver.leon.aero/mcp
+
+
+
+- Protocol:
+
+  2025-03-26
+
+
+
+- Server:
+
+  leonMcpServer
+
+
+
+- Version:
+
+  1.0.0
+
+
+
+- Advertised tools:
+
+  115
+
+
+
+Important read-only tools discovered:
+
+
+
+- get-report-wizard-flight-scope-columns-list
+
+- get-report-wizard-flight-scope-report
+
+- get-duty-list
+
+- get-crew-ftl-sheet
+
+- get-ftl-duty-details
+
+- get-crew-by-wildcard
+
+
+
+The chosen official source is:
+
+
+
+get-report-wizard-flight-scope-report
+
+
+
+MCP requests require:
+
+
+
+Accept: application/json, text/event-stream
+
+
+
+The tool requires:
+
+
+
+- dateFilter
+
+- columnList
+
+- acftNidList
+
+- crewMemberNidList
+
+- adepLocationNidList
+
+- adesLocationNidList
+
+- airportLocationNidList
+
+- isCanceled
+
+- permitsCountryList
+
+
+
+Optional filters may be sent as null where accepted by LEON.
+
+
+
+DateTime format:
+
+
+
+YYYY-MM-DDTHH:mm:ssZ
+
+
+
+No MCP create/update/delete tool may be called.
+
+
+
+====================================================
+
+7. REAL MCP RESPONSE STRUCTURE
+
+====================================================
+
+
+
+The real live LEON MCP response has been inspected.
+
+
+
+Observed structure:
+
+
+
+HTTP status:
+
+200
+
+
+
+Content-Type:
+
+text/event-stream
+
+
+
+SSE event count:
+
+one or more
+
+
+
+SSE data contains a JSON-RPC envelope:
+
+
+
+{
+
+  "jsonrpc": "...",
+
+  "id": "...",
+
+  "result": {
+
+    "content": [...]
+
+  }
+
+}
+
+
+
+The relevant content item:
+
+
+
+{
+
+  "type": "text",
+
+  "text": "<JSON serialized as text>"
+
+}
+
+
+
+The JSON inside `text` contains:
+
+
+
+{
+
+  "records": [...],
+
+  "recordsCount": 552
+
+}
+
+
+
+For June 2026:
+
+
+
+- recordsCount = 552
+
+- official crew-code totals extracted = 169
+
+
+
+Confirmed report fields include:
+
+
+
+- crew_codes
+
+- blockTimeJourneyLog
+
+
+
+The parser work currently supports or is intended to support:
+
+
+
+- plain JSON;
+
+- SSE;
+
+- multiple SSE events;
+
+- JSON-RPC envelopes;
+
+- result.content;
+
+- content.type=text;
+
+- JSON serialized inside text;
+
+- one controlled nested JSON-string layer;
+
+- resource text;
+
+- safe rejection of malformed payloads;
+
+- required-column validation;
+
+- duplicate crew-code removal within one row;
+
+- durations above 24 hours.
+
+
+
+Inspect the current uncommitted parser changes rather than recreating them.
+
+
+
+====================================================
+
+8. CURRENT IMPLEMENTATION
+
+====================================================
+
+
+
+Existing backend package:
+
+
+
+backend/statistics/crew_hours/
+
+├── config.py
+
+├── errors.py
+
+├── flight_query.py
+
+├── graphql.py
+
+├── leon_client.py
+
+├── mcp_report.py
+
+├── models.py
+
+├── response_models.py
+
+├── router.py
+
+├── schemas.py
+
+├── service.py
+
+├── token_provider.py
+
+└── transport.py
+
+
+
+Existing tests include:
+
+
+
+backend/tests/test_crew_hours_skeleton.py
+
+backend/tests/test_crew_hours_leon_foundation.py
+
+backend/tests/test_crew_hours_leon_s4.py
+
+backend/tests/test_crew_hours_report_api.py
+
+backend/tests/test_crew_hours_mcp_report.py
+
+
+
+Existing API:
+
+
+
+GET /api/statistics/crew-hours/report
+
+
+
+Existing legacy route:
+
+
+
+POST /api/statistics/crew-hours
+
+
+
+The old POST route intentionally returned 501 during the skeleton phase. Inspect whether this route must remain for compatibility or can be documented separately.
+
+
+
+Existing frontend route:
+
+
+
+/modules/crew-hours
+
+
+
+Frontend file:
+
+
+
+src/routes/_authenticated/modules/crew-hours.tsx
+
+
+
+The frontend already contains:
+
+
+
+- date filters;
+
+- position filter;
+
+- crew search;
+
+- Load Report button;
+
+- summary cards;
+
+- crew cards/sections;
+
+- flight detail table;
+
+- loading state;
+
+- error state;
+
+- empty state;
+
+- official total display;
+
+- `Official LEON MCP` badge;
+
+- local/manual TRN toggle.
+
+
+
+The frontend was recently fixed to use the existing internal `ApiClient` instead of an incorrect raw relative fetch.
+
+
+
+Do not create direct browser-to-LEON requests.
+
+
+
+====================================================
+
+9. CURRENT BLOCKER
+
+====================================================
+
+
+
+The MCP parser now successfully extracts:
+
+
+
+- 552 official records;
+
+- 169 official totals.
+
+
+
+But the current service architecture still appears to use GraphQL `flightList` to create the crew members and flights displayed by the API.
+
+
+
+Current flow appears to be:
+
+
+
+GraphQL flightList
+
+→ displayed crew list and flight details
+
+
+
+MCP Report Wizard
+
+→ totals by crew code
+
+
+
+Then:
+
+
+
+join GraphQL crew codes with MCP totals
+
+
+
+When GraphQL times out:
+
+
+
+- the service falls back to demo flight data;
+
+- demo data contains only two fake crew members and two fake flights;
+
+- demo crew codes do not match LEON MCP crew codes;
+
+- official totals cannot attach;
+
+- API returns:
+
+  - total_crew = 2
+
+  - total_flights = 2
+
+  - official available = 0
+
+  - hours_source_status = not_discovered
+
+
+
+This is the current architectural defect.
+
+
+
+The parser is not the remaining blocker.
+
+
+
+The remaining blocker is that the official MCP records are not yet the primary source for constructing the report rows and crew members.
+
+
+
+====================================================
+
+10. TARGET ARCHITECTURE
+
+====================================================
+
+
+
+The desired architecture is:
+
+
+
+Frontend
+
+    ↓
+
+Internal AccessForge API
+
+    ↓
+
+CrewHoursService
+
+    ↓
+
+LeonMcpReportProvider
+
+    ↓
+
+LEON MCP Report Wizard
+
+    ↓
+
+Official MCP records
+
+    ↓
+
+Map records into internal report models
+
+    ↓
+
+Group by crew code
+
+    ↓
+
+Aggregate blockTimeJourneyLog
+
+    ↓
+
+Return API response
+
+    ↓
+
+Render frontend
+
+
+
+MCP must be the authoritative and primary report source.
+
+
+
+GraphQL must not be required for:
+
+
+
+- crew list;
+
+- official totals;
+
+- basic flight-detail rows;
+
+- report success.
+
+
+
+GraphQL may optionally enrich fields only when it succeeds.
+
+
+
+A GraphQL timeout must not remove or invalidate valid MCP results.
+
+
+
+====================================================
+
+11. CREW IDENTITY
+
+====================================================
+
+
+
+Use normalized crew code as the stable identity.
+
+
+
+Normalization:
+
+
+
+- trim whitespace;
+
+- uppercase;
+
+- reject empty values.
+
+
+
+Do not group by first name/surname.
+
+
+
+For each MCP record:
+
+
+
+- read `crew_codes`;
+
+- support one or multiple crew codes;
+
+- deduplicate the same code within one record;
+
+- create one crew-flight association per unique code;
+
+- never count a duplicated code twice in one row.
+
+
+
+If the MCP report does not contain crew names:
+
+
+
+- use crew code as the display fallback;
+
+- set name fields to null;
+
+- do not invent names;
+
+- do not require GraphQL just to show the report.
+
+
+
+====================================================
+
+12. OFFICIAL HOURS RULE
+
+====================================================
+
+
+
+Use only:
+
+
+
+blockTimeJourneyLog
+
+
+
+For each crew code:
+
+
+
+official_total_minutes =
+
+sum of official blockTimeJourneyLog minutes from associated MCP report rows
+
+
+
+Store durations internally as integer minutes.
+
+
+
+Format at the API/UI boundary as:
+
+
+
+HH:MM
+
+
+
+Valid examples:
+
+
+
+0:00
+
+5:50
+
+95:45
+
+3452:25
+
+
+
+Do not use a clock-time type that is limited to 24 hours.
+
+
+
+Required response fields:
+
+
+
+official_total
+
+raw_official_total
+
+hours_source_status
+
+
+
+Expected:
+
+
+
+official_total = formatted official MCP total
+
+raw_official_total = same unadjusted total
+
+hours_source_status = "official_mcp_report"
+
+
+
+Keep:
+
+
+
+reference_total = null
+
+variance_minutes = null
+
+
+
+No manual adjustment in this phase.
+
+
+
+====================================================
+
+13. TRN STATUS
+
+====================================================
+
+
+
+TRN means Training.
+
+
+
+The manual June 2026 report marked some people as TRN.
+
+
+
+The authoritative source and exact REDSEA rule for TRN have not been fully confirmed.
+
+
+
+Current behavior:
+
+
+
+- TRN toggle is local/manual in the UI;
+
+- it is not persisted;
+
+- it must not overwrite or mutate the official total;
+
+- refreshing may reset it;
+
+- no database write.
+
+
+
+Do not try to auto-detect or persist TRN in the current stabilization unless the repository already contains an approved rule.
+
+
+
+====================================================
+
+14. DEMO FALLBACK
+
+====================================================
+
+
+
+The official production report endpoint must not silently return fake demo data.
+
+
+
+Required behavior:
+
+
+
+If MCP succeeds:
+
+- return MCP-derived records and crew members;
+
+- return official totals;
+
+- never return demo rows.
+
+
+
+If MCP fails:
+
+- return a safe typed API error;
+
+- do not return demo data as HTTP 200.
+
+
+
+Demo fixtures may remain only:
+
+
+
+- in unit tests;
+
+- in an explicitly separate development/demo path;
+
+- never mixed into official production results.
+
+
+
+====================================================
+
+15. FILTERING
+
+====================================================
+
+
+
+Current filters:
+
+
+
+- from
+
+- to
+
+- position
+
+- crew_member
+
+
+
+Date rules:
+
+
+
+- strict YYYY-MM-DD;
+
+- from <= to;
+
+- convert to full UTC timestamps for MCP.
+
+
+
+Crew filter:
+
+
+
+- case-insensitive;
+
+- search normalized crew code;
+
+- optionally search display name only if a real name exists.
+
+
+
+Position filter:
+
+
+
+Only apply it if the actual MCP report contains a confirmed position field.
+
+
+
+Do not infer Cockpit/Cabin from unrelated fields.
+
+
+
+If position is not available from MCP:
+
+
+
+- document the capability limitation;
+
+- disable or safely reject the unsupported filter;
+
+- do not return fake classifications.
+
+
+
+====================================================
+
+16. ERROR HANDLING
+
+====================================================
+
+
+
+MCP failures must not become:
+
+
+
+HTTP 200
+
+hours_source_status = not_discovered
+
+
+
+when MCP is configured and attempted.
+
+
+
+Use typed safe errors:
+
+
+
+- Authentication failure
+
+- Timeout
+
+- Transport failure
+
+- Rate limit
+
+- MCP protocol error
+
+- Unsupported report format
+
+- Missing required columns
+
+- Malformed duration
+
+
+
+Map errors using the existing project conventions, such as:
+
+
+
+LeonTimeoutError → 504
+
+LeonTransportError → 503
+
+LeonResponseError → 502
+
+LeonContractError → 502
+
+
+
+Never expose:
+
+
+
+- raw LEON payload;
+
+- tokens;
+
+- Authorization headers;
+
+- stack traces;
+
+- personal raw data.
+
+
+
+====================================================
+
+17. NETWORK / PROXY ENVIRONMENT
+
+====================================================
+
+
+
+A local proxy issue was diagnosed.
+
+
+
+Observed:
+
+
+
+httpx with trust_env=True:
+
+ConnectError
+
+
+
+httpx with trust_env=False:
+
+direct connection succeeds
+
+
+
+The local backend process inherited invalid variables:
+
+
+
+- HTTP_PROXY
+
+- HTTPS_PROXY
+
+- ALL_PROXY
+
+
+
+For local live smoke, these variables were removed from the backend process.
+
+
+
+Do not hardcode `trust_env=False` globally without considering production environments.
+
+
+
+A configurable future solution could be:
+
+
+
+LEON_TRUST_ENV=true|false
+
+
+
+But do not add this unless the repository and runtime requirements clearly justify it.
+
+
+
+====================================================
+
+18. DATABASE SAFETY
+
+====================================================
+
+
+
+The Crew Hours module should not write to the database in the current phase.
+
+
+
+Root database:
+
+
+
+redsea.db
+
+
+
+Known safe SHA-256:
+
+
+
+F856D0F1F1F94B203212E649B7C3BA1EE8293EB56C14E3998BF97C651BAEA93D
+
+
+
+An accidental empty file previously appeared at:
+
+
+
+backend/redsea.db
+
+
+
+It was removed and added to `.gitignore`.
+
+
+
+Never:
+
+
+
+- run tests against root redsea.db;
+
+- create backend/redsea.db;
+
+- run migrations;
+
+- run runtime DDL;
+
+- seed the real local database.
+
+
+
+Use temporary SQLite for automated tests and startup validation.
+
+
+
+====================================================
+
+19. GIT HISTORY AND CURRENT STATE
+
+====================================================
+
+
+
+Important completed commits include:
+
+
+
+e91776e
+
+feat: integrate official leon mcp crew hours totals
+
+
+
+15fcfbf
+
+feat: display official leon crew hours totals
+
+
+
+3d363fa
+
+fix: stabilize crew hours end-to-end demo
+
+
+
+M4 and M5 were pushed previously.
+
+
+
+Current parser/MCP-first work may be uncommitted on top of 3d363fa.
+
+
+
+Before doing anything:
+
+
+
+Run:
+
+
+
+git branch --show-current
+
+git rev-parse HEAD
+
+git status --short
+
+git diff --stat
+
+git diff
+
+git stash list
+
+
+
+Classify every modified/untracked file.
+
+
+
+Do not discard current work.
+
+
+
+Protected stash:
+
+
+
+9248e137326529d271d53c5c14868fe822535a36
+
+
+
+It contains unrelated Task 0.4.5 work and must remain untouched.
+
+
+
+====================================================
+
+20. TEST STATUS
+
+====================================================
+
+
+
+Before the latest MCP-first change, known successful validation included:
+
+
+
+- 70/70 backend tests;
+
+- later parser work reached 85/85 tests;
+
+- focused MCP/API tests reached 19 passing;
+
+- `npx tsc --noEmit` passed;
+
+- `npx vite build` passed;
+
+- `git diff --check` passed.
+
+
+
+Automated tests must use fake transports only.
+
+
+
+No automated test may connect to live LEON.
+
+
+
+====================================================
+
+21. WHAT WE NEED FROM YOU FIRST
+
+====================================================
+
+
+
+Do not start coding immediately.
+
+
+
+First perform a full architectural review of the actual repository.
+
+
+
+Return a report containing:
+
+
+
+# AccessForge Crew Hours Technical Assessment
+
+
+
+## 1. Repository state
+
+
+
+- branch
+
+- HEAD
+
+- working-tree state
+
+- current uncommitted files
+
+- stash safety
+
+- database safety
+
+
+
+## 2. Current architecture
+
+
+
+Explain the actual runtime flow based on code:
+
+
+
+- frontend request
+
+- router
+
+- service
+
+- MCP provider
+
+- GraphQL provider
+
+- token provider
+
+- transport
+
+- response mapping
+
+
+
+Do not repeat assumptions if code differs.
+
+
+
+## 3. What is already working
+
+
+
+Identify precisely:
+
+
+
+- auth
+
+- API
+
+- frontend
+
+- MCP connectivity
+
+- parser
+
+- tests
+
+- official total aggregation
+
+
+
+## 4. Current root cause
+
+
+
+Confirm whether the main blocker is:
+
+
+
+GraphQL-dependent report construction and demo fallback
+
+
+
+or identify the real blocker from code.
+
+
+
+## 5. MCP record field inventory
+
+
+
+Inspect the current sanitized fixtures/tests/code and list:
+
+
+
+- confirmed MCP fields;
+
+- mapped fields;
+
+- missing optional fields;
+
+- dynamic columns;
+
+- unsafe assumptions.
+
+
+
+Do not expose real personal values.
+
+
+
+## 6. Architecture decision
+
+
+
+Recommend one:
+
+
+
+A. MCP-first report source
+
+B. GraphQL-first with MCP totals
+
+C. Hybrid source
+
+D. Another justified design
+
+
+
+Explain trade-offs.
+
+
+
+Our preferred direction is MCP-first unless the code provides strong evidence against it.
+
+
+
+## 7. Minimal completion plan
+
+
+
+Provide a file-by-file plan that turns the current module into a visible end-to-end demo.
+
+
+
+For every file:
+
+
+
+- exact responsibility;
+
+- exact change;
+
+- why required;
+
+- tests required;
+
+- risk.
+
+
+
+Do not include future Excel/PDF/manual-adjustment features.
+
+
+
+## 8. API contract
+
+
+
+Propose the final current-phase API response using the existing schemas where possible.
+
+
+
+Specify:
+
+
+
+- period
+
+- source
+
+- records_count
+
+- total_crew
+
+- total_flights/details
+
+- official totals available/unavailable
+
+- crew members
+
+- official_total
+
+- raw_official_total
+
+- source status
+
+- optional fields
+
+
+
+## 9. Frontend contract
+
+
+
+Explain how the existing page should render:
+
+
+
+- official totals;
+
+- missing names;
+
+- loading;
+
+- errors;
+
+- empty states;
+
+- optional flight details;
+
+- position capability limitations;
+
+- TRN.
+
+
+
+## 10. Error behavior
+
+
+
+Define exactly when the API returns:
+
+
+
+- 200
+
+- 422
+
+- 502
+
+- 503
+
+- 504
+
+
+
+Confirm that demo fallback is not used in official responses.
+
+
+
+## 11. Test plan
+
+
+
+List:
+
+
+
+- MCP parser tests;
+
+- service tests;
+
+- API tests;
+
+- frontend build/type checks;
+
+- live smoke;
+
+- database safety verification.
+
+
+
+## 12. Risks and open questions
+
+
+
+Examples:
+
+
+
+- names absent from MCP;
+
+- position field absent;
+
+- report column changes;
+
+- slow MCP response;
+
+- duplicate records;
+
+- manual report differences;
+
+- TRN source;
+
+- GraphQL enrichment.
+
+
+
+## 13. Final recommendation
+
+
+
+Return:
+
+
+
+- recommended architecture;
+
+- exact next implementation task;
+
+- expected files changed;
+
+- acceptance criteria;
+
+- what must remain deferred.
+
+
+
+====================================================
+
+22. IMPORTANT BEHAVIOR
+
+====================================================
+
+
+
+Challenge incorrect assumptions.
+
+
+
+If the current implementation already has a better pattern, explain it.
+
+
+
+If MCP records do not contain enough detail to replace GraphQL, prove exactly which fields are missing and recommend a non-blocking hybrid design.
+
+
+
+Do not tell us to rewrite the system.
+
+
+
+Do not create a separate Crew Hours application.
+
+
+
+Do not start broad cleanup.
+
+
+
+Focus on delivering the existing module visibly and safely.
+
+
+
+After returning the assessment, stop and wait for approval before modifying code.
+

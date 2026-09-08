@@ -115,9 +115,9 @@ function InvitationsPage() {
                     <Badge
                       variant="outline"
                       className={
-                        s.tone === "success" ? "text-emerald-600 border-emerald-600/40" :
+                        s.tone === "success" ? "text-[var(--status-success-foreground)] border-[var(--status-success-border)]" :
                         s.tone === "muted" ? "text-muted-foreground" :
-                        "text-amber-600 border-amber-600/40"
+                        "text-[var(--status-warning-foreground)] border-[var(--status-warning-border)]"
                       }
                     >{s.label}</Badge>
                     <span className="text-xs text-muted-foreground ml-auto">

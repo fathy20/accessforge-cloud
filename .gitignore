@@ -43,6 +43,12 @@ __pycache__/
 # Local database files (including pre-migration backups)
 *.db
 *.db.bak-*
+
+# Archives and build artifacts — a 19.8 MB repo snapshot was once committed
+*.zip
+*.7z
+*.tar
+*.tar.gz
 *.sqlite
 *.sqlite3
 

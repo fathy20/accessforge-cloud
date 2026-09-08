@@ -188,7 +188,7 @@ function TaskExtractorResults() {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="h-9 gap-2 shrink-0 border-green-600/30 text-green-700 hover:bg-green-50 hover:text-green-800 dark:text-green-400 dark:hover:bg-green-950/50"
+                  className="h-9 gap-2 shrink-0 border-[var(--status-success-border)] text-[var(--status-success-foreground)] hover:bg-[var(--status-success-background)]"
                   onClick={() => {
                     window.open(xlsxFile.url, "_blank", "noopener,noreferrer");
                   }}

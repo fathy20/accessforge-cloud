@@ -1,36 +1,74 @@
-"""Flying Duty Period (FDP) model — Heavy derived from the regulation.
+"""Flying Duty Period (FDP) model — a shadow validator. NOT a Heavy rule.
 
-Source: EgyptAir Operations Manual Chapter 7 "Flight Time Limitation"
-(STD SEP.09, the owner's `reference.pdf`) and ECAR Part 121 Subpart Q
-(ECAA, 01-Jan-2016), both the CAP 371 scheme. Plan and open rulings:
-`docs/architecture/heavy-fdp-regulatory-model-plan-2026-09-03.md`.
+Source: EgyptAir Operations Manual Chapter 7 "Flight Time Limitation",
+Issue 2 Rev 00, STD SEP.09, pages 7.1-2 … 7.1-11 (the owner's scans
+`reference.pdf` and `flight limitation pdf.pdf`). Plan and open rulings:
+`docs/architecture/heavy-fdp-regulatory-model-plan-2026-09-03.md`. The
+independent read of all ten OM pages, which is the evidence for everything
+below: `Heavy_FDP_Report/independent_review/FINDINGS.md`.
 
-The one inequality this module evaluates:
+RETRACTION (2026-09-08)
+-----------------------
+This docstring used to present the inequality below as the definition of
+"Heavy". That claim is withdrawn. It was never in the OM, and it does not
+hold against the data.
 
-    planned FDP  >  maximum FDP(table, local start band, sectors)
+* **The OM does not define Heavy.** Chapter 7 regulates flight-time limits,
+  rest and positioning. Across all ten pages the word "Heavy" never appears,
+  nor does "H.C", nor any word for allowance, wage, bonus, compensation or
+  overtime, in Arabic or English. Nothing in the OM is authority for or
+  against a Heavy verdict, in either direction.
+* **Heavy is a Red Sea business/policy verdict.** Its authority is the
+  owner's rulings (the EVN and SVX absolutes, the domestic-route ruling, the
+  SP trainee-slot ruling), LEON's ``crewAugmentation``, and the approved
+  precedence table in ``heavy.py``. None of those is an FDP calculation.
+* **Augmentation does not prove the base limit was exceeded.** Of 779
+  augmented June member-duties, only 49 exceed the base table limit and the
+  median augmented duty sits roughly 5 h *below* it. Operators carry extra
+  crew for training, ferry, familiarisation and standby cover as well. The
+  OM's own augmentation clause is a safety provision — an extra licensed
+  flight-deck member (7.1-6 2-2-1), a rest facility (7.1-6 2-2-2), 50% more
+  cabin crew when relief is carried (7.1-10 7-2-6) — never a payment trigger.
+* **An over-limit FDP does not prove Heavy either.** The OM offers other
+  routes to legality: split duty (7.1-6 2-3), commander's discretion up to
+  3:00 (7.1-7 2-6), the cabin +1:00 (7.1-10 7-2-1), and the exclusion of a
+  positioning member's landings from his sector count (7.1-7 2-4-1).
+
+What this module actually computes — one regulatory quantity, nothing more:
+
+    planned FDP  vs  maximum FDP(table, local start band, sectors)
 
   planned FDP   = 1:30 before the first scheduled departure
-                  -> 0:30 after the last landing            (OM 2-1-3, ECAR 121.503(d))
+                  -> 0:30 after the last landing            (OM 7.1-4 2-1-3)
   maximum FDP   = Table A when the member starts acclimatised (local start
                   band x sectors), Table B otherwise (preceding rest x sectors)
-                                                            (OM 2-1, ECAR 121.503)
+                                                            (OM 7.1-4 2-1)
   positioning   = duty, never a sector; when it precedes the FDP it is inside
-                  the FDP                                   (ECAR 121.506)
-  cabin crew    = cockpit limit + 1:00                      (OM 7-2-1, ECAR 121.516)
+                  the FDP                                   (OM 7.1-7 2-4-1)
+  cabin crew    = cockpit limit + 1:00                      (OM 7.1-10 7-2-1)
 
-When the inequality holds the rotation cannot be flown by a two-pilot crew as
-rostered: the operator augments (a third pilot, in-flight relief — LEON's
-``crewAugmentation``) or carries two crews (the operate + ride swap the
-allowance model credits). That is what "Heavy" is.
+``FdpAssessment.needs_augmentation`` is that comparison and only that: "the
+planned duty is longer than the base two-pilot table limit". Read it as a
+regulatory observation, never as a Heavy verdict, and never as a claim about
+why extra crew was or was not rostered.
 
-STATUS: SHADOW ONLY. Nothing here changes a verdict, an export cell, or a
-credit. The service paints the assessment next to the existing verdict and
-into the decision trace so June/July can be back-tested before the owner
-rules on R1–R7 in the plan.
+STATUS: SHADOW / VALIDATION ONLY. Nothing here changes a Heavy verdict, a
+credit, an export cell, or a total, and nothing here may. The service paints
+the assessment beside the existing verdict and into the decision trace for
+back-testing and diagnostics. ``credit_vs_fdp`` in `tools/fdp_backtest.py`
+compares a business boolean against a safety model, so disagreement between
+them is the expected state, not an error signal.
+
+Citations: every FDP rule above is stated verbatim in the OM and was verified
+page by page in the review cited at the top. The ECAR Part 121 Subpart Q /
+CAP 371 paragraph numbers this module also used to cite are NOT verified
+against an official ECAA text; where they survive in the comments below they
+are marked UNVERIFIED, and the OM paragraph is the authority in each case.
 
 Pure module: no I/O, no service imports, plain dataclasses only. The tables
 are DATA, versioned, because the 2009 OM and the 2016 ECAR differ in two
-cells and Red Sea's approved manual decides which applies (ruling R1).
+cells and Red Sea's approved manual decides which applies (ruling R1 —
+answered by the data: LEON is configured with the OM-2009 values).
 """
 
 from __future__ import annotations
@@ -48,9 +86,13 @@ REPORT_BEFORE_DEPARTURE = timedelta(hours=1, minutes=30)
 POST_FLIGHT_DUTY = timedelta(minutes=30)
 CABIN_FDP_EXTRA = timedelta(hours=1)
 
-# In-flight relief (ECAR 121.504(c), CAP 371 §12.3): rest under 3 h counts for
-# nothing; from 3 h the FDP extends by half the rest in a bunk (cap 18 h;
-# cabin 19 h) or a third of the rest in a seat (cap 15 h; cabin 16 h).
+# In-flight relief (OM 7.1-6 2-2; ECAR 121.504(c) / CAP 371 §12.3 UNVERIFIED):
+# rest under 3 h counts for nothing even if non-consecutive (2-2-3); from 3 h
+# the FDP extends by half the rest in a bunk (cap 18 h; cabin 19 h) or a third
+# of the rest in a seat (cap 15 h; cabin 16 h). Confirmed verbatim in the OM.
+# Note for anyone comparing against LEON: LEON awards the 15:00/16:00 seat cap
+# outright whenever the crew is augmented and a rest facility exists, without
+# reference to the rest actually taken, and never uses the bunk tier.
 RELIEF_MINIMUM_REST = timedelta(hours=3)
 RELIEF_CAPS: Mapping[tuple[str, CrewType], timedelta] = {
     ("bunk", "cockpit"): timedelta(hours=18),
@@ -58,8 +100,10 @@ RELIEF_CAPS: Mapping[tuple[str, CrewType], timedelta] = {
     ("seat", "cockpit"): timedelta(hours=15),
     ("seat", "cabin"): timedelta(hours=16),
 }
-# Split duty (ECAR 121.505, CAP 371 §13.1): ground rest under 3 h extends
-# nothing; 3–10 h extends the FDP by half the consecutive rest.
+# Split duty (OM 7.1-6 2-3; ECAR 121.505 / CAP 371 §13.1 UNVERIFIED): ground
+# rest under 3 h extends nothing; 3–10 h extends the FDP by half the
+# consecutive rest. Confirmed verbatim in the OM, which states no cap of its
+# own — the table's domain stops at 10 h, so its implied ceiling is 5:00.
 SPLIT_DUTY_MINIMUM_REST = timedelta(hours=3)
 SPLIT_DUTY_MAXIMUM_REST = timedelta(hours=10)
 
@@ -115,7 +159,11 @@ class FdpTables:
 
 
 # The owner's document: EgyptAir OM Chapter 7, STD SEP.09, page 7.1-4 and the
-# printed Table A/B page. Fractions read as quarters (9¼ = 9:15).
+# printed Table A/B page. Fractions read as quarters (9¼ = 9:15). Verified
+# cell for cell against the Arabic 7.1-4 / 7.1-5 pages. Two cells there are
+# typeset non-monotonically (Table A 22:00–05:59 × 6 sectors, Table B row 1 ×
+# 6–7 sectors); the monotonic English insert is used, and neither cell is
+# reachable — no Red Sea duty exceeds 4 sectors.
 TABLES_OM_2009 = FdpTables(
     version="om-2009",
     source="EgyptAir Operations Manual Ch.7 Flight Time Limitation, STD SEP.09 (reference.pdf)",
@@ -134,9 +182,11 @@ TABLES_OM_2009 = FdpTables(
     under_18_row=None,
 )
 
-# ECAR Part 121 Subpart Q, 01-Jan-2016, 121.503. Differs from the 2009 OM in
-# the 08:00–14:59 row (3–8 sectors) and labels Table B's first row
-# "Up to 18 or over 30".
+# ECAR Part 121 Subpart Q, 01-Jan-2016, 121.503. UNVERIFIED against an
+# official ECAA text — transcribed from a third-party copy and kept only so
+# ruling R1 has something to select. Differs from the 2009 OM in the
+# 08:00–14:59 row (3–8 sectors) and labels Table B's first row
+# "Up to 18 or over 30". LEON is configured with the OM-2009 values.
 TABLES_ECAR_2016 = FdpTables(
     version="ecar-2016",
     source="ECAR Part 121 Subpart Q, The Avoidance of Excessive Fatigue in Aircrew, 01-Jan-2016",
@@ -265,6 +315,10 @@ class FdpAssessment:
     def margin(self) -> timedelta | None:
         return None if self.limit is None else self.window.planned - self.limit
 
+    # NOT a Heavy verdict, and not a claim about why crew were rostered: it is
+    # "the planned duty is longer than the base two-pilot table limit" and
+    # nothing else. The name is kept because it is read by the schema, the
+    # trace and the back-test tool. See the retraction in the module docstring.
     @property
     def needs_augmentation(self) -> bool | None:
         return None if self.limit is None else self.window.planned > self.limit
@@ -287,7 +341,10 @@ def _position(leg: AllowanceLeg) -> str:
 def rotation_window(legs: Sequence[AllowanceLeg]) -> FdpWindow | None:
     """The duty as a two-pilot crew would have to fly it: every leg a sector,
     report 1:30 before the first departure, off duty 0:30 after the last
-    landing. This is the planning question "does this rotation need Heavy?"."""
+    landing (OM 7.1-4 2-1-3). This answers "is this rotation longer than the
+    base two-pilot limit?" — a regulatory question. It does not answer "is
+    this rotation Heavy?", which is a Red Sea policy question decided
+    elsewhere."""
 
     parsed = _parsed(legs)
     if not parsed:
@@ -302,9 +359,13 @@ def rotation_window(legs: Sequence[AllowanceLeg]) -> FdpWindow | None:
 
 def member_window(legs: Sequence[AllowanceLeg]) -> FdpWindow | None:
     """One member's own FDP: positioning before the first operated leg is
-    inside the FDP but not a sector; positioning after the last operated leg
-    is duty, not FDP (ECAR 121.506, 121.504(d)). Neutral positions (OBS, STB,
-    SP, OPS) are ignored. None when the member operated nothing."""
+    inside the FDP but not a sector (OM 7.1-7 2-4-1 — a positioning member's
+    landings are not counted for him, and travel immediately before operating
+    is counted continuously); positioning after the last operated leg is duty,
+    not FDP (inferred from 7.1-7 2-4-1 read with 7.1-6 2-2-4 and the 7.1-2 §3
+    duty-period definition; ECAR 121.506 / 121.504(d) UNVERIFIED). Neutral
+    positions (OBS, STB, SP, OPS) are ignored. None when the member operated
+    nothing."""
 
     parsed = [(leg, s, e) for leg, s, e in _parsed(legs) if _position(leg) not in NEUTRAL_POSITIONS]
     operated = [(leg, s, e) for leg, s, e in parsed if _position(leg) not in RIDE_POSITIONS and _position(leg) != "PSN"]
@@ -399,6 +460,11 @@ def assess(
         limit=limit,
         limit_reason=limit_reason,
     )
+    # The wording below ("needs augmentation (Heavy)") is the shipped trace
+    # text and is kept byte-for-byte so recorded traces stay comparable. It is
+    # inaccurate: the step reports one thing only — whether the planned duty
+    # exceeds the base two-pilot table limit. It is not a Heavy verdict, and a
+    # Heavy verdict is never derived from it. See the module docstring.
     steps.append(
         step(
             "FDP_SHADOW_VERDICT",

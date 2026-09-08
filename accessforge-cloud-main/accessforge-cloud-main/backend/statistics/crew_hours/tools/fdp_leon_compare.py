@@ -11,8 +11,29 @@ member-duty: ``fdpStartTime``/``fdpEndTime``/``fdpLength``, ``maxFdpLength``,
 * the limit    — does our Table A/B lookup (band from LEON's own local offset,
                  LEON's sector count, LEON's acclimatisation flag) equal
                  LEON's ``maxFdpLength`` minus any ``fdpExtension``?
-* Heavy        — does ``fdpLength > basic limit`` line up with LEON's
-                 ``crewAugmentation``?
+* augmentation — how often does our ``fdpLength > limit`` observation coincide
+                 with LEON's ``crewAugmentation``? This is a model-vs-LEON
+                 agreement statistic and nothing more.
+
+**It does not test Heavy.** Heavy is a Red Sea business/policy verdict — the
+owner's rulings, LEON's ``crewAugmentation`` and the approved precedence table
+decide it. The EgyptAir OM sets FDP limits, extensions, rest and positioning
+rules; it never defines Heavy and never mentions an allowance. Neither
+direction of implication holds: only 49 of 779 augmented June duties exceed
+the base limit (median about 5 h below it — extra crew is also carried for
+training, ferry, familiarisation and standby cover), and a duty over the base
+limit may be legal by split duty, commander's discretion, the cabin +1:00 or
+the positioning-landings exclusion without any extra crew at all. The
+``our_needs_augmentation`` column is that inequality, not a verdict; nothing
+here may change a verdict, a credit, an export cell or a total.
+
+Trap in the output, deliberately left in place: **``leon_basic_max`` is not a
+basic limit.** It is ``maxFdpLength - fdpExtension``, and ``fdpExtension`` is
+0:00 in 1,770 of 1,770 June duties — so on an augmented duty it is LEON's
+POST-augmentation ceiling (a flat 15:00 cockpit / 16:00 cabin), not the base
+table value. Compare against ``our_limit`` for the base figure. The column
+name is unchanged on purpose: it is written into ``leon_duties.csv`` and
+downstream analysis reads it.
 
 Usage (read-only against LEON, reads LEON_* from .env like the app):
 
@@ -203,6 +224,10 @@ def analyse(duty: Mapping[str, Any], tables: FdpTables) -> dict[str, Any]:
         "our_band": "",
         "our_table": "",
         "our_limit": "",
+        # Misnamed, and kept so (it ships in leon_duties.csv): `fdpExtension`
+        # is 0:00 in every observed duty, so on an augmented duty this is
+        # LEON's POST-augmentation ceiling, not a base limit. The base table
+        # figure is `our_limit` above.
         "leon_basic_max": _fmt(max_fdp - extension) if max_fdp is not None else "",
         "limit_match": "",
         "our_needs_augmentation": "",

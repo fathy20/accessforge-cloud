@@ -8,6 +8,17 @@ writes every leg, the disagreements, and a summary — the evidence the owner
 rulings R1–R7 in docs/architecture/heavy-fdp-regulatory-model-plan-2026-09-03.md
 need. Crew are identified by code only.
 
+``classification`` and ``credit_vs_fdp`` compare a Red Sea business verdict
+against a regulatory model. **Disagreement is the expected state, not an
+error signal**: Heavy is decided by the owner's rulings, LEON's
+``crewAugmentation`` and the approved precedence table, while the shadow model
+reports only whether a duty is longer than the base two-pilot table limit.
+Augmentation does not imply an overrun (49 of 779 augmented June duties, the
+median about 5 h under the limit) and an overrun does not imply Heavy (split
+duty, commander's discretion, the cabin +1:00 and the positioning-landings
+exclusion are lawful without extra crew). Read the columns as a diagnostic;
+nothing produced here may move a verdict, a credit, an export cell or a total.
+
 Usage (reads LEON_* from the environment / .env, exactly like the app):
 
     python -m backend.statistics.crew_hours.tools.fdp_backtest \

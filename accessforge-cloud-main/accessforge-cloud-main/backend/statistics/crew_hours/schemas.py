@@ -22,7 +22,12 @@ class HeavyTraceStep(BaseModel):
 
 
 class FdpShadow(BaseModel):
-    """Regulatory FDP assessment of the duty this leg belongs to (shadow)."""
+    """Regulatory FDP assessment of the duty this leg belongs to (shadow).
+
+    Diagnostics only. Heavy is a Red Sea business/policy verdict decided by
+    the owner's rulings, LEON's ``crewAugmentation`` and the precedence table;
+    nothing in here is a Heavy verdict or an input to one.
+    """
 
     tables_version: str
     table: str                       # "A" | "B"
@@ -31,7 +36,11 @@ class FdpShadow(BaseModel):
     planned: str                     # H:MM
     limit: str | None                # H:MM; None when Table B has no row
     margin: str | None               # planned - limit, H:MM (negative = within)
+    # planned > limit, and nothing more. NOT "this duty is Heavy" and not
+    # "extra crew was required": see the retraction in fdp.py's docstring.
     needs_augmentation: bool | None
+    # A False here is a diagnostic observation, not a defect: the verdict and
+    # the shadow model answer different questions.
     agrees_with_verdict: bool | None # vs effective_heavy, when both are known
     duty_leg_keys: list[str] = []
 

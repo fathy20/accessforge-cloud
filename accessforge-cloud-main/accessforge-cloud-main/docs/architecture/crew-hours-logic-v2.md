@@ -4,10 +4,16 @@
 module runs on today, written down as a single source so it can be restored
 exactly if the work that follows it does not pan out.
 
-**Why it exists.** The next slice re-derives Heavy from the regulation (the
-owner's `reference.pdf` → the FDP model). That work runs in *shadow* and is
-allowed to fail. If it does, or if the owner rejects it, **this document is
-the state to return to** — no reconstruction from memory, no guessing.
+**Why it exists.** The slice that followed set out to re-derive Heavy from
+the regulation (the owner's `reference.pdf` → the FDP model). That work ran
+in *shadow* and was allowed to fail — and on the Heavy question it did.
+**Closed 2026-09-08: Heavy is a Red Sea business/policy verdict and is not
+derived from an FDP calculation.** The EgyptAir OM sets FDP limits,
+extensions, rest and positioning rules and never mentions Heavy or any
+allowance; augmentation does not prove the base limit was exceeded, and an
+over-limit duty does not prove Heavy. The FDP model survives as a shadow
+validator (section 5), which is exactly the state this document describes —
+so the logic below is current, not a fallback awaiting a verdict.
 
 **Two anchors, deliberately distinct** (on `fix/crew-hours-heavy-airport-rules`):
 

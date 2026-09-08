@@ -32,14 +32,35 @@ re-derive it.**
 
 ## 1. What changed and why this plan is different
 
-Reading the owner's `reference.pdf` (EgyptAir OM Ch.7 = ECAR 121 Subpart Q =
-CAP 371) gave the mechanism behind every Heavy heuristic:
+> **Correction, 2026-09-08.** This section opened by quoting the framing
+> *"a rotation needs augmentation when its planned FDP exceeds the Table A/B
+> maximum … the operator then flies it with a third pilot or with two crews"*
+> as "the mechanism behind every Heavy heuristic". **Retracted.** Exceeding
+> the base limit is one reason an operator may roster extra crew; it is not
+> the definition of Heavy, not a necessary condition for augmentation, and
+> not sufficient for it either.
+>
+> * The EgyptAir OM sets FDP limits, extensions, rest and positioning rules.
+>   Read in full (ten pages, 7.1-2 … 7.1-11) it **never uses the word
+>   "Heavy"** and never mentions an allowance, wage, bonus or overtime. It
+>   cannot define Heavy or a Heavy allowance.
+> * **Heavy is a Red Sea business/policy verdict**, decided by the owner's
+>   rulings, LEON's `crewAugmentation`, and the approved precedence table.
+> * Only **49 of 779** augmented June member-duties exceed the base limit;
+>   the median augmented duty is about **5 h below** it. Extra crew is also
+>   carried for training, ferry, familiarisation and standby cover.
+> * A duty **over** the base limit may still be lawful with no extra crew —
+>   split duty (7.1-6 §2-3), commander's discretion up to 3:00 (7.1-7 §2-6),
+>   the cabin +1:00 (7.1-10 §7-2-1), the positioning-landings exclusion
+>   (7.1-7 §2-4-1).
+>
+> The three-layer architecture in section 2 already assumes this separation
+> and is unaffected: layer 2 validates, layer 3 decides pay, and layer 2 never
+> writes a verdict. What follows below stands, minus the retracted framing.
 
-> A rotation needs augmentation when its planned **FDP exceeds the Table A/B
-> maximum** for its local start band and sector count. The operator then flies
-> it with a third pilot (in-flight relief → LEON `crewAugmentation`) or with
-> two crews (each member operates one leg, rides the other → the swap the
-> allowance credits).
+Reading the owner's `reference.pdf` (EgyptAir OM Ch.7; the ECAR 121 Subpart Q
+and CAP 371 equivalences are UNVERIFIED and not load-bearing) gave the
+regulatory mechanism the FDP model measures.
 
 Then we measured our implementation of that against **LEON's own FTL engine**
 (`ftl.dutyList`, June 2026, 1,562 flown member-duties):
@@ -100,14 +121,23 @@ Rules that must hold:
 | `allowed_limit` | What this duty was actually permitted, **after** split duty, discretion and the augmentation cap | LEON's `maxFdpLength` |
 | `recorded_augmentation` | What was actually rostered (`NORMAL` / `AUGMENTED` / `DOUBLED` / `TRIPLED`) | LEON's `crewAugmentation`, kept raw |
 
-- "This rotation **needed** augmentation" ⇔ `fdpLength > basic_limit`.
+- "This duty is **longer than the base table limit**" ⇔ `fdpLength >
+  basic_limit`. **Not** the same as "this rotation needed augmentation": the
+  OM's split duty, commander's discretion, cabin +1:00 and
+  positioning-landings exclusion each make an over-limit duty lawful with no
+  extra crew (corrected 2026-09-08 — this line previously read "This rotation
+  **needed** augmentation ⇔ `fdpLength > basic_limit`").
 - "This duty was **legal**" ⇔ `fdpLength <= allowed_limit`.
-- "This member **earns H.C**" is neither — it is Layer 3 policy.
+- "This member **earns H.C**" is neither — it is Layer 3 policy, and the OM
+  has nothing to say about it: Chapter 7 never mentions Heavy, H.C or any
+  allowance in any of its ten pages.
 
-The June evidence proves the three are independent: four cockpit ENGM duties
-are `AUGMENTED` at 12:45 against a 13:15 basic limit — augmented while under
-the limit. So the flag never proves an overrun, and an overrun never proves
-the flag. Any statement that mixes them is a bug, not a shortcut.
+The June evidence proves the three are independent, in both directions: four
+cockpit ENGM duties are `AUGMENTED` at 12:45 against a 13:15 basic limit —
+augmented while under the limit — and month-wide only 49 of 779 augmented
+duties are over the base limit at all, the median sitting about 5 h under it.
+So the flag never proves an overrun, and an overrun never proves the flag.
+Any statement that mixes them is a bug, not a shortcut.
 
 ## 3. Phases
 
@@ -254,7 +284,7 @@ Candidates, each independently switchable:
 | R4 | Cabin augmentation threshold: `minimum × 1.5` or `> 4` | open |
 | R5 | Does a ride *before* the operated leg extend the member's FDP for the allowance | open (book says yes; LEON's own duty answers it per member) |
 | R6 | Compliance view wanted, and for whom | open |
-| R7 | Missing OM pages 7.1-5 … 7.1-9 | open (LEON's config now answers most of what they'd contain) |
+| R7 | Missing OM pages 7.1-5 … 7.1-9 | **closed 2026-09-08** — the owner supplied the full ten-page chapter; relief 7.1-6 §2-2, split duty 7.1-6 §2-3, positioning 7.1-7 §2-4-1, discretion 7.1-7 §2-6, rest 7.1-8 §3, standby 7.1-9 §4, cabin 7.1-10 §7 all read verbatim |
 | R8 | **Does a cabin member earn H.C on a single-sector Moscow/LED duty** because the cabin was DOUBLED, when their own duty is ~7:50 vs a 13:00 limit? | open — evidence gathered **in parallel**, not blocking |
 | R9 | Adopt LEON FTL fields as the primary regulatory source, demote our constants to a validator | open (recommend: yes — this plan assumes it) |
 

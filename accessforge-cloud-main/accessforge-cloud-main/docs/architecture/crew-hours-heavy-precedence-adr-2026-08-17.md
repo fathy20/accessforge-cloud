@@ -350,15 +350,37 @@ it as a `Decision trace` disclosure inside the existing verdict tooltip, for
 - UNKNOWN is never a final displayed verdict.
 
 
-## Pending — Decision 7 candidate: Heavy derived from the FDP tables (2026-09-03)
+## ~~Pending — Decision 7 candidate: Heavy derived from the FDP tables (2026-09-03)~~ — WITHDRAWN 2026-09-08
 
-The owner's `reference.pdf` (EgyptAir OM Chapter 7 = ECAR 121 Subpart Q =
-CAP 371) gives the mechanism behind every rule above: a rotation is Heavy
-when its planned FDP (1:30 before first departure to 0:30 after last
-landing) exceeds the Table A/B two-pilot maximum for its local start band
-and sector count; the operator then augments or carries two crews. The
-inequality reproduces all ten owner cases with times. It runs in **shadow**
-only (`fdp.py`, `FlightItem.fdp_shadow`, `FDP_SHADOW_*` trace steps) until
-the seven rulings in
-`heavy-fdp-regulatory-model-plan-2026-09-03.md` land. Nothing in Decisions
-1–6 changes meanwhile.
+The candidate proposed that *"a rotation is Heavy when its planned FDP (1:30
+before first departure to 0:30 after last landing) exceeds the Table A/B
+two-pilot maximum for its local start band and sector count; the operator
+then augments or carries two crews"*, on the strength of ten owner cases the
+inequality reproduced.
+
+**Withdrawn. Heavy is closed as a business rule and is not to be tied to an
+FDP calculation.** The full EgyptAir OM Chapter 7 (ten pages, 7.1-2 …
+7.1-11) was read independently on 2026-09-08:
+
+- The OM sets FDP limits, extensions, rest and positioning rules. It **never
+  uses the word "Heavy"**, never says "H.C", and mentions no allowance, wage,
+  bonus, compensation or overtime anywhere in the chapter. It is not
+  authority for or against a Heavy verdict.
+- The inequality fails against live data: only **49 of 779** augmented June
+  member-duties exceed the base limit, and the median augmented duty sits
+  about **5 h below** it. The ten agreeing cases were hand-picked and
+  computed on a window (report −1:30, end +0:30) that LEON is not configured
+  with.
+- Extra crew is also carried for training, ferry, familiarisation and standby
+  cover; and an over-limit duty can be lawful with no extra crew via split
+  duty (7.1-6 §2-3), commander's discretion (7.1-7 §2-6), the cabin +1:00
+  (7.1-10 §7-2-1) or the positioning-landings exclusion (7.1-7 §2-4-1).
+
+Heavy stays what Decisions 1–6 make it: the owner's rulings, LEON's
+`crewAugmentation`, and the precedence table above. `fdp.py`,
+`FlightItem.fdp_shadow` and the `FDP_SHADOW_*` trace steps remain **shadow /
+validation only** — display and diagnostics, never a verdict, a credit, an
+export cell or a total. Nothing in Decisions 1–6 changes.
+
+Evidence: `Heavy_FDP_Report/independent_review/FINDINGS.md` (Rev 2,
+2026-09-08).

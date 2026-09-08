@@ -64,3 +64,6 @@ local_storage/
 
 # Session/agent task briefs
 .*-brief.md
+
+# Local Python virtualenv (79MB) — never commit
+.venv/

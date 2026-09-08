@@ -42,7 +42,7 @@ function ResetPasswordPage() {
   };
 
   return (
-    <div className="dark min-h-screen surface-gradient grid place-items-center p-4">
+    <div className="min-h-screen surface-gradient grid place-items-center p-4">
       <form
         onSubmit={submit}
         className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 panel-shadow space-y-4"

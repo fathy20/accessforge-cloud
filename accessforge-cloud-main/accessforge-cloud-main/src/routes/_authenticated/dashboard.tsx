@@ -21,12 +21,30 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
 });
 
+/**
+ * Recharts styles only the tooltip BOX from contentStyle and falls back to a
+ * hardcoded dark colour for the text inside it, which is invisible on a dark
+ * popover. itemStyle and labelStyle are what actually colour the content.
+ */
+const CHART_TOOLTIP = {
+  contentStyle: {
+    background: "var(--popover)",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    boxShadow: "var(--surface-overlay-shadow)",
+    fontSize: 12,
+    color: "var(--popover-foreground)",
+  },
+  itemStyle: { color: "var(--popover-foreground)", padding: 0 },
+  labelStyle: { color: "var(--muted-foreground)", marginBottom: 4, fontWeight: 500 },
+} as const;
+
 const STATUS_COLORS: Record<string, string> = {
-  queued: "hsl(var(--info))",
-  running: "hsl(var(--warning))",
-  done: "hsl(var(--success))",
-  failed: "hsl(var(--destructive))",
-  cancelled: "hsl(var(--muted-foreground))",
+  queued: "var(--info)",
+  running: "var(--warning)",
+  done: "var(--success)",
+  failed: "var(--destructive)",
+  cancelled: "var(--muted-foreground)",
 };
 
 function DashboardPage() {
@@ -116,7 +134,7 @@ function DashboardPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 chart-enter">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{ar ? "المهام آخر 14 يوم" : "Jobs · last 14 days"}</CardTitle>
           </CardHeader>
@@ -133,18 +151,36 @@ function DashboardPage() {
                     <stop offset="100%" stopColor={STATUS_COLORS.failed} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="day" fontSize={11} stroke="hsl(var(--muted-foreground))" />
-                <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
-                <Area type="monotone" dataKey="done" stroke={STATUS_COLORS.done} fill="url(#g-done)" />
-                <Area type="monotone" dataKey="failed" stroke={STATUS_COLORS.failed} fill="url(#g-failed)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="day" fontSize={11} stroke="var(--muted-foreground)" />
+                <YAxis fontSize={11} stroke="var(--muted-foreground)" allowDecimals={false} />
+                <Tooltip {...CHART_TOOLTIP} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+                <Area
+                  type="monotone"
+                  dataKey="done"
+                  stroke={STATUS_COLORS.done}
+                  fill="url(#g-done)"
+                  isAnimationActive
+                  animationBegin={80}
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="failed"
+                  stroke={STATUS_COLORS.failed}
+                  fill="url(#g-failed)"
+                  isAnimationActive
+                  animationBegin={220}
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="chart-enter chart-enter--2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{ar ? "توزيع الحالات" : "Status mix"}</CardTitle>
           </CardHeader>
@@ -152,13 +188,24 @@ function DashboardPage() {
             {stats && stats.statusPie.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={stats.statusPie} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={2}>
+                  <Pie
+                    data={stats.statusPie}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={2}
+                    isAnimationActive
+                    animationBegin={0}
+                    animationDuration={700}
+                    animationEasing="ease-out"
+                  >
                     {stats.statusPie.map((s) => (
-                      <Cell key={s.name} fill={STATUS_COLORS[s.name] ?? "hsl(var(--muted-foreground))"} />
+                      <Cell key={s.name} fill={STATUS_COLORS[s.name] ?? "var(--muted-foreground)"} />
                     ))}
                   </Pie>
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
+                  <Tooltip {...CHART_TOOLTIP} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

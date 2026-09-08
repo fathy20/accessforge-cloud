@@ -107,7 +107,7 @@ function AuthPage() {
 
   return (
     <div 
-      className="dark min-h-screen w-full flex items-center justify-center p-4 relative"
+      className="min-h-screen w-full flex items-center justify-center p-4 relative"
       style={{
         backgroundImage: "url('/login_bg.jpg')",
         backgroundSize: "cover",

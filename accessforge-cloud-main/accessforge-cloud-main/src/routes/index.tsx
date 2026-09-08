@@ -1,4 +1,6 @@
-import { FlightPathBackground } from "@/components/FlightPathBackground/FlightPathBackground";
+import { SeaBands } from "@/components/SeaBands/SeaBands";
+import { WaveEmblem } from "@/components/SeaBands/WaveEmblem";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { DEFAULT_MODULE_ICON, MODULE_ICONS } from "@/lib/modules/icons";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -72,7 +74,7 @@ const features = [
 function LandingPage() {
 
   return (
-    <div className="dark min-h-screen w-full bg-background text-foreground">
+    <div dir="ltr" lang="en" className="min-h-screen w-full bg-background text-foreground">
       {/* Header */}
       <header className="border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -88,6 +90,7 @@ function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Link
               to="/auth"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -97,7 +100,7 @@ function LandingPage() {
             <Link
               to="/auth"
               search={{ mode: "signup" } as never}
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md brand-gradient text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 duration-[var(--motion-duration-fast)] transition-[filter]"
             >
               Get started <ArrowRight className="size-3.5" />
             </Link>
@@ -106,43 +109,76 @@ function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <FlightPathBackground />
-        <div className="absolute inset-0 bg-black/20 z-0 pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.5)_0%,transparent_60%)] z-0 pointer-events-none" />
-        <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32 text-center z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-card/40 text-xs text-muted-foreground mb-6 backdrop-blur-sm">
-            <span className="size-1.5 rounded-full bg-success animate-pulse" />
-            Production-ready · v0.1
+      <section
+        className="relative overflow-hidden flex items-center min-h-[calc(100vh-4rem)]"
+        style={{ backgroundColor: "var(--hero-ground)" }}
+      >
+        <SeaBands />
+
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-6 pt-16 pb-56 text-center">
+          <div className="hero-rise flex justify-center" style={{ animationDelay: "0ms" }}>
+            <WaveEmblem className="h-16 w-auto" />
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight max-w-4xl mx-auto drop-shadow-lg">
-            Aviation maintenance,{" "}
-            <span className="bg-clip-text text-transparent brand-gradient drop-shadow-sm">
-              streamlined end-to-end
-            </span>
+
+          <p
+            className="hero-rise mt-6 text-[12px] font-semibold uppercase tracking-[0.32em]"
+            style={{ color: "var(--hero-eyebrow)", animationDelay: "120ms" }}
+          >
+            REDSEA Aviation Toolkit
+          </p>
+
+          <h1
+            className="hero-rise mt-5 font-extrabold tracking-[-0.03em] text-balance"
+            style={{
+              fontFamily: '"Outfit", "Inter", ui-sans-serif, system-ui, sans-serif',
+              fontSize: "clamp(2.6rem, 7vw, 5.2rem)",
+              lineHeight: 1.03,
+              color: "var(--hero-ink)",
+              animationDelay: "240ms",
+            }}
+          >
+            Aviation maintenance,
+            <br />
+            <span style={{ color: "var(--hero-coral)" }}>streamlined</span>{" "}
+            <span style={{ color: "var(--hero-teal)" }}>end&#8209;to&#8209;end</span>
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto drop-shadow-md">
+
+          <p
+            className="hero-rise mx-auto mt-7 max-w-2xl text-lg leading-relaxed"
+            style={{ color: "var(--hero-sub)", animationDelay: "360ms" }}
+          >
             REDSEA turns your maintenance PDFs, task cards and effectivity sheets into a
             structured, searchable, auditable workflow — with role-based access and background
             processing that scales.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-3">
+
+          <div
+            className="hero-rise mt-10 flex flex-wrap items-center justify-center gap-3"
+            style={{ animationDelay: "480ms" }}
+          >
             <Link
               to="/auth"
               search={{ mode: "signup" } as never}
-              className="inline-flex items-center gap-2 h-11 px-6 rounded-md brand-gradient text-primary-foreground font-medium hover:opacity-90 glow-ring transition-opacity shadow-lg shadow-primary/20"
+              className="group inline-flex h-12 items-center gap-2 rounded-full px-8 font-semibold text-white shadow-[0_10px_28px_-10px_var(--hero-coral)] duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)] transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-10px_var(--hero-coral)] active:translate-y-0"
+              style={{ backgroundColor: "var(--hero-coral)" }}
             >
-              Create your account <ArrowRight className="size-4" />
+              Create your account
+              <ArrowRight className="size-4 duration-[var(--motion-duration-fast)] transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
               to="/auth"
-              className="inline-flex items-center gap-2 h-11 px-6 rounded-md border border-border bg-card/40 backdrop-blur-sm text-foreground font-medium hover:bg-card/60 transition-colors"
+              className="inline-flex h-12 items-center rounded-full border px-8 font-medium duration-[var(--motion-duration-fast)] transition-colors"
+              style={{ borderColor: "color-mix(in oklab, var(--hero-ink) 26%, transparent)", color: "var(--hero-ink)" }}
             >
               Sign in
             </Link>
           </div>
-          <p className="mt-6 text-xs text-muted-foreground">
-            New accounts are reviewed by an administrator before activation.
+
+          <p
+            className="hero-rise mt-7 text-xs"
+            style={{ color: "var(--hero-sub)", animationDelay: "600ms" }}
+          >
+            New accounts are reviewed by an administrator before activation. · Production-ready · v0.1
           </p>
         </div>
       </section>
@@ -221,7 +257,7 @@ function LandingPage() {
             <Link
               to="/auth"
               search={{ mode: "signup" } as never}
-              className="inline-flex items-center gap-2 h-11 px-6 rounded-md brand-gradient text-primary-foreground font-medium hover:opacity-90 glow-ring transition-opacity"
+              className="inline-flex items-center gap-2 h-12 px-7 rounded-lg bg-primary text-primary-foreground font-semibold tracking-tight hover:brightness-110 active:scale-[.99] duration-[var(--motion-duration-fast)] ease-[var(--motion-ease-standard)] transition-[filter,transform]"
             >
               Get started <ArrowRight className="size-4" />
             </Link>

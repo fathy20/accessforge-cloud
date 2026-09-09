@@ -6,7 +6,13 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
 from fastapi import Depends
 
 from .augmented import AugmentedIndex
-from .allowance import AllowanceLeg, DutyCredit, compute_member_credits
+from .allowance import (
+    NEUTRAL_POSITIONS,
+    RIDE_POSITIONS,
+    AllowanceLeg,
+    DutyCredit,
+    compute_member_credits,
+)
 from .fdp import FdpTables, assess_rotation, tables_for
 from .trace import format_break
 from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
@@ -523,9 +529,31 @@ def _paint_fdp_shadow(
     by_key = {flight.flight_nid: flight for flight in flights}
     for duty in duties:
         duty_keys = set(duty.leg_keys)
-        assessment = assess_rotation(
-            [leg for leg in member_legs if leg.key in duty_keys], tables=tables
-        )
+        duty_legs = [leg for leg in member_legs if leg.key in duty_keys]
+        # WHO this member is, from his own role slots on this duty. Identity
+        # for the trace only: the service never supplies ``crew_type``, so the
+        # limit stays the base table figure whatever this says. ``len(...) == 1``
+        # and never ``all(...)``: ``all([])`` is True, which would label a duty
+        # with no classified slot at all as Cabin.
+        tokens = [(leg.position or "").strip().upper() for leg in duty_legs]
+        groups = [_position_group(token) for token in tokens]
+        classified = {group for group in groups if group}
+        unclassified = [token for token, group in zip(tokens, groups) if group is None]
+        non_crew = RIDE_POSITIONS | NEUTRAL_POSITIONS | {"PSN"}
+        unexplained = [token for token in unclassified if token not in non_crew]
+
+        if len(classified) == 1:
+            crew_group = next(iter(classified))
+            if unexplained:
+                crew_group += " (incomplete role data)"
+        elif classified:
+            crew_group = "undetermined (mixed: " + "+".join(sorted(classified)) + ")"
+        elif unexplained:
+            crew_group = "undetermined (role data missing)"
+        else:
+            crew_group = "undetermined (positioning/neutral only)"
+
+        assessment = assess_rotation(duty_legs, tables=tables, crew_group=crew_group)
         if assessment is None:
             continue
         for key in duty.leg_keys:
@@ -547,6 +575,7 @@ def _paint_fdp_shadow(
                     if needs is None or flight.effective_heavy is None
                     else needs == flight.effective_heavy
                 ),
+                crew_group=assessment.crew_group,
                 duty_leg_keys=list(duty.leg_keys),
             )
             flight.heavy_trace.extend(

@@ -27,6 +27,11 @@ class FdpShadow(BaseModel):
     Diagnostics only. Heavy is a Red Sea business/policy verdict decided by
     the owner's rulings, LEON's ``crewAugmentation`` and the precedence table;
     nothing in here is a Heavy verdict or an input to one.
+
+    ``limit`` is the BASE Table A/B figure: the conditional differentials —
+    the cabin +1:00 (OM 7.1-10 7-2-1), in-flight relief, split duty and
+    commander's discretion — are not evaluated on this path, so it is not a
+    final personal legal limit for the member it is shown beside.
     """
 
     tables_version: str
@@ -42,6 +47,9 @@ class FdpShadow(BaseModel):
     # A False here is a diagnostic observation, not a defect: the verdict and
     # the shadow model answer different questions.
     agrees_with_verdict: bool | None # vs effective_heavy, when both are known
+    # The member's crew group on this duty, as the roster's role slots name it.
+    # Identity only: it never changes ``limit``.
+    crew_group: str | None = None
     duty_leg_keys: list[str] = []
 
 

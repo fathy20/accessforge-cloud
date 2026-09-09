@@ -7,8 +7,10 @@ test_crew_hours_heavy_rules.py). The FDP inequality must reproduce the ruling
 with no airport special case, no sector minimum, and no link constant.
 """
 
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from backend.statistics.crew_hours.allowance import AllowanceLeg
 from backend.statistics.crew_hours.fdp import (
@@ -30,6 +32,7 @@ from backend.statistics.crew_hours.fdp import (
     start_band,
     tables_for,
 )
+from backend.statistics.crew_hours.trace import format_break
 
 
 def leg(key, date, start, end, position="FO", *, adep="HRG", ades="SSH", leon=None):
@@ -420,3 +423,295 @@ class TestServiceShadow(unittest.TestCase):
             om = self._response(rows).crew_members[0].flights[0].fdp_shadow
         self.assertEqual((om.tables_version, om.limit), ("om-2009", "12:30"))
         self.assertEqual((ecar.tables_version, ecar.limit), ("ecar-2016", "11:45"))
+
+
+# ---------------------------------------------------------------------------
+# crew_group: the member's crew group, carried through the shadow for
+# IDENTITY only. It never enters the arithmetic — see the anti-hack test.
+# ---------------------------------------------------------------------------
+
+BASELINE_PATH = (
+    Path(__file__).parent / "fixtures" / "crew_hours_fdp_shadow_baseline.json"
+)
+
+# One rotation, flown by seven members whose position tokens exercise every
+# branch of the crew_group derivation. HRG->LIS out, LIS->HRG home.
+ACCEPTANCE_CODES = ["CKP", "CAB", "ENG", "MIX", "POS", "MIS", "CIN"]
+ACCEPTANCE_OUT_POSITIONS = ["FO", "FA3", "ENG1", "FA3", "PAD", "ZZZ", "FA3"]
+ACCEPTANCE_HOME_POSITIONS = ["PAD", "PAD", "ENG1", "ENG1", "PSN", "ZZZ", "ZZZ"]
+EXPECTED_CREW_GROUPS = {
+    "CKP": "Cockpit",
+    "CAB": "Cabin",
+    "ENG": "Maintenance",
+    "MIX": "undetermined (mixed: Cabin+Maintenance)",
+    "POS": "undetermined (positioning/neutral only)",
+    "MIS": "undetermined (role data missing)",
+    "CIN": "Cabin (incomplete role data)",
+}
+
+
+def shadow_row(uid, number, adep, ades, date, start, end, codes, positions):
+    return {
+        "scope_row_unique_id": f"row-{uid}",
+        "unique_id": uid,
+        "flightNo": number,
+        "crew_codes": list(codes),
+        "crew_names": [f"Crew {c}" for c in codes],
+        "crew_position_names": list(positions),
+        "acftType": "B738 - 737-800",
+        "blockTimeJourneyLog": "01:30",
+        "jl_adep_preferred_code": adep,
+        "jl_ades_preferred_code": ades,
+        "date_STD_log_UTC": date,
+        "JL_STD_UTC": start,
+        "JL_STA_UTC": end,
+    }
+
+
+def acceptance_rows():
+    # Three duties so the frozen fields include a Heavy Yes (SVX), a Heavy No
+    # (EVN) and an undetermined verdict, not just one of them.
+    return [
+        shadow_row(931, "RSX6077", "HRG", "LIS", "10-06-2026", "14:25", "20:40",
+                   ACCEPTANCE_CODES, ACCEPTANCE_OUT_POSITIONS),
+        shadow_row(932, "RSX6078", "LIS", "HRG", "10-06-2026", "21:50", "03:35",
+                   ACCEPTANCE_CODES, ACCEPTANCE_HOME_POSITIONS),
+        shadow_row(933, "RSX6100", "SSH", "SVX", "20-06-2026", "17:15", "22:35",
+                   ACCEPTANCE_CODES, ACCEPTANCE_OUT_POSITIONS),
+        shadow_row(934, "RSX6101", "SVX", "SSH", "20-06-2026", "23:50", "06:00",
+                   ACCEPTANCE_CODES, ACCEPTANCE_HOME_POSITIONS),
+        shadow_row(935, "RSX6200", "SSH", "EVN", "22-06-2026", "08:00", "12:00",
+                   ACCEPTANCE_CODES, ACCEPTANCE_OUT_POSITIONS),
+        shadow_row(936, "RSX6201", "EVN", "SSH", "22-06-2026", "13:30", "17:30",
+                   ACCEPTANCE_CODES, ACCEPTANCE_HOME_POSITIONS),
+    ]
+
+
+def live_report(rows):
+    """The report exactly as the API builds it, through the real service."""
+
+    from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
+    from backend.statistics.crew_hours.service import LiveCrewHoursService
+
+    totals = {code: "10:00" for row in rows for code in row["crew_codes"] if code}
+
+    class FakeCrewClient:
+        def fetch_official_totals(self, from_date, to_date):
+            return OfficialMcpReport(totals, rows)
+
+    return LiveCrewHoursService(FakeCrewClient()).get_crew_hours_report(
+        "2026-06-01", "2026-06-30"
+    )
+
+
+def workbook_cells(report):
+    """Every written cell of the exported workbook, sheet by sheet."""
+
+    from openpyxl import load_workbook
+
+    from backend.statistics.crew_hours.export import build_crew_hours_workbook
+
+    stream = build_crew_hours_workbook(
+        report,
+        generated_at=datetime(2026, 9, 9, 12, 0, tzinfo=timezone.utc),
+        generated_by="fixture@example.com",
+    )
+    book = load_workbook(stream)
+    return {
+        sheet.title: [
+            [cell.coordinate, str(cell.value)]
+            for row in sheet.iter_rows()
+            for cell in row
+            if cell.value is not None
+        ]
+        for sheet in book.worksheets
+    }
+
+
+def acceptance_snapshot():
+    """Everything the crew_group change is forbidden to move.
+
+    ``crew_group`` and the new trace keys are deliberately absent: they are
+    the only things allowed to differ between the before and after runs.
+    """
+
+    report = live_report(acceptance_rows())
+    members = {}
+    for member in sorted(report.crew_members, key=lambda item: item.person_code or ""):
+        legs = []
+        for flight in sorted(member.flights, key=lambda item: item.flight_nid):
+            shadow = flight.fdp_shadow
+            legs.append({
+                "flight_nid": flight.flight_nid,
+                "position": flight.position,
+                "effective_heavy": flight.effective_heavy,
+                "heavy_source": flight.heavy_source,
+                "heavy_reason": flight.heavy_reason,
+                "duty_credit": flight.duty_credit,
+                "credit_source": flight.credit_source,
+                "fdp_limit": None if shadow is None else shadow.limit,
+                "fdp_margin": None if shadow is None else shadow.margin,
+                "planned": None if shadow is None else shadow.planned,
+                "needs_augmentation": None if shadow is None else shadow.needs_augmentation,
+                "agrees_with_verdict": None if shadow is None else shadow.agrees_with_verdict,
+                "band": None if shadow is None else shadow.band,
+                "sectors": None if shadow is None else shadow.sectors,
+                "table": None if shadow is None else shadow.table,
+                "tables_version": None if shadow is None else shadow.tables_version,
+                "duty_leg_keys": None if shadow is None else sorted(shadow.duty_leg_keys),
+            })
+        members[member.person_code] = {
+            "position_type": member.position_type,
+            "official_total": member.official_total,
+            "flight_count": member.flight_count,
+            "heavy_credits": member.heavy_credits,
+            "legs": legs,
+        }
+    return {
+        "members": members,
+        "official_totals_by_position": dict(report.official_totals_by_position),
+        "xlsx": workbook_cells(report),
+    }
+
+
+def shadow_by_code(report):
+    """The first duty's shadow per member, by leg key so the pick is stable."""
+
+    shadows = {}
+    for member in report.crew_members:
+        for flight in sorted(member.flights, key=lambda item: item.flight_nid):
+            if flight.fdp_shadow is not None:
+                shadows.setdefault(member.person_code, flight.fdp_shadow)
+    return shadows
+
+
+class TestCrewGroupIdentity(unittest.TestCase):
+    """The member's crew group is reported; the number never moves for it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.report = live_report(acceptance_rows())
+        cls.shadows = shadow_by_code(cls.report)
+
+    def test_a_cabin_duty_is_labelled_cabin_and_keeps_the_cockpit_limit(self):
+        # THE anti-hack test: identity changed, arithmetic did not. The cabin
+        # member's limit is the plain Table A cell for this band and sector
+        # count — no +1:00 anywhere on the service path.
+        cabin = self.shadows["CAB"]
+        cockpit = self.shadows["CKP"]
+        self.assertEqual(cabin.crew_group, "Cabin")
+        self.assertEqual(cockpit.crew_group, "Cockpit")
+        table_limit = TABLES_OM_2009.table_a_limit(cabin.band, cabin.sectors)
+        self.assertEqual(cabin.limit, "12:15")
+        self.assertEqual(cabin.limit, format_break(table_limit))
+        self.assertEqual(cabin.limit, cockpit.limit)
+        self.assertEqual(cabin.margin, cockpit.margin)
+        self.assertEqual(cabin.needs_augmentation, cockpit.needs_augmentation)
+
+    def test_every_derivation_branch(self):
+        for code, expected in EXPECTED_CREW_GROUPS.items():
+            self.assertEqual(self.shadows[code].crew_group, expected, code)
+
+    def test_positioning_only_and_missing_roles_are_never_cabin(self):
+        for code in ("POS", "MIS"):
+            self.assertNotEqual(self.shadows[code].crew_group, "Cabin", code)
+            self.assertTrue(self.shadows[code].crew_group.startswith("undetermined"), code)
+
+    def test_an_empty_duty_and_unparseable_positions_do_not_crash(self):
+        from backend.statistics.crew_hours.service import _paint_fdp_shadow
+
+        _paint_fdp_shadow([], [], [], TABLES_OM_2009)  # no legs, no duties
+
+        report = live_report([
+            shadow_row(941, "RSX7001", "HRG", "LIS", "12-06-2026", "14:25", "20:40",
+                       ["BLANK"], [""]),
+            shadow_row(942, "RSX7002", "LIS", "HRG", "12-06-2026", "21:50", "03:35",
+                       ["BLANK"], [None]),
+        ])
+        shadow = shadow_by_code(report)["BLANK"]
+        self.assertNotEqual(shadow.crew_group, "Cabin")
+        self.assertEqual(shadow.crew_group, "undetermined (role data missing)")
+
+    def test_the_three_representations_agree(self):
+        assessment = assess_rotation(
+            [
+                leg("a", "10-06-2026", "14:25", "20:40", "FA3", adep="HRG", ades="LIS"),
+                leg("b", "10-06-2026", "21:50", "03:35", "PAD", adep="LIS", ades="HRG"),
+            ],
+            crew_group="Cabin",
+        )
+        limit_step = next(item for item in assessment.trace if item.step == "FDP_SHADOW_LIMIT")
+        self.assertEqual(assessment.crew_group, "Cabin")
+        self.assertEqual(limit_step.inputs["crew_group"], "Cabin")
+
+        for member in self.report.crew_members:
+            if member.person_code != "CAB":
+                continue
+            for flight in member.flights:
+                painted = next(
+                    item for item in flight.heavy_trace if item.step == "FDP_SHADOW_LIMIT"
+                )
+                self.assertEqual(flight.fdp_shadow.crew_group, "Cabin")
+                self.assertEqual(painted.inputs["crew_group"], "Cabin")
+
+
+class TestCrewGroupTrace(unittest.TestCase):
+    """The FDP_SHADOW_LIMIT chips explain themselves; crew_type still ships."""
+
+    def test_service_path_step_keeps_crew_type_and_adds_the_four_keys(self):
+        report = live_report(acceptance_rows())
+        shadow_flight = next(
+            flight
+            for member in report.crew_members
+            if member.person_code == "CAB"
+            for flight in member.flights
+        )
+        inputs = next(
+            item.inputs for item in shadow_flight.heavy_trace
+            if item.step == "FDP_SHADOW_LIMIT"
+        )
+        # The old key survives, with its old value: this change is additive.
+        self.assertIn("crew_type", inputs)
+        self.assertEqual(inputs["crew_type"], "cockpit")
+        self.assertEqual(inputs["crew_type_role"], "calculation input, not member identity")
+        self.assertEqual(inputs["crew_group"], "Cabin")
+        self.assertIn("conditional differentials not evaluated", inputs["basis"])
+        self.assertIn("cabin +1:00 (OM 7.1-10 7-2-1) eligibility", inputs["not_evaluated"])
+        self.assertIn("in-flight relief (7.1-6 2-2)", inputs["not_evaluated"])
+        self.assertIn("split duty (7.1-6 2-3)", inputs["not_evaluated"])
+        self.assertIn("discretion (7.1-7 2-6)", inputs["not_evaluated"])
+
+    def test_an_unsupplied_crew_group_renders_as_undetermined(self):
+        window = rotation_window([leg("a", "01-07-2026", "06:30", "10:00")])
+        inputs = next(
+            item.inputs for item in assess(window).trace if item.step == "FDP_SHADOW_LIMIT"
+        )
+        self.assertEqual(inputs["crew_group"], "undetermined")
+
+    def test_an_explicit_cabin_caller_still_gets_the_hour_and_is_told_so(self):
+        window = rotation_window([
+            leg("a", "16-06-2026", "17:15", "22:35", adep="SSH", ades="SVX"),
+            leg("b", "16-06-2026", "23:50", "06:00", adep="SVX", ades="SSH"),
+        ])
+        cockpit = assess(window)
+        cabin = assess(window, crew_type="cabin", crew_group="Cabin")
+        self.assertEqual(cabin.limit, cockpit.limit + timedelta(hours=1))
+        self.assertEqual(cabin.limit, hm("13:15"))
+        inputs = next(
+            item.inputs for item in cabin.trace if item.step == "FDP_SHADOW_LIMIT"
+        )
+        self.assertEqual(inputs["crew_type"], "cabin")
+        self.assertEqual(inputs["crew_group"], "Cabin")
+        self.assertIn("caller-requested cabin differential", inputs["basis"])
+        self.assertIn("eligibility is not verified by this module", inputs["basis"])
+        # The cabin item drops out of the not-evaluated list once it is applied.
+        self.assertNotIn("cabin +1:00", inputs["not_evaluated"])
+        self.assertIn("in-flight relief (7.1-6 2-2)", inputs["not_evaluated"])
+
+
+class TestNumberDidNotMove(unittest.TestCase):
+    """The acceptance gate: a before/after fixture through the real service."""
+
+    def test_every_frozen_field_matches_the_pre_change_baseline(self):
+        baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(acceptance_snapshot(), baseline)

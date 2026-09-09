@@ -1,0 +1,2558 @@
+{
+  "members": {
+    "CAB": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": "Cabin"
+    },
+    "CIN": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": "Cabin"
+    },
+    "CKP": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "FO",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "FO",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "FO",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": "Cockpit"
+    },
+    "ENG": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": "Maintenance"
+    },
+    "MIS": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ZZZ",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": null
+    },
+    "MIX": {
+      "flight_count": 6,
+      "heavy_credits": 2,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": "OPERATE_PLUS_RIDE",
+          "duty_credit": true,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "FA3",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "ENG1",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": "Cabin"
+    },
+    "POS": {
+      "flight_count": 6,
+      "heavy_credits": 0,
+      "legs": [
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-931",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": null,
+          "band": "15:00-21:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-931",
+            "row-932"
+          ],
+          "effective_heavy": null,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:55",
+          "flight_nid": "row-932",
+          "heavy_reason": "UNKNOWN",
+          "heavy_source": "UNKNOWN",
+          "needs_augmentation": true,
+          "planned": "15:10",
+          "position": "PSN",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-933",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "15:00-21:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-933",
+            "row-934"
+          ],
+          "effective_heavy": true,
+          "fdp_limit": "12:15",
+          "fdp_margin": "2:30",
+          "flight_nid": "row-934",
+          "heavy_reason": "SVX_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": true,
+          "planned": "14:45",
+          "position": "PSN",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-935",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "PAD",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        },
+        {
+          "agrees_with_verdict": true,
+          "band": "08:00-14:59",
+          "credit_source": null,
+          "duty_credit": false,
+          "duty_leg_keys": [
+            "row-935",
+            "row-936"
+          ],
+          "effective_heavy": false,
+          "fdp_limit": "13:15",
+          "fdp_margin": "-1:45",
+          "flight_nid": "row-936",
+          "heavy_reason": "EVN_AIRPORT",
+          "heavy_source": "LOCAL_RULE",
+          "needs_augmentation": false,
+          "planned": "11:30",
+          "position": "PSN",
+          "sectors": 2,
+          "table": "A",
+          "tables_version": "om-2009"
+        }
+      ],
+      "official_total": "10:00",
+      "position_type": null
+    }
+  },
+  "official_totals_by_position": {
+    "Cabin": "30:00",
+    "Cockpit": "10:00",
+    "Maintenance": "10:00",
+    "Unclassified": "20:00"
+  },
+  "xlsx": {
+    "Cabin": [
+      [
+        "A4",
+        "Position type"
+      ],
+      [
+        "B4",
+        "Name"
+      ],
+      [
+        "C4",
+        "Surname"
+      ],
+      [
+        "D4",
+        "Date"
+      ],
+      [
+        "E4",
+        "Aircraft"
+      ],
+      [
+        "F4",
+        "Flight number"
+      ],
+      [
+        "G4",
+        "ADEP "
+      ],
+      [
+        "H4",
+        "ADES"
+      ],
+      [
+        "I4",
+        "OFF"
+      ],
+      [
+        "J4",
+        "ON"
+      ],
+      [
+        "K4",
+        "Block time"
+      ],
+      [
+        "L4",
+        "Heavy"
+      ],
+      [
+        "A5",
+        "Cabin"
+      ],
+      [
+        "B5",
+        "Crew"
+      ],
+      [
+        "C5",
+        "CAB"
+      ],
+      [
+        "D5",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F5",
+        "RSX6077"
+      ],
+      [
+        "G5",
+        "HRG"
+      ],
+      [
+        "H5",
+        "LIS"
+      ],
+      [
+        "I5",
+        "14:25:00"
+      ],
+      [
+        "J5",
+        "20:40:00"
+      ],
+      [
+        "K5",
+        "01:30:00"
+      ],
+      [
+        "L5",
+        "Yes"
+      ],
+      [
+        "A6",
+        "Not-Active"
+      ],
+      [
+        "B6",
+        "Crew"
+      ],
+      [
+        "C6",
+        "CAB"
+      ],
+      [
+        "D6",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F6",
+        "RSX6078"
+      ],
+      [
+        "G6",
+        "LIS"
+      ],
+      [
+        "H6",
+        "HRG"
+      ],
+      [
+        "I6",
+        "21:50:00"
+      ],
+      [
+        "J6",
+        "03:35:00"
+      ],
+      [
+        "K6",
+        "01:30:00"
+      ],
+      [
+        "L6",
+        "PAD"
+      ],
+      [
+        "A7",
+        "Cabin"
+      ],
+      [
+        "B7",
+        "Crew"
+      ],
+      [
+        "C7",
+        "CAB"
+      ],
+      [
+        "D7",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F7",
+        "RSX6100"
+      ],
+      [
+        "G7",
+        "SSH"
+      ],
+      [
+        "H7",
+        "SVX"
+      ],
+      [
+        "I7",
+        "17:15:00"
+      ],
+      [
+        "J7",
+        "22:35:00"
+      ],
+      [
+        "K7",
+        "01:30:00"
+      ],
+      [
+        "L7",
+        "Yes"
+      ],
+      [
+        "A8",
+        "Not-Active"
+      ],
+      [
+        "B8",
+        "Crew"
+      ],
+      [
+        "C8",
+        "CAB"
+      ],
+      [
+        "D8",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F8",
+        "RSX6101"
+      ],
+      [
+        "G8",
+        "SVX"
+      ],
+      [
+        "H8",
+        "SSH"
+      ],
+      [
+        "I8",
+        "23:50:00"
+      ],
+      [
+        "J8",
+        "06:00:00"
+      ],
+      [
+        "K8",
+        "01:30:00"
+      ],
+      [
+        "L8",
+        "PAD"
+      ],
+      [
+        "A9",
+        "Cabin"
+      ],
+      [
+        "B9",
+        "Crew"
+      ],
+      [
+        "C9",
+        "CAB"
+      ],
+      [
+        "D9",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F9",
+        "RSX6200"
+      ],
+      [
+        "G9",
+        "SSH"
+      ],
+      [
+        "H9",
+        "EVN"
+      ],
+      [
+        "I9",
+        "08:00:00"
+      ],
+      [
+        "J9",
+        "12:00:00"
+      ],
+      [
+        "K9",
+        "01:30:00"
+      ],
+      [
+        "L9",
+        "No"
+      ],
+      [
+        "A10",
+        "Not-Active"
+      ],
+      [
+        "B10",
+        "Crew"
+      ],
+      [
+        "C10",
+        "CAB"
+      ],
+      [
+        "D10",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F10",
+        "RSX6201"
+      ],
+      [
+        "G10",
+        "EVN"
+      ],
+      [
+        "H10",
+        "SSH"
+      ],
+      [
+        "I10",
+        "13:30:00"
+      ],
+      [
+        "J10",
+        "17:30:00"
+      ],
+      [
+        "K10",
+        "01:30:00"
+      ],
+      [
+        "L10",
+        "PAD"
+      ],
+      [
+        "A11",
+        "Crew"
+      ],
+      [
+        "B11",
+        "CAB"
+      ],
+      [
+        "D11",
+        "2026-06-01 00:00:00"
+      ],
+      [
+        "I11",
+        "Total"
+      ],
+      [
+        "K11",
+        "10:00:00"
+      ],
+      [
+        "L11",
+        "H.C 2"
+      ],
+      [
+        "A15",
+        "Position type"
+      ],
+      [
+        "B15",
+        "Name"
+      ],
+      [
+        "C15",
+        "Surname"
+      ],
+      [
+        "D15",
+        "Date"
+      ],
+      [
+        "E15",
+        "Aircraft"
+      ],
+      [
+        "F15",
+        "Flight number"
+      ],
+      [
+        "G15",
+        "ADEP "
+      ],
+      [
+        "H15",
+        "ADES"
+      ],
+      [
+        "I15",
+        "OFF"
+      ],
+      [
+        "J15",
+        "ON"
+      ],
+      [
+        "K15",
+        "Block time"
+      ],
+      [
+        "L15",
+        "Heavy"
+      ],
+      [
+        "A16",
+        "Cabin"
+      ],
+      [
+        "B16",
+        "Crew"
+      ],
+      [
+        "C16",
+        "CIN"
+      ],
+      [
+        "D16",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F16",
+        "RSX6077"
+      ],
+      [
+        "G16",
+        "HRG"
+      ],
+      [
+        "H16",
+        "LIS"
+      ],
+      [
+        "I16",
+        "14:25:00"
+      ],
+      [
+        "J16",
+        "20:40:00"
+      ],
+      [
+        "K16",
+        "01:30:00"
+      ],
+      [
+        "L16",
+        "Yes"
+      ],
+      [
+        "A17",
+        "Cabin"
+      ],
+      [
+        "B17",
+        "Crew"
+      ],
+      [
+        "C17",
+        "CIN"
+      ],
+      [
+        "D17",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F17",
+        "RSX6078"
+      ],
+      [
+        "G17",
+        "LIS"
+      ],
+      [
+        "H17",
+        "HRG"
+      ],
+      [
+        "I17",
+        "21:50:00"
+      ],
+      [
+        "J17",
+        "03:35:00"
+      ],
+      [
+        "K17",
+        "01:30:00"
+      ],
+      [
+        "L17",
+        "Yes"
+      ],
+      [
+        "A18",
+        "Cabin"
+      ],
+      [
+        "B18",
+        "Crew"
+      ],
+      [
+        "C18",
+        "CIN"
+      ],
+      [
+        "D18",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F18",
+        "RSX6100"
+      ],
+      [
+        "G18",
+        "SSH"
+      ],
+      [
+        "H18",
+        "SVX"
+      ],
+      [
+        "I18",
+        "17:15:00"
+      ],
+      [
+        "J18",
+        "22:35:00"
+      ],
+      [
+        "K18",
+        "01:30:00"
+      ],
+      [
+        "L18",
+        "Yes"
+      ],
+      [
+        "A19",
+        "Cabin"
+      ],
+      [
+        "B19",
+        "Crew"
+      ],
+      [
+        "C19",
+        "CIN"
+      ],
+      [
+        "D19",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F19",
+        "RSX6101"
+      ],
+      [
+        "G19",
+        "SVX"
+      ],
+      [
+        "H19",
+        "SSH"
+      ],
+      [
+        "I19",
+        "23:50:00"
+      ],
+      [
+        "J19",
+        "06:00:00"
+      ],
+      [
+        "K19",
+        "01:30:00"
+      ],
+      [
+        "L19",
+        "Yes"
+      ],
+      [
+        "A20",
+        "Cabin"
+      ],
+      [
+        "B20",
+        "Crew"
+      ],
+      [
+        "C20",
+        "CIN"
+      ],
+      [
+        "D20",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F20",
+        "RSX6200"
+      ],
+      [
+        "G20",
+        "SSH"
+      ],
+      [
+        "H20",
+        "EVN"
+      ],
+      [
+        "I20",
+        "08:00:00"
+      ],
+      [
+        "J20",
+        "12:00:00"
+      ],
+      [
+        "K20",
+        "01:30:00"
+      ],
+      [
+        "L20",
+        "No"
+      ],
+      [
+        "A21",
+        "Cabin"
+      ],
+      [
+        "B21",
+        "Crew"
+      ],
+      [
+        "C21",
+        "CIN"
+      ],
+      [
+        "D21",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F21",
+        "RSX6201"
+      ],
+      [
+        "G21",
+        "EVN"
+      ],
+      [
+        "H21",
+        "SSH"
+      ],
+      [
+        "I21",
+        "13:30:00"
+      ],
+      [
+        "J21",
+        "17:30:00"
+      ],
+      [
+        "K21",
+        "01:30:00"
+      ],
+      [
+        "L21",
+        "No"
+      ],
+      [
+        "A22",
+        "Crew"
+      ],
+      [
+        "B22",
+        "CIN"
+      ],
+      [
+        "D22",
+        "2026-06-01 00:00:00"
+      ],
+      [
+        "I22",
+        "Total"
+      ],
+      [
+        "K22",
+        "10:00:00"
+      ],
+      [
+        "L22",
+        "H.C 2"
+      ],
+      [
+        "A26",
+        "Position type"
+      ],
+      [
+        "B26",
+        "Name"
+      ],
+      [
+        "C26",
+        "Surname"
+      ],
+      [
+        "D26",
+        "Date"
+      ],
+      [
+        "E26",
+        "Aircraft"
+      ],
+      [
+        "F26",
+        "Flight number"
+      ],
+      [
+        "G26",
+        "ADEP "
+      ],
+      [
+        "H26",
+        "ADES"
+      ],
+      [
+        "I26",
+        "OFF"
+      ],
+      [
+        "J26",
+        "ON"
+      ],
+      [
+        "K26",
+        "Block time"
+      ],
+      [
+        "L26",
+        "Heavy"
+      ],
+      [
+        "A27",
+        "Cabin"
+      ],
+      [
+        "B27",
+        "Crew"
+      ],
+      [
+        "C27",
+        "MIX"
+      ],
+      [
+        "D27",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F27",
+        "RSX6077"
+      ],
+      [
+        "G27",
+        "HRG"
+      ],
+      [
+        "H27",
+        "LIS"
+      ],
+      [
+        "I27",
+        "14:25:00"
+      ],
+      [
+        "J27",
+        "20:40:00"
+      ],
+      [
+        "K27",
+        "01:30:00"
+      ],
+      [
+        "L27",
+        "Yes"
+      ],
+      [
+        "A28",
+        "Cabin"
+      ],
+      [
+        "B28",
+        "Crew"
+      ],
+      [
+        "C28",
+        "MIX"
+      ],
+      [
+        "D28",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F28",
+        "RSX6078"
+      ],
+      [
+        "G28",
+        "LIS"
+      ],
+      [
+        "H28",
+        "HRG"
+      ],
+      [
+        "I28",
+        "21:50:00"
+      ],
+      [
+        "J28",
+        "03:35:00"
+      ],
+      [
+        "K28",
+        "01:30:00"
+      ],
+      [
+        "L28",
+        "Yes"
+      ],
+      [
+        "A29",
+        "Cabin"
+      ],
+      [
+        "B29",
+        "Crew"
+      ],
+      [
+        "C29",
+        "MIX"
+      ],
+      [
+        "D29",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F29",
+        "RSX6100"
+      ],
+      [
+        "G29",
+        "SSH"
+      ],
+      [
+        "H29",
+        "SVX"
+      ],
+      [
+        "I29",
+        "17:15:00"
+      ],
+      [
+        "J29",
+        "22:35:00"
+      ],
+      [
+        "K29",
+        "01:30:00"
+      ],
+      [
+        "L29",
+        "Yes"
+      ],
+      [
+        "A30",
+        "Cabin"
+      ],
+      [
+        "B30",
+        "Crew"
+      ],
+      [
+        "C30",
+        "MIX"
+      ],
+      [
+        "D30",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F30",
+        "RSX6101"
+      ],
+      [
+        "G30",
+        "SVX"
+      ],
+      [
+        "H30",
+        "SSH"
+      ],
+      [
+        "I30",
+        "23:50:00"
+      ],
+      [
+        "J30",
+        "06:00:00"
+      ],
+      [
+        "K30",
+        "01:30:00"
+      ],
+      [
+        "L30",
+        "Yes"
+      ],
+      [
+        "A31",
+        "Cabin"
+      ],
+      [
+        "B31",
+        "Crew"
+      ],
+      [
+        "C31",
+        "MIX"
+      ],
+      [
+        "D31",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F31",
+        "RSX6200"
+      ],
+      [
+        "G31",
+        "SSH"
+      ],
+      [
+        "H31",
+        "EVN"
+      ],
+      [
+        "I31",
+        "08:00:00"
+      ],
+      [
+        "J31",
+        "12:00:00"
+      ],
+      [
+        "K31",
+        "01:30:00"
+      ],
+      [
+        "L31",
+        "No"
+      ],
+      [
+        "A32",
+        "Cabin"
+      ],
+      [
+        "B32",
+        "Crew"
+      ],
+      [
+        "C32",
+        "MIX"
+      ],
+      [
+        "D32",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F32",
+        "RSX6201"
+      ],
+      [
+        "G32",
+        "EVN"
+      ],
+      [
+        "H32",
+        "SSH"
+      ],
+      [
+        "I32",
+        "13:30:00"
+      ],
+      [
+        "J32",
+        "17:30:00"
+      ],
+      [
+        "K32",
+        "01:30:00"
+      ],
+      [
+        "L32",
+        "No"
+      ],
+      [
+        "A33",
+        "Crew"
+      ],
+      [
+        "B33",
+        "MIX"
+      ],
+      [
+        "D33",
+        "2026-06-01 00:00:00"
+      ],
+      [
+        "I33",
+        "Total"
+      ],
+      [
+        "K33",
+        "10:00:00"
+      ],
+      [
+        "L33",
+        "H.C 2"
+      ]
+    ],
+    "Cabin Summary": [
+      [
+        "B1",
+        "Cabin HRS.Jun.26"
+      ],
+      [
+        "B2",
+        "Name"
+      ],
+      [
+        "D2",
+        "Block time"
+      ],
+      [
+        "E2",
+        "H.C"
+      ],
+      [
+        "A3",
+        "1"
+      ],
+      [
+        "B3",
+        "Crew"
+      ],
+      [
+        "C3",
+        "CAB"
+      ],
+      [
+        "D3",
+        "10:00:00"
+      ],
+      [
+        "E3",
+        "2"
+      ],
+      [
+        "A4",
+        "2"
+      ],
+      [
+        "B4",
+        "Crew"
+      ],
+      [
+        "C4",
+        "CIN"
+      ],
+      [
+        "D4",
+        "10:00:00"
+      ],
+      [
+        "E4",
+        "2"
+      ],
+      [
+        "A5",
+        "3"
+      ],
+      [
+        "B5",
+        "Crew"
+      ],
+      [
+        "C5",
+        "MIX"
+      ],
+      [
+        "D5",
+        "10:00:00"
+      ],
+      [
+        "E5",
+        "2"
+      ],
+      [
+        "B6",
+        "Total"
+      ],
+      [
+        "D6",
+        "1 day, 6:00:00"
+      ],
+      [
+        "E6",
+        "6"
+      ]
+    ],
+    "Cockpit": [
+      [
+        "A4",
+        "Position type"
+      ],
+      [
+        "B4",
+        "Name"
+      ],
+      [
+        "C4",
+        "Surname"
+      ],
+      [
+        "D4",
+        "Date"
+      ],
+      [
+        "E4",
+        "Aircraft"
+      ],
+      [
+        "F4",
+        "Flight number"
+      ],
+      [
+        "G4",
+        "ADEP "
+      ],
+      [
+        "H4",
+        "ADES"
+      ],
+      [
+        "I4",
+        "OFF"
+      ],
+      [
+        "J4",
+        "ON"
+      ],
+      [
+        "K4",
+        "Block time"
+      ],
+      [
+        "L4",
+        "Heavy"
+      ],
+      [
+        "A5",
+        "Cockpit"
+      ],
+      [
+        "B5",
+        "Crew"
+      ],
+      [
+        "C5",
+        "CKP"
+      ],
+      [
+        "D5",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F5",
+        "RSX6077"
+      ],
+      [
+        "G5",
+        "HRG"
+      ],
+      [
+        "H5",
+        "LIS"
+      ],
+      [
+        "I5",
+        "14:25:00"
+      ],
+      [
+        "J5",
+        "20:40:00"
+      ],
+      [
+        "K5",
+        "01:30:00"
+      ],
+      [
+        "L5",
+        "Yes"
+      ],
+      [
+        "A6",
+        "Not-Active"
+      ],
+      [
+        "B6",
+        "Crew"
+      ],
+      [
+        "C6",
+        "CKP"
+      ],
+      [
+        "D6",
+        "2026-06-10 00:00:00"
+      ],
+      [
+        "F6",
+        "RSX6078"
+      ],
+      [
+        "G6",
+        "LIS"
+      ],
+      [
+        "H6",
+        "HRG"
+      ],
+      [
+        "I6",
+        "21:50:00"
+      ],
+      [
+        "J6",
+        "03:35:00"
+      ],
+      [
+        "K6",
+        "01:30:00"
+      ],
+      [
+        "L6",
+        "PAD"
+      ],
+      [
+        "A7",
+        "Cockpit"
+      ],
+      [
+        "B7",
+        "Crew"
+      ],
+      [
+        "C7",
+        "CKP"
+      ],
+      [
+        "D7",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F7",
+        "RSX6100"
+      ],
+      [
+        "G7",
+        "SSH"
+      ],
+      [
+        "H7",
+        "SVX"
+      ],
+      [
+        "I7",
+        "17:15:00"
+      ],
+      [
+        "J7",
+        "22:35:00"
+      ],
+      [
+        "K7",
+        "01:30:00"
+      ],
+      [
+        "L7",
+        "Yes"
+      ],
+      [
+        "A8",
+        "Not-Active"
+      ],
+      [
+        "B8",
+        "Crew"
+      ],
+      [
+        "C8",
+        "CKP"
+      ],
+      [
+        "D8",
+        "2026-06-20 00:00:00"
+      ],
+      [
+        "F8",
+        "RSX6101"
+      ],
+      [
+        "G8",
+        "SVX"
+      ],
+      [
+        "H8",
+        "SSH"
+      ],
+      [
+        "I8",
+        "23:50:00"
+      ],
+      [
+        "J8",
+        "06:00:00"
+      ],
+      [
+        "K8",
+        "01:30:00"
+      ],
+      [
+        "L8",
+        "PAD"
+      ],
+      [
+        "A9",
+        "Cockpit"
+      ],
+      [
+        "B9",
+        "Crew"
+      ],
+      [
+        "C9",
+        "CKP"
+      ],
+      [
+        "D9",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F9",
+        "RSX6200"
+      ],
+      [
+        "G9",
+        "SSH"
+      ],
+      [
+        "H9",
+        "EVN"
+      ],
+      [
+        "I9",
+        "08:00:00"
+      ],
+      [
+        "J9",
+        "12:00:00"
+      ],
+      [
+        "K9",
+        "01:30:00"
+      ],
+      [
+        "L9",
+        "No"
+      ],
+      [
+        "A10",
+        "Not-Active"
+      ],
+      [
+        "B10",
+        "Crew"
+      ],
+      [
+        "C10",
+        "CKP"
+      ],
+      [
+        "D10",
+        "2026-06-22 00:00:00"
+      ],
+      [
+        "F10",
+        "RSX6201"
+      ],
+      [
+        "G10",
+        "EVN"
+      ],
+      [
+        "H10",
+        "SSH"
+      ],
+      [
+        "I10",
+        "13:30:00"
+      ],
+      [
+        "J10",
+        "17:30:00"
+      ],
+      [
+        "K10",
+        "01:30:00"
+      ],
+      [
+        "L10",
+        "PAD"
+      ],
+      [
+        "A11",
+        "Crew"
+      ],
+      [
+        "B11",
+        "CKP"
+      ],
+      [
+        "D11",
+        "2026-06-01 00:00:00"
+      ],
+      [
+        "I11",
+        "Total"
+      ],
+      [
+        "K11",
+        "10:00:00"
+      ],
+      [
+        "L11",
+        "H.C 2"
+      ]
+    ],
+    "Cockpit Summary": [
+      [
+        "B1",
+        "Cockpit HRS.Jun.26"
+      ],
+      [
+        "B2",
+        "Name"
+      ],
+      [
+        "D2",
+        "Block time"
+      ],
+      [
+        "E2",
+        "H.C"
+      ],
+      [
+        "A3",
+        "1"
+      ],
+      [
+        "B3",
+        "Crew"
+      ],
+      [
+        "C3",
+        "CKP"
+      ],
+      [
+        "D3",
+        "10:00:00"
+      ],
+      [
+        "E3",
+        "2"
+      ],
+      [
+        "B4",
+        "Total"
+      ],
+      [
+        "D4",
+        "10:00:00"
+      ],
+      [
+        "E4",
+        "2"
+      ]
+    ],
+    "Report Information": [
+      [
+        "A1",
+        "Crew Hours \u2014 Report Information"
+      ],
+      [
+        "A3",
+        "Report period from"
+      ],
+      [
+        "B3",
+        "2026-06-01"
+      ],
+      [
+        "A4",
+        "Report period to"
+      ],
+      [
+        "B4",
+        "2026-06-30"
+      ],
+      [
+        "A5",
+        "Generated at UTC"
+      ],
+      [
+        "B5",
+        "2026-09-09T12:00:00Z"
+      ],
+      [
+        "A6",
+        "Generated by"
+      ],
+      [
+        "B6",
+        "fixture@example.com"
+      ],
+      [
+        "A7",
+        "Source"
+      ],
+      [
+        "B7",
+        "LEON MCP"
+      ],
+      [
+        "A8",
+        "Crew handling"
+      ],
+      [
+        "B8",
+        "Cockpit and Cabin only. Maintenance and unclassified crew are not exported \u2014 the sheet has no tab for them."
+      ],
+      [
+        "A9",
+        "Unparsed durations"
+      ],
+      [
+        "B9",
+        "None"
+      ],
+      [
+        "A10",
+        "Unreadable dates"
+      ],
+      [
+        "B10",
+        "None"
+      ],
+      [
+        "A11",
+        "Blank leg cells"
+      ],
+      [
+        "B11",
+        "ADEP, ADES, OFF, ON, Block time and Date come from the LEON Journey Log. A leg with no journey log filed shows its flight number and aircraft with those cells empty \u2014 nothing was dropped here."
+      ]
+    ]
+  }
+}

@@ -52,6 +52,17 @@ planned duty is longer than the base two-pilot table limit". Read it as a
 regulatory observation, never as a Heavy verdict, and never as a claim about
 why extra crew was or was not rostered.
 
+WHAT THE SERVICE PATH ACTUALLY PRODUCES: the report never supplies
+``crew_type``, so every shadow painted on a report is the base Table A/B
+figure with no conditional differential applied — no cabin +1:00, no relief,
+no split duty, no commander's discretion — and is therefore never a final
+personal legal limit for the member it sits beside. ``crew_group`` names who
+that member is; it is descriptive and never enters the arithmetic. A caller
+that does supply ``crew_type="cabin"`` gets the OM 7.1-10 7-2-1 hour at its
+own request, and this module does not verify that request's eligibility (the
+condition — cabin reporting at a different time from the flight deck — is not
+in our inputs).
+
 STATUS: SHADOW / VALIDATION ONLY. Nothing here changes a Heavy verdict, a
 credit, an export cell, or a total, and nothing here may. The service paints
 the assessment beside the existing verdict and into the decision trace for
@@ -309,6 +320,9 @@ class FdpAssessment:
     acclimatised: bool
     limit: timedelta | None          # None: no rosterable limit (Table B, rest < 18 h)
     limit_reason: str
+    # WHO the member is, for the trace only. ``crew_type`` above is the
+    # calculation basis; this is identity and never touches the arithmetic.
+    crew_group: str | None = None
     trace: tuple[HeavyTraceStep, ...] = field(default_factory=tuple)
 
     @property
@@ -388,6 +402,7 @@ def assess(
     *,
     tables: FdpTables = DEFAULT_TABLES,
     crew_type: CrewType = "cockpit",
+    crew_group: str | None = None,
     acclimatised: bool = True,
     preceding_rest: timedelta | None = None,
     local_offset: timedelta | None = None,
@@ -397,6 +412,11 @@ def assess(
     ``acclimatised`` defaults to True because the data to decide otherwise
     (previous duty end place/time) is not in the report yet (ruling R4 in
     the plan); Table B is implemented and tested for when it is.
+
+    ``crew_group`` is the member's crew group as the roster knows it
+    ("Cabin", "Cockpit", "undetermined (…)"). It is DESCRIPTIVE: it reaches
+    the trace and the assessment and nothing else. ``crew_type`` remains the
+    calculation basis, and only it can change a limit.
     """
 
     offset = egypt_utc_offset(window.start_utc) if local_offset is None else local_offset
@@ -436,6 +456,17 @@ def assess(
         limit = limit + CABIN_FDP_EXTRA
         limit_reason += "; cabin +1:00 (OM 7-2-1)"
 
+    # Reads the branch that has already run; it adds no condition to the
+    # arithmetic and cannot alter ``limit``. It only lets the step describe
+    # what the computation actually did.
+    cabin_extra_applied = limit is not None and crew_type == "cabin"
+    not_evaluated = [
+        "in-flight relief (7.1-6 2-2)",
+        "split duty (7.1-6 2-3)",
+        "commander's discretion (7.1-7 2-6)",
+    ]
+    if not cabin_extra_applied:
+        not_evaluated.insert(0, "cabin +1:00 (OM 7.1-10 7-2-1) eligibility")
     steps.append(
         step(
             "FDP_SHADOW_LIMIT",
@@ -446,7 +477,18 @@ def assess(
             sectors=window.sectors,
             acclimatised=acclimatised,
             crew_type=crew_type,
+            crew_type_role="calculation input, not member identity",
+            crew_group=crew_group or "undetermined",
             reason=limit_reason,
+            basis=(
+                "crew_type is the calculation basis, not the member's crew group; "
+                "base Table A/B limit plus the caller-requested cabin differential; "
+                "its OM 7.1-10 7-2-1 eligibility is not verified by this module"
+                if cabin_extra_applied
+                else "crew_type is the calculation basis, not the member's crew group; "
+                "base Table A/B limit, conditional differentials not evaluated"
+            ),
+            not_evaluated="; ".join(not_evaluated),
         )
     )
     assessment = FdpAssessment(
@@ -459,6 +501,7 @@ def assess(
         acclimatised=acclimatised,
         limit=limit,
         limit_reason=limit_reason,
+        crew_group=crew_group,
     )
     # The wording below ("needs augmentation (Heavy)") is the shipped trace
     # text and is kept byte-for-byte so recorded traces stay comparable. It is

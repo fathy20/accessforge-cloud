@@ -331,6 +331,140 @@ class TestEvnVeto(unittest.TestCase):
         self.assertEqual(result.credits, 0)
 
 
+class TestEvnPainting(unittest.TestCase):
+    """Owner ruling 2026-09-10: an EVN leg reads No on every surface, even
+    inside a duty that another leg credited. The duty keeps its credit and the
+    H.C count never moves — this is display painting only."""
+
+    def test_evn_inside_a_leon_credited_duty_is_painted_no_and_the_count_holds(self):
+        # The real MSN 06/07-06 shape: a LEON-augmented CAI->SSH sector, then
+        # the SSH<->EVN pair inside the same duty. EVN beats LEON here, unlike
+        # the domestic carve-out which is swap-only.
+        result = compute_member_credits([
+            leg("earner", "06-06-2026", "17:55", "19:05", "FA2", leon=True,
+                adep="CAI", ades="SSH"),
+            leg("evn_out", "06-06-2026", "21:45", "00:25", "IFA",
+                adep="SSH", ades="EVN"),
+            leg("evn_back", "07-06-2026", "01:40", "04:40", "IFA",
+                adep="EVN", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["earner"], (True, CREDIT_LEON))
+        self.assertEqual(result.by_leg["evn_out"], (False, None))
+        self.assertEqual(result.by_leg["evn_back"], (False, None))
+
+    def test_leon_marking_the_evn_legs_augmented_does_not_rescue_them(self):
+        # The literal all_legs.csv shape: LEON reports leon_heavy=True on the
+        # EVN legs themselves (06-06 RSX121 SSH-EVN, 07-06 RSX122 EVN-SSH; the
+        # 04/05-07 AMY pair is identical). The EVN veto runs before LEON's
+        # value is ever read, so the earning path is still the non-EVN CAI->SSH
+        # sector -- and the EVN rows read No even though LEON called them
+        # augmented. This is the strongest form of the carve-out.
+        result = compute_member_credits([
+            leg("earner", "06-06-2026", "17:55", "19:05", "FA2", leon=True,
+                adep="CAI", ades="SSH"),
+            leg("evn_out", "06-06-2026", "21:45", "00:25", "IFA", leon=True,
+                adep="SSH", ades="EVN"),
+            leg("evn_back", "07-06-2026", "01:40", "04:40", "IFA", leon=True,
+                adep="EVN", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        duty = result.duties[0]
+        self.assertTrue(duty.credited)
+        self.assertEqual(duty.source, CREDIT_LEON)
+        self.assertEqual(result.by_leg["earner"], (True, CREDIT_LEON))
+        self.assertEqual(result.by_leg["evn_out"], (False, None))
+        self.assertEqual(result.by_leg["evn_back"], (False, None))
+
+    def test_an_evn_only_duty_leon_marked_augmented_still_earns_nothing(self):
+        # Same LEON value, no non-EVN sector to earn from: the veto removes the
+        # only legs there are, so there is no credit to paint at all.
+        result = compute_member_credits([
+            leg("evn_out", "06-06-2026", "21:45", "00:25", "IFA", leon=True,
+                adep="SSH", ades="EVN"),
+            leg("evn_back", "07-06-2026", "01:40", "04:40", "IFA", leon=True,
+                adep="EVN", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 0)
+        self.assertEqual(result.by_leg["evn_out"], (False, None))
+        self.assertEqual(result.by_leg["evn_back"], (False, None))
+
+    def test_evn_inside_a_swap_credited_duty_is_painted_no_and_the_count_holds(self):
+        result = compute_member_credits([
+            leg("out", "12-07-2026", "06:00", "11:30", "FO", adep="CAI", ades="VKO"),
+            leg("back", "12-07-2026", "13:00", "18:30", "PAD", adep="VKO", ades="CAI"),
+            leg("evn", "12-07-2026", "20:00", "22:40", "FO", adep="SSH", ades="EVN"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.duties[0].source, CREDIT_SWAP)
+        self.assertEqual(result.by_leg["out"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["back"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["evn"], (False, None))
+
+    def test_the_icao_spelling_of_evn_is_carved_out_identically(self):
+        result = compute_member_credits([
+            leg("earner", "06-06-2026", "17:55", "19:05", "FA2", leon=True,
+                adep="CAI", ades="SSH"),
+            leg("evn", "06-06-2026", "21:45", "00:25", "IFA",
+                adep="HESH", ades="UDYZ"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["earner"], (True, CREDIT_LEON))
+        self.assertEqual(result.by_leg["evn"], (False, None))
+
+    def test_an_evn_pad_leg_and_an_evn_psn_leg_are_both_painted_no(self):
+        result = compute_member_credits([
+            leg("earner", "06-06-2026", "17:55", "19:05", "FA2", leon=True,
+                adep="CAI", ades="SSH"),
+            leg("evn_pad", "06-06-2026", "21:45", "00:25", "PAD",
+                adep="SSH", ades="EVN"),
+            leg("evn_psn", "07-06-2026", "01:40", "04:40", "PSN",
+                adep="EVN", ades="SSH"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.by_leg["evn_pad"], (False, None))
+        self.assertEqual(result.by_leg["evn_psn"], (False, None))
+
+    def test_the_psn_chaining_of_neighbouring_legs_survives_an_evn_neighbour(self):
+        # The PSN carve-out reads its neighbours from the duty list, never from
+        # by_leg, so carving the EVN leg out cannot break the chain that the
+        # non-EVN PSN leg depends on: 20:05 -> 21:10 is 1:05, still chained.
+        result = compute_member_credits([
+            leg("out", "09-06-2026", "07:15", "13:20", "CPT", adep="HRG", ades="OPO"),
+            leg("psn_back", "09-06-2026", "14:45", "20:05", "PSN",
+                adep="OPO", ades="SSH"),
+            leg("evn", "09-06-2026", "21:10", "23:55", "FO", adep="SSH", ades="EVN"),
+        ])
+        self.assertEqual(result.credits, 1)
+        self.assertEqual(result.duties[0].source, CREDIT_SWAP)
+        self.assertEqual(result.by_leg["out"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["psn_back"], (True, CREDIT_SWAP))
+        self.assertEqual(result.by_leg["evn"], (False, None))
+
+    def test_the_duty_credit_record_still_reports_its_source_and_reason(self):
+        result = compute_member_credits([
+            leg("earner", "06-06-2026", "17:55", "19:05", "FA2", leon=True,
+                adep="CAI", ades="SSH"),
+            leg("evn", "06-06-2026", "21:45", "00:25", "IFA",
+                adep="SSH", ades="EVN"),
+        ])
+        duty = result.duties[0]
+        self.assertTrue(duty.credited)
+        self.assertEqual(duty.source, CREDIT_LEON)
+        self.assertEqual(duty.reason, "LEON marked an operated sector augmented")
+        self.assertEqual(duty.leg_keys, ("earner", "evn"))
+
+    def test_an_uncredited_duty_paints_its_evn_leg_no_the_same_way(self):
+        # The carve-out is guarded on `earned`, so an uncredited duty is
+        # untouched: its EVN leg reads No because the duty does.
+        result = compute_member_credits([
+            leg("evn", "06-06-2026", "21:45", "00:25", "IFA",
+                adep="SSH", ades="EVN"),
+        ])
+        self.assertEqual(result.credits, 0)
+        self.assertEqual(result.by_leg["evn"], (False, None))
+
+
 class TestDutyBoundaries(unittest.TestCase):
     def test_a_four_hour_break_splits_the_duty_strictly(self):
         # 4:00 exactly rejects -> two duties, each missing the other role.
@@ -519,6 +653,176 @@ class TestServiceWiring(unittest.TestCase):
         for flight in member.flights:
             self.assertIs(flight.duty_credit, False, flight.flight_number)
             self.assertIsNone(flight.credit_source)
+
+
+class TestEvnPaintingReachesTheScreenAndTheExport(unittest.TestCase):
+    """The real MSN 06/07-06 case, end to end through LiveCrewHoursService and
+    the XLSX writer: the two EVN rows display No, everything that is counted or
+    totalled is byte-for-byte what it was before the carve-out existed."""
+
+    ROWS = [
+        {
+            "scope_row_unique_id": "row-1101",
+            "unique_id": 1101,
+            "flightNo": "RSX492",
+            "crew_codes": ["MSN"],
+            "crew_names": ["Crew MSN"],
+            "crew_position_names": ["FA2"],
+            "acftType": "B738 - 737-800",
+            "blockTimeJourneyLog": "01:30",
+            "jl_adep_preferred_code": "CAI",
+            "jl_ades_preferred_code": "SSH",
+            "date_STD_log_UTC": "06-06-2026",
+            "JL_STD_UTC": "17:55",
+            "JL_STA_UTC": "19:05",
+        },
+        {
+            "scope_row_unique_id": "row-1102",
+            "unique_id": 1102,
+            "flightNo": "RSX121",
+            "crew_codes": ["MSN"],
+            "crew_names": ["Crew MSN"],
+            "crew_position_names": ["IFA"],
+            "acftType": "B738 - 737-800",
+            "blockTimeJourneyLog": "01:30",
+            "jl_adep_preferred_code": "SSH",
+            "jl_ades_preferred_code": "EVN",
+            "date_STD_log_UTC": "06-06-2026",
+            "JL_STD_UTC": "21:45",
+            "JL_STA_UTC": "00:25",
+        },
+        {
+            "scope_row_unique_id": "row-1103",
+            "unique_id": 1103,
+            "flightNo": "RSX122",
+            "crew_codes": ["MSN"],
+            "crew_names": ["Crew MSN"],
+            "crew_position_names": ["IFA"],
+            "acftType": "B738 - 737-800",
+            "blockTimeJourneyLog": "01:30",
+            "jl_adep_preferred_code": "EVN",
+            "jl_ades_preferred_code": "SSH",
+            "date_STD_log_UTC": "07-06-2026",
+            "JL_STD_UTC": "01:40",
+            "JL_STA_UTC": "04:40",
+        },
+    ]
+
+    def _member(self):
+        from backend.statistics.crew_hours.augmented import AugmentedIndex
+        from backend.statistics.crew_hours.mcp_report import OfficialMcpReport
+        from backend.statistics.crew_hours.service import LiveCrewHoursService
+
+        rows = self.ROWS
+
+        class FakeCrewClient:
+            def fetch_official_totals(self, from_date, to_date):
+                return OfficialMcpReport(
+                    {"MSN": "10:00"}, rows, buffered_rows=rows
+                )
+
+            def fetch_augmented_index(self, from_date, to_date):
+                # LEON marks the EVN pair augmented TOO, not just the CAI->SSH
+                # earner: in the live pull the SSH<->EVN legs of this very
+                # rotation (06-06 RSX121 SSH-EVN and 07-06 RSX122 EVN-SSH, and
+                # the 04/05-07 SSH<->EVN pair) all carry leon_heavy=True --
+                # 206 of the 474 EVN legs in the June+July pull do. That is the
+                # real conflict the carve-out has to survive: LEON itself
+                # called these EVN legs augmented, the credit still comes from
+                # the non-EVN sector, and the owner absolute still paints the
+                # EVN rows No.
+                return AugmentedIndex(
+                    True,
+                    {("MSN", 1101): True, ("MSN", 1102): True, ("MSN", 1103): True},
+                    3,
+                    0,
+                )
+
+        report = LiveCrewHoursService(FakeCrewClient()).get_crew_hours_report(
+            "2026-06-01", "2026-06-30"
+        )
+        return report, report.crew_members[0]
+
+    def test_the_evn_rows_display_no_while_the_credit_and_the_count_stay_put(self):
+        _, member = self._member()
+
+        # Unchanged from before the carve-out: the duty still earns, and H.C
+        # still reads 1 for this member.
+        self.assertEqual(member.heavy_credits, 1)
+        self.assertEqual(member.official_total, "10:00")
+        self.assertEqual(member.flight_count, 3)
+
+        by_number = {flight.flight_number: flight for flight in member.flights}
+        # The earning leg is untouched.
+        self.assertIs(by_number["RSX492"].duty_credit, True)
+        self.assertEqual(by_number["RSX492"].credit_source, CREDIT_LEON)
+        # Both EVN rows now read No, and claim no source.
+        for number in ("RSX121", "RSX122"):
+            self.assertIs(by_number[number].duty_credit, False, number)
+            self.assertIsNone(by_number[number].credit_source, number)
+        # Nothing else about the EVN rows moved.
+        for number in ("RSX492", "RSX121", "RSX122"):
+            self.assertEqual(by_number[number].block_time, "01:30", number)
+
+    def test_the_evn_rows_carry_leons_yes_and_still_resolve_to_a_conflicted_no(self):
+        # Proof that this fixture reproduces the live conflict rather than a
+        # LEON-silent stand-in: the EVN rows arrive with leon_heavy=True and
+        # still come out effective_heavy=False, flagged as a conflict, on the
+        # EVN_AIRPORT absolute. The earner keeps LEON's Yes untouched.
+        _, member = self._member()
+        by_number = {flight.flight_number: flight for flight in member.flights}
+
+        earner = by_number["RSX492"]
+        self.assertIs(earner.leon_heavy, True)
+        self.assertIs(earner.effective_heavy, True)
+        self.assertFalse(earner.heavy_conflict)
+
+        for number in ("RSX121", "RSX122"):
+            row = by_number[number]
+            self.assertIs(row.leon_heavy, True, number)
+            self.assertIs(row.effective_heavy, False, number)
+            self.assertTrue(row.heavy_conflict, number)
+            self.assertEqual(row.heavy_source, "LOCAL_RULE", number)
+            self.assertEqual(row.heavy_reason, "EVN_AIRPORT", number)
+
+    def test_the_xlsx_shows_no_on_the_evn_rows_and_leaves_hc_and_totals_alone(self):
+        import io
+        from datetime import datetime, time, timedelta, timezone
+
+        from openpyxl import load_workbook
+
+        from backend.statistics.crew_hours.export import build_crew_hours_workbook
+
+        report, _ = self._member()
+        workbook = load_workbook(
+            io.BytesIO(
+                build_crew_hours_workbook(
+                    report, generated_at=datetime(2026, 9, 10, tzinfo=timezone.utc)
+                ).getvalue()
+            )
+        )
+
+        detail = workbook["Cabin"]
+        verdicts = {
+            detail.cell(row=row, column=6).value: detail.cell(row=row, column=12).value
+            for row in (5, 6, 7)
+        }
+        self.assertEqual(
+            verdicts, {"RSX492": "Yes", "RSX121": "No", "RSX122": "No"}
+        )
+        # The detail block's H.C badge and its block-time total are the values
+        # the pre-carve-out export wrote: 1 credit, 10:00 of hours.
+        self.assertEqual(detail.cell(row=8, column=12).value, "H.C 1")
+        self.assertEqual(detail.cell(row=8, column=11).value, timedelta(hours=10))
+        for row in (5, 6, 7):
+            self.assertEqual(detail.cell(row=row, column=11).value, time(1, 30), row)
+
+        summary = workbook["Cabin Summary"]
+        self.assertEqual(summary.cell(row=2, column=5).value, "H.C")
+        self.assertEqual(summary.cell(row=3, column=5).value, 1)   # member H.C
+        self.assertEqual(summary.cell(row=4, column=5).value, 1)   # group total
+        self.assertEqual(summary.cell(row=3, column=4).value, timedelta(hours=10))
+        self.assertEqual(summary.cell(row=4, column=4).value, timedelta(hours=10))
 
 
 if __name__ == "__main__":

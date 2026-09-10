@@ -35,8 +35,10 @@ The model, in full:
 
   OBS / OBS2 / STB / SP / OPS are NEUTRAL: never operate, never ride.
 
-  EVN sectors contribute nothing in either role (owner absolute; also
-  subsumed by the sector minimum — EVN legs run ~2:40-2:55).
+  EVN sectors contribute nothing in either role, and are painted No even
+  inside a credited duty — any credited duty, a CREDIT_LEON one included
+  (owner absolute; also subsumed by the sector minimum — EVN legs run
+  ~2:40-2:55).
 
   An SVX sector is NOT a credit source by itself: adding "operated an SVX
   leg" over-counted July (50/54 vs 52/54). SVX rotations are crew-swap duties,
@@ -359,18 +361,30 @@ def compute_member_credits(
                 leg_keys=tuple(leg.key for _, _, leg in duty),
             )
         )
-        # Every leg inherits the duty verdict EXCEPT two carve-outs that are
-        # painted No without touching the count: a PSN leg that did not itself
-        # satisfy the chain rule (it merely sits inside a heavy duty, e.g. an
-        # early repositioning after an overnight PAD return), and a domestic
-        # hop inside a swap-credited duty.
+        # Every leg inherits the duty verdict EXCEPT three carve-outs that are
+        # painted No without touching the count: an EVN leg (an absolute on
+        # every surface, whichever rule credited the duty), a PSN leg that did
+        # not itself satisfy the chain rule (it merely sits inside a heavy
+        # duty, e.g. an early repositioning after an overnight PAD return),
+        # and a domestic hop inside a swap-credited duty.
         for index, (start, end, leg) in enumerate(duty):
             position = (leg.position or "").strip().upper()
+            # EVN is an absolute exclusion on every surface (ADR 2026-08-17): an
+            # EVN leg reads No even inside a credited duty. Unlike the domestic
+            # carve-out this also applies to CREDIT_LEON -- the duty keeps its
+            # credit and its count, only the EVN row stops claiming it. Same
+            # predicate as the earning skip above, so painting and earning
+            # cannot drift apart (owner ruling 2026-09-10).
+            if earned and _is_evn_leg(leg):
+                by_leg[leg.key] = (False, None)
+                continue
             # A domestic hop is never itself Heavy, even inside a credited
             # rotation (owner 23-06 ruling: the HRG->SSH 0:40 shuttle reads No
-            # while the SSH->OPO leg of the same duty reads Yes). Only the
-            # swap rule is carved: a CREDIT_LEON duty keeps painting all its
-            # legs, because LEON's own value is never re-judged here.
+            # while the SSH->OPO leg of the same duty reads Yes). THIS carve-out
+            # is swap-only: a CREDIT_LEON duty keeps painting its domestic legs,
+            # because LEON's own value is never re-judged here. The EVN carve-out
+            # above is deliberately not so limited — an owner absolute outranks
+            # even a value LEON stated.
             if earned and source == CREDIT_SWAP and _is_domestic_leg(leg):
                 by_leg[leg.key] = (False, None)
                 continue

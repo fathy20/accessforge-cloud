@@ -145,7 +145,8 @@ suspected omission in the sheet itself). Extended 2026-09-02 by owner ruling.
   toward the minimum, and are painted No even inside a credited swap duty.
 - **`OBS`, `OBS2`, `STB`, `SP`, `OPS`, `FAOBS` are neutral**: never operate,
   never ride.
-- **EVN sectors** contribute nothing in either role.
+- **EVN sectors** contribute nothing in either role, and are painted No even
+  inside a credited duty — any credited duty, a `LEON_AUGMENTED` one included.
 - **An SVX sector is not a credit source by itself** — adding it over-counted
   July (50/54 vs 52/54). SVX rotations are crew-swap duties, so the swap rule
   already credits the members who actually augmented.

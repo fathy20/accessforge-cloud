@@ -104,8 +104,13 @@ async function fetchWithNetworkError(
 }
 
 export class ApiClient {
+  /**
+   * Same-origin by default: the dev server proxies `/api` to FastAPI and the
+   * production reverse proxy does the same, so no CORS and no baked-in host.
+   * Set VITE_API_URL only when the API genuinely lives on another origin.
+   */
   static get API_URL() {
-    return import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+    return import.meta.env.VITE_API_URL || "/api";
   }
   static getToken() {
     return localStorage.getItem("access_token");

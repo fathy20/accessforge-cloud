@@ -9,6 +9,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from .errors import LeonContractError
+from .positions import crew_set_identity
 
 
 READ_BUFFER_DAYS = 2
@@ -28,7 +29,11 @@ class CrewSlot:
     source_index: int
 
     @property
-    def is_operating(self) -> bool:
+    def counts_in_totals(self) -> bool:
+        # TOTALS crew rule — PSN-only exclusion, owner parity ruling
+        # 2026-08-09. Governs per-member NUMERIC TOTALS attribution and
+        # nothing else. Deliberately different from ``rotation_crew_set``
+        # below (M-2 ruling 2026-08-18): do NOT unify the two.
         return (self.position or "").strip().upper() != PSN_POSITION
 
 
@@ -47,8 +52,23 @@ class NormalizedReportRow:
         return self.names_misaligned or self.positions_misaligned
 
     @property
-    def operating_crew_set(self) -> frozenset[str]:
-        return frozenset(slot.code.casefold() for slot in self.crew if slot.is_operating)
+    def rotation_crew_set(self) -> frozenset[str]:
+        # ROTATION/duty-grouping identity: THE shared crew-set definition
+        # (owner one-identity ruling 2026-08-17, via positions.crew_set_identity;
+        # same identity STEP 4 compares — unknown_resolver.rotation_crew_codes).
+        # Riders and non-operating cockpit slots never split a duty.
+        # Deliberately different from ``counts_in_totals`` above (PSN-only,
+        # 2026-08-09 parity ruling): do NOT unify the two (M-2 ruling
+        # 2026-08-18).
+        return crew_set_identity((slot.code, slot.position) for slot in self.crew)
+
+
+def utc_today() -> date:
+    """Today on the UTC clock. All Crew Hours date defaults derive from UTC
+    (owner ruling 2026-08-18): the report data is UTC-keyed, and around
+    midnight a non-UTC server's local date is a different day."""
+
+    return datetime.now(timezone.utc).date()
 
 
 def buffered_query_dates(from_date: str, to_date: str) -> tuple[str, str]:
@@ -141,9 +161,9 @@ def select_rows_for_period(
         if (
             normalized_row.off_utc is not None
             and normalized_row.on_utc is not None
-            and normalized_row.operating_crew_set
+            and normalized_row.rotation_crew_set
         ):
-            duty_candidates[normalized_row.operating_crew_set].append((index, normalized_row))
+            duty_candidates[normalized_row.rotation_crew_set].append((index, normalized_row))
             continue
 
         attribution_date = (

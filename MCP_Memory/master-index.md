@@ -10,6 +10,9 @@ Based on your current task, start here:
 - **Need to write SQL or map an Entity?** Check [database/erd.md](database/erd.md) and [entities/](entities/).
 - **Curious why a technical choice was made?** Read the [decisions/](decisions/) folder (ADRs).
 - **Need to write Tests?** Go to [testing/](testing/) to ensure feature parity with App2.
+- **Working on Crew Hours / Heavy?** Read [business-logic/crew-hours-heavy.md](business-logic/crew-hours-heavy.md), [api/crew-hours.md](api/crew-hours.md), and — before re-deriving ANYTHING — [development/closed-questions.md](development/closed-questions.md).
+
+> **This tree is the ONE authoritative knowledge base.** A nested `MCP_Memory/` that briefly existed next to the app code (`accessforge-cloud-main/accessforge-cloud-main/`) was deleted on 2026-08-18 — never recreate it; write decisions here.
 
 ---
 

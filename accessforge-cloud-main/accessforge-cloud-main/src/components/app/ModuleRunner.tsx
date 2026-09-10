@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -41,12 +41,20 @@ export interface ModuleRunnerProps {
   extraControls?: React.ReactNode;
   /** True if this module supports fetching from DB */
   supportsDatabase?: boolean;
+  /**
+   * Notified with the currently selected upload ids whenever the selection
+   * changes (including the initial empty selection and the reset after a job
+   * is queued). Optional: file selection stays owned by this component, so
+   * module pages that do not need it are unaffected.
+   */
+  onSelectionChange?: (ids: string[]) => void;
 }
 
 export function ModuleRunner(props: ModuleRunnerProps) {
   const {
     moduleKey, title, titleAr, description, descriptionAr,
-    icon: Icon, acceptedKinds, minFiles = 1, maxFiles, extraInput, extraControls, supportsDatabase
+    icon: Icon, acceptedKinds, minFiles = 1, maxFiles, extraInput, extraControls, supportsDatabase,
+    onSelectionChange,
   } = props;
 
   const { user } = useAuth();
@@ -83,6 +91,15 @@ export function ModuleRunner(props: ModuleRunnerProps) {
       return [];
     },
   });
+
+  // Held in a ref so an inline arrow from the parent does not re-fire the
+  // effect on every render: the notification tracks `selected`, nothing else.
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+
+  useEffect(() => {
+    onSelectionChangeRef.current?.(Array.from(selected));
+  }, [selected]);
 
   const handleFiles = useCallback(async (fileList: FileList | File[]) => {
     if (!user) return;

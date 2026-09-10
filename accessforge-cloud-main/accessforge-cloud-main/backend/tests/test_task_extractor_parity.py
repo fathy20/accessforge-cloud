@@ -52,6 +52,11 @@ class _DesktopExtractorContext:
     def _find_related_tasks(self, code, pdf_path=None):
         return self._toolkit.rt.RedseaApp._find_related_tasks(self, code, pdf_path)
 
+    def _extract_related_tasks_to_pdf(self, code, related_tasks, pdf_path, out_dir):
+        return self._toolkit.rt.RedseaApp._extract_related_tasks_to_pdf(
+            self, code, related_tasks, pdf_path, out_dir
+        )
+
 
 class TestTaskExtractorParity(unittest.TestCase):
     task_code = "27-001-00"
@@ -114,6 +119,83 @@ class TestTaskExtractorParity(unittest.TestCase):
         finally:
             desktop_doc.close()
             web_doc.close()
+
+    def test_related_tasks_are_split_into_separate_pdfs_matching_desktop(self):
+        """Step 1 branch: a code with siblings under the same 2-segment prefix.
+
+        ``_run_extract`` only reaches ``_extract_related_tasks_to_pdf`` when
+        ``_find_related_tasks`` finds at least one sibling sharing the base
+        task's first two dash-segments (``27-054`` for ``27-054-00``). This
+        exercises that branch, which the base-task test above never reaches
+        because its fixture has no siblings for ``27-001-00``.
+        """
+
+        from worker import toolkit
+        from worker.handlers import task_extractor
+
+        base_code = "27-054-00"
+        sibling_code = "27-054-01"
+        unrelated_code = "27-002-00"
+
+        source = self.source_dir / "27_related.pdf"
+        doc = fitz.open()
+        for text in (
+            f"ORIGINAL BASE PAGE\nTASK {base_code}",
+            f"ORIGINAL SIBLING PAGE\nTASK {sibling_code}",
+            f"ORIGINAL UNRELATED PAGE\nTASK {unrelated_code}",
+        ):
+            page = doc.new_page(width=612, height=792)
+            page.insert_text((72, 72), text, fontsize=12)
+        doc.save(source)
+        doc.close()
+
+        desktop_dir = self.tmpdir / "desktop-related"
+        desktop_dir.mkdir()
+        web_workdir = self.tmpdir / "web-work-related"
+        (web_workdir / "out").mkdir(parents=True)
+
+        desktop = _DesktopExtractorContext(toolkit, self.source_dir, desktop_dir, base_code)
+        with mock.patch.object(toolkit.rt.threading, "Thread", _ImmediateThread):
+            toolkit.rt.RedseaApp._run_extract(desktop)
+
+        desktop_outputs = sorted(p.name for p in desktop_dir.iterdir())
+        self.assertEqual(
+            desktop_outputs,
+            [f"{base_code}_related.pdf", f"{sibling_code}_related.pdf"],
+            "desktop must extract the base task plus its one sibling, each to its own file",
+        )
+
+        web_outputs = task_extractor(
+            {"input_refs": {"task_code": base_code}},
+            [str(source)],
+            web_workdir,
+            lambda _progress, _message: None,
+        )
+        web_names = sorted(Path(p).name for p in web_outputs)
+        self.assertEqual(
+            web_names,
+            desktop_outputs,
+            f"web handler must match desktop's related-task split; got {web_names}",
+        )
+
+        for name in desktop_outputs:
+            desktop_doc = fitz.open(desktop_dir / name)
+            web_doc = fitz.open(next(p for p in web_outputs if Path(p).name == name))
+            try:
+                self.assertEqual(desktop_doc.page_count, 1)
+                self.assertEqual(desktop_doc.page_count, web_doc.page_count)
+                self.assertEqual(desktop_doc[0].get_text(), web_doc[0].get_text())
+            finally:
+                desktop_doc.close()
+                web_doc.close()
+
+        # The unrelated code's page must not leak into either output.
+        for name in desktop_outputs:
+            web_doc = fitz.open(next(p for p in web_outputs if Path(p).name == name))
+            try:
+                self.assertNotIn("ORIGINAL UNRELATED PAGE", web_doc[0].get_text())
+            finally:
+                web_doc.close()
 
 
 if __name__ == "__main__":

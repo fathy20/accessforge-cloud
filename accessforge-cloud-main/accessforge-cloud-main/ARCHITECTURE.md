@@ -109,3 +109,20 @@ implemented ad hoc here.
    storage have a single implementation.
 6. **Honesty over completeness** — unfinished modules say so
    (`discovery_required`); LEON failures surface as failures.
+
+## Deployment (2026-09-03)
+
+The frontend is a static SPA: `npx vite build` writes `dist/client/` with the
+public pages prerendered and one shell per route; there is no Node server at
+runtime. nginx serves that directory and proxies `/api` and `/health` to the
+FastAPI container, so the browser sees a single origin and CORS is not part
+of the request path. `Dockerfile` (API, uvicorn + Alembic + Tesseract + the
+SQL Server ODBC driver) and `Dockerfile.web` (nginx + build) are wired by
+`docker-compose.yml`. Runbooks: `docs/deploy/frontend-static.md`,
+`docs/deploy/docker.md`. In `JOB_EXECUTION_MODE=worker` the API only enqueues
+and a `worker` service (same image, `python -m worker.runner`) executes jobs:
+SQL-backed queue on the `jobs` table, atomic claim with a lease token, every
+worker write fenced on that token, heartbeat + stale reclaim, killable child
+process per job (timeout and cancellation are real), manual retry, at-least-
+once semantics. `backend/job_queue.py` holds the primitives,
+`backend/job_runner.py` the per-job execution shared with inline mode.

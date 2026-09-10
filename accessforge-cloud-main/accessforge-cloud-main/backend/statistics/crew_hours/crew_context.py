@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 import logging
 from typing import Any, Mapping, Sequence
@@ -41,6 +41,11 @@ class FlightContext:
     end_time_utc: str | None
     flight_tags: tuple[str, ...]
     entries: tuple[CrewContextEntry, ...]
+    # STEP 4 rotation continuity compares these between neighbouring sectors.
+    # They come from the same flight list on both sides of the comparison, so
+    # only internal consistency matters (ICAO preferred, IATA fallback).
+    departure_airport: str | None = None
+    arrival_airport: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,10 @@ class CrewContextIndex:
     available: bool
     by_flight: Mapping[int, tuple[CrewContextEntry, ...]]
     contexts: Mapping[int, FlightContext] = field(default_factory=dict)
+    # False when LEON rejected the workSchedule { function } selection for this
+    # window: the SFA-Function cabin-trainee rule then cannot fire, and the
+    # report must say so instead of implying trainees were excluded.
+    crew_function_available: bool = True
 
     def tags_for(self, flight_nid: int | None) -> tuple[str, ...] | None:
         """Return the flight's tags, or None when this flight was never indexed."""
@@ -72,12 +81,16 @@ def build_crew_context_index(
             start_time_value: object = flight.start_time_utc
             end_time_value: object = flight.end_time_utc
             flight_tags_value: object = flight.flight_tags
+            start_airport_value: object = flight.start_airport
+            end_airport_value: object = flight.end_airport
         elif isinstance(flight, Mapping):
             flight_nid_value = flight.get("flightNid")
             crew_list_value = flight.get("crewList")
             start_time_value = flight.get("startTimeUTC")
             end_time_value = flight.get("endTimeUTC")
             flight_tags_value = flight.get("flightTags")
+            start_airport_value = flight.get("startAirport")
+            end_airport_value = flight.get("endAirport")
         else:
             raise LeonContractError("LEON flight item had an invalid shape.")
 
@@ -103,18 +116,18 @@ def build_crew_context_index(
                 raise LeonContractError("LEON flight workSchedule contained an invalid object.")
             entries.append(
                 CrewContextEntry(
-                    pos_type=_optional_string(
+                    pos_type=_strict_string_or_none(
                         position_object.get("posType") if position_object else None
                     ),
-                    position=_optional_string(
+                    position=_strict_string_or_none(
                         position_object.get("name") if position_object else None
                     ),
-                    training_type=_optional_string(crew.get("flightTrainingType")),
+                    training_type=_strict_string_or_none(crew.get("flightTrainingType")),
                     crew_code=_normalized_crew_code(
                         contact_object.get("personCode") if contact_object else None
                     ),
                     crew_name=_contact_name(contact_object),
-                    function=_optional_string(
+                    function=_strict_string_or_none(
                         work_schedule_object.get("function") if work_schedule_object else None
                     ),
                 )
@@ -122,10 +135,12 @@ def build_crew_context_index(
         by_flight[flight_nid] = tuple(entries)
         contexts[flight_nid] = FlightContext(
             flight_nid=flight_nid,
-            start_time_utc=_optional_string(start_time_value),
-            end_time_utc=_optional_string(end_time_value),
+            start_time_utc=_strict_string_or_none(start_time_value),
+            end_time_utc=_strict_string_or_none(end_time_value),
             flight_tags=_flight_tag_labels(flight_tags_value),
             entries=tuple(entries),
+            departure_airport=_airport_code(start_airport_value),
+            arrival_airport=_airport_code(end_airport_value),
         )
     return CrewContextIndex(available=True, by_flight=by_flight, contexts=contexts)
 
@@ -190,6 +205,10 @@ def fetch_crew_context_index(
         chunk_start = chunk_end + timedelta(days=1)
 
     index = build_crew_context_index(flights)
+    if not include_crew_function:
+        # Owner ruling 2026-08-17 (Q1): no Position-only fallback — the rule
+        # simply does not fire, and the gap is surfaced, never papered over.
+        index = replace(index, crew_function_available=False)
     # Keep this aggregate log free of crew identifiers and upstream payloads.
     logger.info(
         "LEON crew context period=%s..%s chunks=%d flights_indexed=%d crew_function=%s unavailable=%s",
@@ -231,6 +250,8 @@ def _parse_crew_context_flights(
                 "startTimeUTC": item.get("startTimeUTC"),
                 "endTimeUTC": item.get("endTimeUTC"),
                 "flightTags": flight_tags,
+                "startAirport": item.get("startAirport"),
+                "endAirport": item.get("endAirport"),
             }
         )
     return flights
@@ -247,6 +268,8 @@ def _flight_nid_as_int(flight: LeonFlight | Mapping[str, object]) -> int:
 
 
 def _normalize_flight_nid(value: object) -> int:
+    # STRICT by design: a bad flightNid is a broken LEON contract and raises.
+    # Lenient counterpart: augmented._normalize_tr_nid (L-6 ruling 2026-08-18).
     if isinstance(value, bool):
         raise LeonContractError("LEON flight item had an invalid flightNid.")
     if isinstance(value, int):
@@ -259,7 +282,13 @@ def _normalize_flight_nid(value: object) -> int:
     raise LeonContractError("LEON flight item had an invalid flightNid.")
 
 
-def _optional_string(value: object) -> str | None:
+def _strict_string_or_none(value: object) -> str | None:
+    # STRICT by design (L-6 ruling 2026-08-18): this parses LEON's GraphQL
+    # crew-context payload, where a wrong TYPE is a broken contract and must
+    # raise, not silently vanish. The LENIENT twins (service._optional_string,
+    # local_answers._text) parse report ROWS where malformed cells degrade to
+    # None. Deliberately different names, deliberately different semantics —
+    # do not merge them.
     if value is None:
         return None
     if not isinstance(value, str):
@@ -271,8 +300,28 @@ def _optional_string(value: object) -> str | None:
 def _normalized_crew_code(value: object) -> str | None:
     """Crew codes are matched against the FTL index, which upper-cases them."""
 
-    code = _optional_string(value)
+    code = _strict_string_or_none(value)
     return code.upper() if code else None
+
+
+def _airport_code(value: object) -> str | None:
+    """Extract one comparable airport code: ICAO preferred, IATA fallback.
+
+    The flight-list query selects ``startAirport { code { icao iata } }``.
+    A missing or unexpected shape degrades to None (rotation continuity then
+    fails closed) rather than failing the whole report.
+    """
+
+    if not isinstance(value, Mapping):
+        return None
+    code_object = value.get("code")
+    if not isinstance(code_object, Mapping):
+        return None
+    for key in ("icao", "iata"):
+        candidate = code_object.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip().upper()
+    return None
 
 
 def _contact_name(contact: Mapping[str, object] | None) -> str | None:
@@ -280,13 +329,15 @@ def _contact_name(contact: Mapping[str, object] | None) -> str | None:
         return None
     parts = [
         part
-        for part in (_optional_string(contact.get("name")), _optional_string(contact.get("surname")))
+        for part in (_strict_string_or_none(contact.get("name")), _strict_string_or_none(contact.get("surname")))
         if part
     ]
     return " ".join(parts) or None
 
 
 def _flight_tag_labels(value: object) -> tuple[str, ...]:
+    # GraphQL flight-list tag parser; twin of local_answers._tags_from_row,
+    # which parses report rows (L-6 ruling 2026-08-18).
     if value is None:
         return ()
     if not isinstance(value, list):
@@ -296,7 +347,7 @@ def _flight_tag_labels(value: object) -> tuple[str, ...]:
         if isinstance(tag, str):
             label = tag.strip()
         elif isinstance(tag, Mapping):
-            label = _optional_string(tag.get("label")) or ""
+            label = _strict_string_or_none(tag.get("label")) or ""
         else:
             raise LeonContractError("LEON flight flightTags contained an invalid tag.")
         if label:

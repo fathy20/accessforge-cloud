@@ -12,7 +12,11 @@ export function detectKind(file: File): UploadKind {
   const n = file.name.toLowerCase();
   const t = file.type.toLowerCase();
   if (n.endsWith(".pdf") || t === "application/pdf") return "pdf";
-  if (n.endsWith(".xlsx") || n.endsWith(".xls") || t.includes("spreadsheet") || t.includes("excel")) return "excel";
+  // .xlsb is a binary Excel workbook; MPD RSD deliveries are frequently .xlsb
+  // because the sheets are too large for the XML format. It is listed
+  // explicitly because a browser with no Office install reports an empty
+  // file.type for it, so the `t.includes("excel")` fallback cannot be relied on.
+  if (n.endsWith(".xlsx") || n.endsWith(".xls") || n.endsWith(".xlsb") || t.includes("spreadsheet") || t.includes("excel")) return "excel";
   if (n.endsWith(".docx") || n.endsWith(".doc") || t.includes("word")) return "docx";
   if (n.endsWith(".csv") || t === "text/csv") return "csv";
   if (t.startsWith("image/")) return "image";

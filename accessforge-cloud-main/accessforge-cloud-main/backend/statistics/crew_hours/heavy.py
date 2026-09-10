@@ -1,18 +1,28 @@
-"""Pure Heavy decision and provenance engine."""
+"""Pure Heavy decision and provenance engine.
+
+The only side effect in this module is a warning log when an absolute tag
+overrides a conflicting LEON value; every function is otherwise deterministic
+and performs no I/O.
+"""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal, Sequence
 
 from .crew_context import CrewContextEntry
+from .trace import HeavyTraceStep, as_received, step
 from .positions import (
     CABIN_POS_TYPE,
     COCKPIT_POS_TYPE,
     EVN_TAG,
+    airport_code_forms,
     HEAVY_CABIN_THRESHOLD,
     HEAVY_COCKPIT_THRESHOLD,
+    is_domestic_airport,
     NON_OPERATING_COCKPIT_POSITIONS,
+    POSITIONING_POSITIONS,
     SVX_TAG,
     TRAINING_FLIGHT_TYPES,
     TRAINING_FUNCTION_CABIN,
@@ -20,11 +30,17 @@ from .positions import (
 )
 
 
+logger = logging.getLogger(__name__)
+
 HeavySource = Literal["LEON", "LOCAL_RULE", "LEON_AND_LOCAL", "UNKNOWN"]
 HeavyReason = Literal[
     "LEON_AUGMENTED",
     "EVN_TAG",
     "SVX_TAG",
+    "EVN_AIRPORT",
+    "SVX_AIRPORT",
+    # Domestic is a derived No that LEON may override — never absolute.
+    "DOMESTIC_AIRPORT",
     "EXTRA_COCKPIT_CREW",
     "EXTRA_CABIN_CREW",
     "MULTIPLE_RULES",
@@ -33,8 +49,12 @@ HeavyReason = Literal[
 ]
 
 
-# EVN and SVX are final on their own; they never fall through to the UNKNOWN resolver.
-ABSOLUTE_TAG_REASONS: frozenset[str] = frozenset({"EVN_TAG", "SVX_TAG"})
+# EVN and SVX are final on their own; they never fall through to the UNKNOWN
+# resolver. The *_AIRPORT reasons are the live rule (route-based); the *_TAG
+# reasons remain valid as the secondary signal.
+ABSOLUTE_TAG_REASONS: frozenset[str] = frozenset(
+    {"EVN_TAG", "SVX_TAG", "EVN_AIRPORT", "SVX_AIRPORT"}
+)
 
 
 @dataclass(frozen=True)
@@ -66,6 +86,12 @@ def _is_training_flight_type(training_type: str | None) -> bool:
     }
 
 
+def _is_positioning_position(position: str | None) -> bool:
+    """PSN/PAD ride the flight without operating it — never operating crew."""
+
+    return _normalized(position) in {value.casefold() for value in POSITIONING_POSITIONS}
+
+
 def operating_cockpit_count(entries: Sequence[CrewContextEntry]) -> int:
     """Count operating cockpit crew after the approved exclusions."""
 
@@ -79,6 +105,7 @@ def operating_cockpit_count(entries: Sequence[CrewContextEntry]) -> int:
         if _normalized(entry.pos_type) == cockpit_type
         and not _is_training_flight_type(entry.training_type)
         and not is_training_position(entry.position)
+        and not _is_positioning_position(entry.position)
         and _normalized(entry.position) not in non_operating_positions
     )
 
@@ -93,6 +120,7 @@ def operating_cabin_count(entries: Sequence[CrewContextEntry]) -> int:
         if _normalized(entry.pos_type) == cabin_type
         and not _is_training_flight_type(entry.training_type)
         and not is_training_function(entry.function)
+        and not _is_positioning_position(entry.position)
     )
 
 
@@ -112,39 +140,300 @@ def is_svx_flight(flight_tags: Sequence[str] | None) -> bool:
     return bool(tags) and SVX_TAG in tags
 
 
+def merge_route_airports(
+    *sources: Sequence[str | None] | None,
+) -> tuple[str | None, ...]:
+    """Union every airport source, preserving each code exactly as received.
+
+    Duplicates are dropped by their normalized form so the trace stays short,
+    but the first spelling seen is what the trace shows — both an IATA and an
+    ICAO spelling of the same airport survive, because they are what the two
+    sources actually said.
+    """
+
+    merged: list[str | None] = []
+    seen: set[str] = set()
+    for source in sources:
+        for airport in source or ():
+            if not isinstance(airport, str) or not airport.strip():
+                continue
+            key = airport.strip().upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(airport)
+    return tuple(merged)
+
+
+def _route_match(route_airports: Sequence[str | None] | None, code: str) -> str | None:
+    """Return the route code that matched this airport, or None.
+
+    Exact equality after trim+uppercase against every accepted form of the
+    airport (SVX/USSS, EVN/UDYZ) — never a substring match. Returning the
+    matched value rather than a bool lets the trace show WHICH form fired.
+    """
+
+    if not route_airports:
+        return None
+    targets = airport_code_forms(code)
+    for airport in route_airports:
+        if isinstance(airport, str) and airport.strip().upper() in targets:
+            return airport
+    return None
+
+
+def _is_domestic_route(route_airports: Sequence[str | None] | None) -> bool:
+    """Both ends inside Egypt, judged over every route code we were given.
+
+    At least two known codes are required and ALL of them must be Egyptian —
+    a missing or foreign code leaves the sector international, so incomplete
+    journey-log data can never demote a rotation to domestic.
+    """
+
+    codes = [
+        airport
+        for airport in (route_airports or ())
+        if isinstance(airport, str) and airport.strip()
+    ]
+    return len(codes) >= 2 and all(is_domestic_airport(airport) for airport in codes)
+
+
+def _route_matches(route_airports: Sequence[str | None] | None, code: str) -> bool:
+    """Alias-aware exact airport match; see _route_match for the matched form."""
+
+    return _route_match(route_airports, code) is not None
+
+
 def derive_heavy_detail(
     entries: Sequence[CrewContextEntry] | None,
     aircraft_type: str | None,
     flight_tags: Sequence[str] | None = None,
+    *,
+    route_airports: Sequence[str | None] | None = None,
 ) -> tuple[bool | None, HeavyReason]:
-    """Apply the approved local Heavy rules in their agreed precedence order."""
+    """Apply the approved local Heavy rules in their agreed precedence order.
 
-    # STEP 1 — EVN is an absolute exclusion and wins over every other rule.
-    # If EVN and SVX ever appear together, EVN wins; flip these two blocks to change that.
-    if is_evn_flight(flight_tags):
-        return False, "EVN_TAG"
+    EVN and SVX are AIRPORT codes in live data (they appear in ADEP/ADES; LEON
+    does not tag these flights — verified in the 2026-06 UI review against
+    RSX331/RSX332 and RSX121/RSX122). ``route_airports`` carries every route
+    code we know for the flight, from the report row and/or the flight-list
+    context; a match on either source counts. Tags stay as a secondary signal.
+    """
+
+    return derive_heavy_detail_traced(
+        entries, aircraft_type, flight_tags, route_airports=route_airports
+    )[:2]
+
+
+def derive_heavy_detail_traced(
+    entries: Sequence[CrewContextEntry] | None,
+    aircraft_type: str | None,
+    flight_tags: Sequence[str] | None = None,
+    *,
+    route_airports: Sequence[str | None] | None = None,
+) -> tuple[bool | None, HeavyReason, tuple[HeavyTraceStep, ...]]:
+    """derive_heavy_detail, plus the ordered record of how it decided.
+
+    The single implementation: ``derive_heavy_detail`` delegates here and drops
+    the trace, so a traced verdict and an untraced one can never diverge.
+    """
+
+    airports = as_received(route_airports)
+    tags = sorted(_normalized_tags(flight_tags) or ())
+    steps: list[HeavyTraceStep] = []
+
+    # STEP 1 — EVN is an absolute exclusion and wins over every other rule,
+    # including SVX. Airport first (the live rule), then the legacy tag.
+    evn_airport = _route_match(route_airports, EVN_TAG)
+    steps.append(
+        step(
+            "STEP_1_EVN_AIRPORT",
+            f"matched {evn_airport!r} -> Heavy No" if evn_airport else "no match",
+            route_airports=airports,
+            accepted_forms=sorted(airport_code_forms(EVN_TAG)),
+        )
+    )
+    if evn_airport:
+        return False, "EVN_AIRPORT", tuple(steps)
+
+    evn_tag = is_evn_flight(flight_tags)
+    steps.append(
+        step(
+            "STEP_1_EVN_TAG",
+            "tagged EVN -> Heavy No" if evn_tag else "no match",
+            flight_tags=tags,
+        )
+    )
+    if evn_tag:
+        return False, "EVN_TAG", tuple(steps)
+
+    # STEP 1b — a domestic sector (every known route code Egyptian) is never
+    # Heavy by any LOCAL rule (owner ruling 2026-09-02). Deliberately NOT in
+    # ABSOLUTE_TAG_REASONS: unlike EVN/SVX this must lose to an explicit LEON
+    # crewAugmentation value, so decide_heavy treats it as an ordinary derived
+    # No that LEON may override.
+    domestic = _is_domestic_route(route_airports)
+    steps.append(
+        step(
+            "STEP_1_DOMESTIC",
+            "domestic sector (both ends Egyptian) -> Heavy No"
+            if domestic
+            else "no match",
+            route_airports=airports,
+        )
+    )
+    if domestic:
+        return False, "DOMESTIC_AIRPORT", tuple(steps)
+
     # STEP 2 — SVX is an absolute inclusion.
-    if is_svx_flight(flight_tags):
-        return True, "SVX_TAG"
+    svx_airport = _route_match(route_airports, SVX_TAG)
+    steps.append(
+        step(
+            "STEP_2_SVX_AIRPORT",
+            f"matched {svx_airport!r} -> Heavy Yes" if svx_airport else "no match",
+            route_airports=airports,
+            accepted_forms=sorted(airport_code_forms(SVX_TAG)),
+        )
+    )
+    if svx_airport:
+        return True, "SVX_AIRPORT", tuple(steps)
+
+    svx_tag = is_svx_flight(flight_tags)
+    steps.append(
+        step(
+            "STEP_2_SVX_TAG",
+            "tagged SVX -> Heavy Yes" if svx_tag else "no match",
+            flight_tags=tags,
+        )
+    )
+    if svx_tag:
+        return True, "SVX_TAG", tuple(steps)
 
     # STEP 3 — operating counts, after the STEP 0 trainee exclusions.
     if entries is None or not entries:
-        return None, "UNKNOWN"
-    if operating_cockpit_count(entries) > HEAVY_COCKPIT_THRESHOLD:
-        return True, "EXTRA_COCKPIT_CREW"
-    if operating_cabin_count(entries) > HEAVY_CABIN_THRESHOLD:
-        return True, "EXTRA_CABIN_CREW"
-    return False, "NONE"
+        steps.append(
+            step(
+                "STEP_3_OPERATING_COUNTS",
+                "no crew context -> UNKNOWN, STEP 4 decides",
+                crew_entries=0,
+            )
+        )
+        return None, "UNKNOWN", tuple(steps)
+
+    cockpit = operating_cockpit_count(entries)
+    cabin = operating_cabin_count(entries)
+    if cockpit > HEAVY_COCKPIT_THRESHOLD:
+        outcome = f"cockpit {cockpit} > {HEAVY_COCKPIT_THRESHOLD} -> Heavy Yes"
+        reason: HeavyReason = "EXTRA_COCKPIT_CREW"
+        verdict: bool | None = True
+    elif cabin > HEAVY_CABIN_THRESHOLD:
+        outcome = f"cabin {cabin} > {HEAVY_CABIN_THRESHOLD} -> Heavy Yes"
+        reason = "EXTRA_CABIN_CREW"
+        verdict = True
+    else:
+        outcome = (
+            f"cockpit {cockpit} <= {HEAVY_COCKPIT_THRESHOLD} and "
+            f"cabin {cabin} <= {HEAVY_CABIN_THRESHOLD} -> Heavy No"
+        )
+        reason = "NONE"
+        verdict = False
+    steps.append(
+        step(
+            "STEP_3_OPERATING_COUNTS",
+            outcome,
+            operating_cockpit=cockpit,
+            cockpit_threshold=HEAVY_COCKPIT_THRESHOLD,
+            operating_cabin=cabin,
+            cabin_threshold=HEAVY_CABIN_THRESHOLD,
+            crew_entries=len(entries),
+        )
+    )
+    return verdict, reason, tuple(steps)
 
 
 def derive_heavy(
     entries: Sequence[CrewContextEntry] | None,
     aircraft_type: str | None,
     flight_tags: Sequence[str] | None = None,
+    *,
+    route_airports: Sequence[str | None] | None = None,
 ) -> bool | None:
     """Return only the derived Heavy verdict; see derive_heavy_detail for its reason."""
 
-    return derive_heavy_detail(entries, aircraft_type, flight_tags)[0]
+    return derive_heavy_detail(
+        entries, aircraft_type, flight_tags, route_airports=route_airports
+    )[0]
+
+
+def classify_flight_heavy(
+    index,
+    rotation_index,
+    flight_nid: int | None,
+    *,
+    aircraft_type: str | None = None,
+    leon_heavy: bool | None = None,
+    route_airports: Sequence[str | None] | None = None,
+) -> tuple[bool | None, str]:
+    """THE flight-level Heavy verdict — the single engine for every surface.
+
+    Composes derive_heavy_detail → decide_heavy → resolve_unknown_heavy
+    exactly as the Crew Hours report wires them, so the Copilot and any other
+    caller can never disagree with the report (owner ruling, 2026-08-17).
+
+    STEP 4 at flight level: the flight is Heavy when any operating member's
+    rotation qualifies (positioning and non-operating slots never decide).
+    Returns (verdict, reason); verdict None means "no crew context at all".
+
+    ``route_airports`` carries the caller's own airport codes — for the report
+    that is the row's ``jl_adep/jl_ades_preferred_code``. They are UNIONED with
+    the flight-list context's codes, and a match on any of them counts. Callers
+    that omit them see only the context's codes, which is how an ICAO-coded SVX
+    leg used to be invisible to the airport rule on this path.
+    """
+
+    from .unknown_resolver import resolve_unknown_heavy, rotation_crew_codes
+
+    context = (
+        index.contexts.get(flight_nid)
+        if index.available and flight_nid is not None
+        else None
+    )
+    entries = context.entries if context is not None else ()
+    derived, derived_reason = derive_heavy_detail(
+        entries,
+        aircraft_type,
+        context.flight_tags if context is not None else None,
+        route_airports=merge_route_airports(
+            route_airports,
+            (context.departure_airport, context.arrival_airport)
+            if context is not None
+            else None,
+        ),
+    )
+    decision = decide_heavy(leon_heavy, derived, derived_reason)
+    if decision.effective_heavy is not None:
+        return decision.effective_heavy, decision.heavy_reason
+    # Rule 4: with LEON silent, an over-threshold operating count is final —
+    # STEP 4 exists only for the case where the count rule returned UNKNOWN
+    # (rule 5). decide_heavy deliberately leaves this None (its pinned table);
+    # the flight-level finalization happens here.
+    if decision.derived_heavy is True:
+        return True, decision.heavy_reason
+
+    codes = sorted(rotation_crew_codes(entries))
+    if not codes:
+        # No crew context at all is indeterminate; crew with no operating
+        # member (all positioning/non-operating) is simply not Heavy.
+        return (None, "UNKNOWN") if not entries else (False, "NONE")
+
+    reason: str = "NO_FLIGHT_CONTEXT"
+    for code in codes:
+        resolution = resolve_unknown_heavy(index, rotation_index, flight_nid, code)
+        if resolution.effective_heavy:
+            return True, resolution.reason
+        if reason == "NO_FLIGHT_CONTEXT":
+            reason = resolution.reason
+    return False, reason
 
 
 def decide_heavy(
@@ -152,9 +441,33 @@ def decide_heavy(
     derived_heavy: bool | None,
     derived_reason: HeavyReason | None = None,
 ) -> HeavyDecision:
-    """Apply the product-owner precedence table exactly."""
+    """Apply the product-owner precedence table exactly.
+
+    Absolute tags come first: EVN forces No and SVX forces Yes, beating a
+    conflicting LEON ``crewAugmentation`` value. Without a tag, the original
+    LEON-first table is unchanged.
+    """
 
     local_reason: HeavyReason = derived_reason or "EXTRA_COCKPIT_CREW"
+    if derived_reason in ABSOLUTE_TAG_REASONS:
+        # EVN → Heavy No, SVX → Heavy Yes; the verdict follows the airport/tag
+        # rule, not whatever LEON said. A disagreeing LEON value is surfaced as
+        # a conflict so the report never hides that the absolute rule won.
+        tag_heavy = derived_reason in ("SVX_TAG", "SVX_AIRPORT")
+        conflict = leon_heavy is not None and leon_heavy is not tag_heavy
+        if conflict:
+            logger.warning(
+                "Absolute EVN/SVX rule %s overrode a conflicting LEON crewAugmentation value.",
+                derived_reason,
+            )
+        return HeavyDecision(
+            leon_heavy=leon_heavy,
+            derived_heavy=derived_heavy,
+            effective_heavy=tag_heavy,
+            heavy_source="LOCAL_RULE",
+            heavy_reason=local_reason,
+            heavy_conflict=conflict,
+        )
     if leon_heavy is True and derived_heavy is True:
         return HeavyDecision(
             leon_heavy=True,
@@ -191,17 +504,8 @@ def decide_heavy(
             heavy_reason="NONE",
             heavy_conflict=False,
         )
-    if derived_reason in ABSOLUTE_TAG_REASONS:
-        # LEON is silent but the EVN/SVX tag is final on its own, so STEP 4 never runs.
-        return HeavyDecision(
-            leon_heavy=None,
-            derived_heavy=derived_heavy,
-            effective_heavy=derived_heavy,
-            heavy_source="LOCAL_RULE",
-            heavy_reason=local_reason,
-            heavy_conflict=False,
-        )
-    # LEON is silent and no absolute tag applies: STEP 4 resolves this downstream.
+    # LEON is silent and no absolute tag applies (tags returned above, so
+    # STEP 4 never runs for them): STEP 4 resolves this downstream.
     return HeavyDecision(
         leon_heavy=None,
         derived_heavy=derived_heavy,

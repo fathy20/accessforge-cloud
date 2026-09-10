@@ -56,6 +56,7 @@ class OfficialMcpReport(dict[str, str]):
         rows: list[Mapping[str, Any]],
         total_minutes: Mapping[str, int] | None = None,
         records_count: int | None = None,
+        buffered_rows: list[Mapping[str, Any]] | None = None,
     ):
         super().__init__(totals)
         self.total_minutes: Mapping[str, int] = dict(
@@ -65,6 +66,16 @@ class OfficialMcpReport(dict[str, str]):
         )
         self.rows = tuple(dict(row) for row in rows)
         self.records_count = len(self.rows) if records_count is None else records_count
+        # The FULL fetched row set, before select_rows_for_period narrowed it to
+        # the requested period. The H.C allowance reads THESE, so a rotation
+        # that straddles the month end keeps both of its legs visible to the
+        # duty chain; display, totals and flight counts keep reading ``rows``.
+        # Falls back to ``rows`` so fixtures built without it stay valid.
+        self.buffered_rows = (
+            tuple(dict(row) for row in buffered_rows)
+            if buffered_rows is not None
+            else self.rows
+        )
 
 def fetch_official_totals(
     configuration: LeonConfiguration,
@@ -153,6 +164,7 @@ def fetch_official_report(
             rows,
             total_minutes,
             records_count=len(fetched_rows),
+            buffered_rows=fetched_rows,
         )
 
     raise AssertionError("MCP authentication retry loop exhausted unexpectedly.")
@@ -312,7 +324,7 @@ def _aggregate_report_rows(
             continue
         minutes = _parse_block_time(block_time)
         for crew_slot in normalized_row.crew:
-            if not crew_slot.is_operating:
+            if not crew_slot.counts_in_totals:
                 continue
             totals[crew_slot.code] = totals.get(crew_slot.code, 0) + minutes
     return (

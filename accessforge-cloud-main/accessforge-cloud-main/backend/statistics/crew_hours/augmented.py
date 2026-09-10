@@ -46,6 +46,19 @@ class AugmentedIndex:
             return None
         return self.by_crew_sector.get((normalized_code, normalized_flight_nid))
 
+    def has_key(self, crew_code: str | None, flight_nid: object | None) -> bool:
+        """Whether the (crew, sector) key exists at all — even if its value is
+        ambiguous. This is the join-health metric: a present key proves the
+        report-row identifier matched the FTL trNid keying."""
+
+        if not self.available:
+            return False
+        normalized_code = _normalize_crew_code(crew_code)
+        normalized_flight_nid = _normalize_tr_nid(flight_nid)
+        if normalized_code is None or normalized_flight_nid is None:
+            return False
+        return (normalized_code, normalized_flight_nid) in self.by_crew_sector
+
     def lookup_raw(self, crew_code: str | None, flight_nid: object | None) -> str | None:
         if not self.available:
             return None
@@ -248,6 +261,9 @@ def _normalize_crew_code(value: Any) -> str | None:
 
 
 def _normalize_tr_nid(value: Any) -> int | None:
+    # LENIENT by design: an unusable trNid just fails the join for that duty
+    # row. Distinct from crew_context._normalize_flight_nid, which RAISES —
+    # there a bad flightNid is a broken LEON contract (L-6 ruling 2026-08-18).
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):

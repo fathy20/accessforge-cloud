@@ -256,7 +256,12 @@ class Upload(Base):
     
 class Job(Base):
     __tablename__ = "jobs"
-    __table_args__ = (Index("ix_jobs_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_jobs_user_id", "user_id"),
+        # The worker's claim scan: queued rows and expired running rows,
+        # oldest first.
+        Index("ix_jobs_status_created_at", "status", "created_at"),
+    )
     id = Column(String(36), primary_key=True, default=gen_uuid)
     user_id = Column(String(36), ForeignKey("users.id"))
     module_key = Column(String(128), ForeignKey("modules.key"))
@@ -272,6 +277,19 @@ class Job(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    # Durable execution (worker mode). A claim is an optimistic UPDATE that
+    # stamps a fresh lease_token; every later write by that worker is fenced
+    # on the token, so a worker whose lease expired and was reclaimed cannot
+    # overwrite the newer attempt. `attempt` counts claims, including
+    # reclaims after a crash; `cancel_requested` is the cooperative flag the
+    # worker polls before killing the child process.
+    attempt = Column(Integer, default=0, nullable=False, server_default="0")
+    lease_owner = Column(String(128), nullable=True)
+    lease_token = Column(String(36), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    heartbeat_at = Column(DateTime(timezone=True), nullable=True)
+    cancel_requested = Column(Boolean, default=False, nullable=False, server_default="0")
 
     user = relationship("User", back_populates="jobs")
 

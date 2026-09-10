@@ -61,6 +61,38 @@ LEON_POSITION_GROUPS: Mapping[str, frozenset[str]] = {
 
 TRAINING_FLIGHT_TYPES = frozenset({"LINE_TRAINING", "LINE_CHECK"})
 NON_OPERATING_COCKPIT_POSITIONS = frozenset({"OBS", "OBS2", "STB"})
+# Positioning slots (live values inside crew_position_names / flight-list
+# position names): the member rides the flight but does not operate it.
+# Excluded from operating counts and from STEP 4 crew-set comparison; their
+# numeric block-time inclusion semantics are governed elsewhere and unchanged.
+POSITIONING_POSITIONS = frozenset({"PSN", "PAD"})
+
+# THE crew-set identity (owner ruling 2026-08-17): the ONE definition of
+# "same crew" for comparisons — used by BOTH connected-duty grouping
+# (domain.select_rows_for_period) and the STEP-4 rotation comparison
+# (unknown_resolver.rotation_crew_codes). Do not create a third.
+# Riders (PSN/PAD) and non-operating cockpit slots (OBS/OBS2/STB) never make
+# two legs "different crews".
+# NOTE: this is a SET IDENTITY only. Per-member block-time inclusion in the
+# numeric totals (mcp_report aggregation; PSN-only exclusion, 2026-08-09
+# parity ruling) is a separate settled rule and is untouched by this.
+CREW_SET_EXCLUDED_POSITIONS = frozenset(
+    POSITIONING_POSITIONS | frozenset({"OBS", "OBS2", "STB"})
+)
+
+
+def crew_set_identity(members) -> frozenset[str]:
+    """Build the comparable crew set from (code, position) pairs."""
+
+    codes = set()
+    for code, position in members:
+        if not isinstance(code, str) or not code.strip():
+            continue
+        normalized_position = (position or "").strip().upper()
+        if normalized_position in CREW_SET_EXCLUDED_POSITIONS:
+            continue
+        codes.add(code.strip().upper())
+    return frozenset(codes)
 COCKPIT_POS_TYPE = "COCKPIT"
 CABIN_POS_TYPE = "CABIN"
 
@@ -74,6 +106,69 @@ TRAINING_FUNCTION_CABIN = "SFA"
 # EVN wins over every other rule (never Heavy); SVX forces Heavy.
 EVN_TAG = "EVN"
 SVX_TAG = "SVX"
+
+# The same two airports, in both code systems. Live data mixes them: the MCP
+# report row's ``jl_adep/jl_ades_preferred_code`` and the flight-list context's
+# ``_airport_code`` (ICAO preferred, IATA fallback) can name one airport two
+# different ways on the same flight, and comparing against the IATA literal
+# alone silently lost every ICAO-coded leg. Matching stays EXACT on either
+# form after trim+uppercase — never a substring, so USSSX and UDYZA do not
+# match. Adding a third airport to a rule means adding it here, once.
+AIRPORT_CODE_ALIASES: Mapping[str, frozenset[str]] = {
+    SVX_TAG: frozenset({"SVX", "USSS"}),
+    EVN_TAG: frozenset({"EVN", "UDYZ"}),
+}
+
+
+def airport_code_forms(code: str) -> frozenset[str]:
+    """Every accepted spelling of one airport, upper-cased."""
+
+    normalized = code.strip().upper()
+    return AIRPORT_CODE_ALIASES.get(normalized, frozenset({normalized}))
+
+
+# --- Domestic (inside Egypt) ---
+# A sector flown between two of these never earns a Heavy allowance, and its
+# hours never combine with anything to reach the sector minimum (owner ruling
+# 2026-09-02: "CAI->SSH repeated is not Heavy however many hours it adds up
+# to"). Both code systems are listed for the same reason as the aliases above:
+# LEON names one airport IATA on the report row and ICAO on the flight list.
+# Every Egyptian ICAO code begins "HE", but the prefix is NOT used as the test
+# — an exact match on a named airport keeps a foreign code that happens to
+# start with those letters (HEL, Helsinki) from being read as domestic.
+DOMESTIC_AIRPORTS = frozenset(
+    {
+        "CAI", "HECA",   # Cairo
+        "SSH", "HESH",   # Sharm el-Sheikh
+        "HRG", "HEGN",   # Hurghada
+        "HBE", "HEBA",   # Alexandria / Borg el-Arab
+        "LXR", "HELX",   # Luxor
+        "ASW", "HESN",   # Aswan
+        "RMF", "HEMA",   # Marsa Alam
+        "SPX", "HESX",   # Sphinx
+        "ATZ", "HEAT",   # Asyut
+        "MUH", "HEMM",   # Marsa Matruh
+        "TCP", "HETB",   # Taba
+        "AAC", "HEAR",   # El Arish
+        "PSD", "HEPS",   # Port Said
+        "DBB", "HEAL",   # El Alamein
+        "SEW", "HESG",   # Sohag
+    }
+)
+
+
+def is_domestic_airport(code: str | None) -> bool:
+    return isinstance(code, str) and code.strip().upper() in DOMESTIC_AIRPORTS
+
+
+def is_domestic_sector(departure: str | None, arrival: str | None) -> bool:
+    """True only when BOTH ends are inside Egypt.
+
+    One unknown end is enough to leave the sector international: a missing
+    journey-log airport must never silently demote a rotation to domestic.
+    """
+
+    return is_domestic_airport(departure) and is_domestic_airport(arrival)
 
 # --- Heavy Thresholds (strictly-greater) ---
 # cockpit_count > HEAVY_COCKPIT_THRESHOLD → Heavy

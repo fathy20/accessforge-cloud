@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { ModuleRegistryCard } from "@/components/app/ModuleRegistryCard";
+import { PageHeader } from "@/components/app/PageHeader";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { useI18n } from "@/lib/i18n";
 import { sortModules } from "@/lib/modules/registry";
@@ -18,10 +19,7 @@ export function ModulesIndex() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("nav.modules")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mod.index.description")}</p>
-      </div>
+      <PageHeader title={t("nav.modules")} description={t("mod.index.description")} />
 
       {perms.loading ? (
         <div className="p-10 grid place-items-center" role="status">

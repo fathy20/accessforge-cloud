@@ -3,24 +3,24 @@ import type {
   CrewMemberSummary,
   FlightItem,
   PositionTokenFilter,
-  PositioningToken,
   ReportTab,
   ReportTabPosition,
+  UiPositionFilterToken,
 } from "./types";
 import {
   ACTIVE_POSITION_TOKEN,
   ALL_AIRCRAFT,
   ALL_POSITION_TOKENS,
   OFFICIAL_MCP_SOURCE,
-  POSITIONING_TOKENS,
+  UI_POSITION_FILTER_TOKENS,
 } from "./types";
 
 export function hasOfficialTotal(crew: CrewMemberSummary): boolean {
   return typeof crew.official_total === "string" && crew.official_total.trim().length > 0;
 }
 
-export function isPositioningToken(position: string | null): position is PositioningToken {
-  return typeof position === "string" && POSITIONING_TOKENS.includes(position as PositioningToken);
+export function isPositioningToken(position: string | null): position is UiPositionFilterToken {
+  return typeof position === "string" && UI_POSITION_FILTER_TOKENS.includes(position as UiPositionFilterToken);
 }
 
 export function isValidReportPeriod(period?: { from: string; to: string } | null): boolean {

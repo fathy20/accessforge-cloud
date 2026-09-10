@@ -138,7 +138,7 @@ describe("Crew Hours detail rendering", () => {
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 
-  it("shows Heavy provenance in the tooltip and marks LEON/local conflicts", async () => {
+  it("keeps Heavy provenance in the tooltip without a conflict marker", async () => {
     const provenanceCrew: CrewMemberSummary = {
       ...crew,
       flights: [
@@ -166,21 +166,28 @@ describe("Crew Hours detail rendering", () => {
       />,
     );
 
-    const marker = screen.getByRole("img", { name: "Conflict: LEON takes precedence" });
-    expect(marker).toBeInTheDocument();
-    const trigger = marker.closest("[tabindex='0']");
-    expect(trigger).not.toBeNull();
-    fireEvent.focus(trigger as HTMLElement);
+    // The red conflict marker is gone (owner ruling 2026-09-02): the
+    // member-duty allowance is the verdict now, so the old flight-level
+    // LEON-vs-derived disagreement is provenance detail, not a warning.
+    expect(
+      screen.queryByRole("img", { name: "Conflict: LEON takes precedence" }),
+    ).not.toBeInTheDocument();
+
+    const trigger = screen.getAllByLabelText(/Augmented \(Heavy\)/)[0];
+    fireEvent.focus(trigger);
 
     await waitFor(() => {
       expect(screen.getAllByText("Source: LEON").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Reason: EXTRA_COCKPIT_CREW").length).toBeGreaterThan(0);
+      // Reason codes are rendered as sentences, not as the engine's enum name.
+      expect(screen.getAllByText("Reason: More than two operating pilots").length).toBeGreaterThan(
+        0,
+      );
       expect(screen.getAllByText("LEON value: No").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Derived value: Yes").length).toBeGreaterThan(0);
     });
   });
 
-  it("renders the conflict marker in Arabic RTL", () => {
+  it("renders no conflict marker in Arabic RTL either", () => {
     const provenanceCrew: CrewMemberSummary = {
       ...crew,
       flights: [{ ...crew.flights[0], heavy_conflict: true }],
@@ -199,7 +206,7 @@ describe("Crew Hours detail rendering", () => {
       "ar",
     );
 
-    expect(screen.getByRole("img", { name: "تعارض: LEON له الأولوية" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "تعارض: LEON له الأولوية" })).not.toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("dir", "rtl");
   });
 
@@ -242,6 +249,404 @@ describe("Crew Hours detail rendering", () => {
     expect(totalCells?.[0]).toHaveAttribute("colspan", "9");
     expect(totalCells?.[1]).toHaveTextContent("57:35");
     expect(totalCells?.[2]?.textContent).toBe("");
+  });
+
+  it("replaces the empty UNKNOWN reason with what the rotation search actually found", async () => {
+    // A leg whose rotation search concluded used to report two lines:
+    // "Reason: UNKNOWN" and then the real finding. The first read as "the
+    // system does not know" when in fact it looked and reached an answer.
+    const searchedCrew = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "UNKNOWN",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: false,
+          unknown_resolution_reason: "NO_NEIGHBOUR_FLIGHT",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [searchedCrew] }}
+        crews={[searchedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const cell = screen.getAllByLabelText(/Augmented/i)[0];
+    const trigger = cell.closest("[tabindex='0']") ?? cell;
+    fireEvent.focus(trigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Reason: No neighbouring leg in the same duty").length,
+      ).toBeGreaterThan(0);
+    });
+    // The bare code and the empty word are both gone, and the finding is not
+    // repeated on a second line.
+    expect(screen.queryByText(/UNKNOWN/)).toBeNull();
+    expect(screen.queryByText(/NO_NEIGHBOUR_FLIGHT/)).toBeNull();
+    expect(screen.queryByText(/Unknown resolution:/)).toBeNull();
+  });
+
+  it("marks locally-resolved rows with a red exclamation badge and reason tooltip", async () => {
+    const locallyResolvedCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [locallyResolvedCrew] }}
+        crews={[locallyResolvedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const badge = screen.getByTestId("local-resolution-marker");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAccessibleName(
+      "Not found in LEON augmented data — resolved by local rotation rule",
+    );
+
+    const trigger = badge.closest("[tabindex='0']");
+    expect(trigger).not.toBeNull();
+    fireEvent.focus(trigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Unknown resolution: Same day, short break, same crew").length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("Not found in LEON augmented data — resolved by local rotation rule")
+          .length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows the decision trace on a deterministic row, which carries no badge", async () => {
+    // 2.6: every leg explains itself, not only resolver-decided ones. This row
+    // is decided by the airport rule, so it has no badge and must still show
+    // the steps that produced its Yes.
+    const tracedCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 1,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_number: "RSX331",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "SVX_AIRPORT",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: false,
+          heavy_trace: [
+            {
+              step: "LEON_AUGMENTATION",
+              outcome: "LEON is silent for this leg",
+              inputs: { ftl_index_available: true },
+            },
+            {
+              step: "STEP_2_SVX_AIRPORT",
+              outcome: "matched 'USSS' -> Heavy Yes",
+              inputs: { route_airports: ["SSH", "SVX", "HESH", "USSS"] },
+            },
+            { step: "VERDICT", outcome: "Heavy Yes", inputs: { badge: false } },
+          ],
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [tracedCrew] }}
+        crews={[tracedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).toBeNull();
+
+    const verdict = screen.getAllByLabelText(/Augmented \(Heavy\)/)[0];
+    fireEvent.focus(verdict);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("heavy-trace").length).toBeGreaterThan(0);
+    });
+    const trace = screen.getAllByTestId("heavy-trace")[0];
+    expect(trace).toHaveTextContent("STEP_2_SVX_AIRPORT");
+    // Airports as received, in both code systems.
+    expect(trace).toHaveTextContent("SSH, SVX, HESH, USSS");
+    expect(trace).toHaveTextContent("VERDICT");
+  });
+
+  it("shows Yes on both legs of a credited duty and H.C on the header", () => {
+    // The owner complaint (Donia): FO out + PAD home used to split No / Yes.
+    // Under the member-duty allowance both legs read Yes, the swap credit
+    // carries the solid badge, and the header shows H.C 1.
+    const creditedCrew: CrewMemberSummary = {
+      ...crew,
+      heavy_credits: 1,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-out",
+          flight_number: "RSX6077",
+          augmented_heavy: false, // old flight-level verdict said No
+          duty_credit: true, // the credit overrides the display
+          credit_source: "OPERATE_PLUS_RIDE",
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-back",
+          flight_number: "RSX6078",
+          augmented_heavy: true,
+          duty_credit: true,
+          credit_source: "OPERATE_PLUS_RIDE",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [creditedCrew] }}
+        crews={[creditedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const verdicts = screen.getAllByLabelText(/Augmented \(Heavy\)/);
+    expect(verdicts).toHaveLength(2);
+    for (const cell of verdicts) {
+      expect(cell).toHaveTextContent("Yes");
+    }
+    expect(screen.getAllByTestId("local-resolution-marker")).toHaveLength(2);
+    expect(screen.getByText("H.C 1")).toBeInTheDocument();
+  });
+
+  it("shows No on both legs of an uncredited duty even if the old verdict split them", () => {
+    const uncreditedCrew: CrewMemberSummary = {
+      ...crew,
+      heavy_credits: 0,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-1",
+          flight_number: "RSX8891",
+          augmented_heavy: false,
+          duty_credit: false,
+          credit_source: null,
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-2",
+          flight_number: "RSX6083",
+          augmented_heavy: true, // old flight-level Yes
+          duty_credit: false, // no credit -> the display says No
+          credit_source: null,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [uncreditedCrew] }}
+        crews={[uncreditedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    const verdicts = screen.getAllByLabelText(/Augmented \(Heavy\)/);
+    for (const cell of verdicts) {
+      expect(cell).toHaveTextContent("No");
+    }
+    expect(screen.queryByTestId("local-resolution-marker")).toBeNull();
+  });
+
+  it("renders no badge on airport-decided EVN/SVX rows", () => {
+    // RSX331/RSX121 evidence: SVX/EVN verdicts are deterministic rules, not
+    // resolver guesses — unknown_resolved is false and no badge may render.
+    const airportCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "svx-leg",
+          flight_number: "RSX331",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "SVX_AIRPORT",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: false,
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "evn-leg",
+          flight_number: "RSX121",
+          heavy_source: "LOCAL_RULE",
+          heavy_reason: "EVN_AIRPORT",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: false,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [airportCrew] }}
+        crews={[airportCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).not.toBeInTheDocument();
+  });
+
+  it("renders the badge on both legs of a resolver-decided rotation", () => {
+    // RSX6081/RSX6084 evidence: every leg that entered STEP 4 carries the
+    // badge, regardless of its Yes/No outcome.
+    const rotationCrew: CrewMemberSummary = {
+      ...crew,
+      flight_count: 2,
+      flights: [
+        {
+          ...crew.flights[0],
+          flight_nid: "leg-out",
+          flight_number: "RSX6081",
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: true,
+          augmented_heavy: true,
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+        {
+          ...crew.flights[1],
+          flight_nid: "leg-back",
+          flight_number: "RSX6084",
+          heavy_source: "LOCAL_RULE",
+          effective_heavy: false,
+          augmented_heavy: false,
+          unknown_resolved: true,
+          unknown_resolution_reason: "BREAK_EXCEEDS_LIMIT",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [rotationCrew] }}
+        crews={[rotationCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByTestId("local-resolution-marker")).toHaveLength(2);
+  });
+
+  it("renders no local-resolution badge for LEON-sourced rows", () => {
+    const leonCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LEON",
+          effective_heavy: true,
+          unknown_resolved: false,
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [leonCrew] }}
+        crews={[leonCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("local-resolution-marker")).not.toBeInTheDocument();
+  });
+
+  it("renders the local-resolution badge label in Arabic", () => {
+    const locallyResolvedCrew: CrewMemberSummary = {
+      ...crew,
+      flights: [
+        {
+          ...crew.flights[0],
+          heavy_source: "LOCAL_RULE",
+          unknown_resolved: true,
+          unknown_resolution_reason: "SAME_DAY_SHORT_BREAK_SAME_CREW",
+        },
+      ],
+    };
+
+    renderI18n(
+      <CrewDetailTable
+        report={{ ...report, crew_members: [locallyResolvedCrew] }}
+        crews={[locallyResolvedCrew]}
+        aircraftFilter="__all_aircraft__"
+        positionTokenFilter="All"
+        hasClientSideDisplayFilter={false}
+        expandedCrew={{ ALPHA: true }}
+        onToggleCrew={vi.fn()}
+      />,
+      "ar",
+    );
+
+    const badge = screen.getByTestId("local-resolution-marker");
+    expect(badge).toHaveAccessibleName(
+      "غير موجود في بيانات LEON للتعزيز — تم الحل بقاعدة الدوران المحلية",
+    );
   });
 
   it("renders authoritative TRN without a local manual override control", () => {

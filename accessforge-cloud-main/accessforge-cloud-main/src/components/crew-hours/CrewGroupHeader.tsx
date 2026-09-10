@@ -60,6 +60,11 @@ export function CrewGroupHeader({
               </div>
               <span className="block text-xs font-normal text-muted-foreground">
                 {displayValue(crew.position_type)} · {flightCountLabel}
+                {typeof crew.heavy_credits === "number" && (
+                  <span className="ms-2 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
+                    H.C {crew.heavy_credits}
+                  </span>
+                )}
               </span>
             </div>
           </Button>

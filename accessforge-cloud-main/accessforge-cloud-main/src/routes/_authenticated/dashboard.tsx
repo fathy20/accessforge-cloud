@@ -1,271 +1,229 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
+import { Activity, ArrowRight, FileText, FolderKanban, Layers, ListTodo } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { useI18n } from "@/lib/i18n";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/app/PageHeader";
+import { DonutChart } from "@/components/charts/DonutChart";
+import { StackedAreaChart } from "@/components/charts/StackedAreaChart";
+import {
+  ACTIVE_POLL_MS,
+  IDLE_POLL_MS,
+  JOB_STATUSES,
+  JOB_STATUS_COLOR,
+  JOB_STATUS_TONE,
+  type JobRecord,
+  type JobStatus,
+} from "@/components/jobs/job-status";
 import { Badge } from "@/components/ui/badge";
-import {
-  FileText, ListTodo, FolderKanban, Layers, Activity, ArrowRight,
-} from "lucide-react";
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  PieChart, Pie, Cell, Legend,
-} from "recharts";
-import { format, subDays, startOfDay } from "date-fns";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard · REDSEA" }] }),
   component: DashboardPage,
 });
 
-/**
- * Recharts styles only the tooltip BOX from contentStyle and falls back to a
- * hardcoded dark colour for the text inside it, which is invisible on a dark
- * popover. itemStyle and labelStyle are what actually colour the content.
- */
-const CHART_TOOLTIP = {
-  contentStyle: {
-    background: "var(--popover)",
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    boxShadow: "var(--surface-overlay-shadow)",
-    fontSize: 12,
-    color: "var(--popover-foreground)",
-  },
-  itemStyle: { color: "var(--popover-foreground)", padding: 0 },
-  labelStyle: { color: "var(--muted-foreground)", marginBottom: 4, fontWeight: 500 },
-} as const;
+interface UploadRecord {
+  id: string;
+  original_name: string;
+  kind: string;
+}
 
-const STATUS_COLORS: Record<string, string> = {
-  queued: "var(--info)",
-  running: "var(--warning)",
-  done: "var(--success)",
-  failed: "var(--destructive)",
-  cancelled: "var(--muted-foreground)",
-};
+/** Shape of GET /api/dashboard/summary — aggregated in SQL on the server. */
+interface DashboardSummary {
+  jobs: {
+    total: number;
+    active: boolean;
+    by_status: Record<JobStatus, number>;
+    by_module: Array<{ module_key: string; count: number }>;
+    daily: Array<{ day: string; done: number; failed: number }>;
+    recent: JobRecord[];
+  };
+  uploads: { total: number; recent: UploadRecord[] };
+  projects: { total: number };
+}
+
+const HISTORY_DAYS = 14;
+
+async function loadDashboard() {
+  // One request carrying a few dozen numbers, instead of the caller's whole
+  // job and upload history reduced in the browser on every poll.
+  const summary = await ApiClient.fetch<DashboardSummary>("/dashboard/summary");
+
+  const statusCounts = Object.fromEntries(
+    JOB_STATUSES.map((status) => [status, summary.jobs.by_status[status] ?? 0]),
+  ) as Record<JobStatus, number>;
+
+  return {
+    jobsTotal: summary.jobs.total,
+    uploadsTotal: summary.uploads.total,
+    projectsTotal: summary.projects.total,
+    hasActiveJobs: summary.jobs.active,
+    statusCounts,
+    days: summary.jobs.daily.map((row) => ({
+      label: format(parseISO(row.day), "MMM d"),
+      values: { done: row.done, failed: row.failed },
+    })),
+    moduleBars: summary.jobs.by_module.map((row) => ({
+      name: row.module_key.replace(/_/g, " "),
+      value: row.count,
+    })),
+    recentJobs: summary.jobs.recent,
+    recentUploads: summary.uploads.recent,
+  };
+}
 
 function DashboardPage() {
   const { user } = useAuth();
   const perms = usePermissions();
-  const { lang } = useI18n();
-  const ar = lang === "ar";
-  const qc = useQueryClient();
+  const { t } = useI18n();
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
-    queryFn: async () => {
-      const [jobs, uploads] = await Promise.all([
-        ApiClient.fetch("/jobs"),
-        ApiClient.fetch("/uploads"),
-      ]);
-
-      const days: { day: string; queued: number; running: number; done: number; failed: number }[] = [];
-      for (let i = 13; i >= 0; i--) {
-        const d = startOfDay(subDays(new Date(), i));
-        days.push({ day: format(d, "MMM d"), queued: 0, running: 0, done: 0, failed: 0 });
-      }
-      const idxByLabel = new Map(days.map((d, i) => [d.day, i]));
-      for (const j of jobs) {
-        const label = format(startOfDay(new Date(j.created_at)), "MMM d");
-        const i = idxByLabel.get(label);
-        if (i === undefined) continue;
-        const k = j.status as keyof (typeof days)[number];
-        if (k in days[i]) (days[i] as Record<string, number | string>)[k] = (days[i][k as "queued"] as number) + 1;
-      }
-
-      const statusCounts: Record<string, number> = {};
-      for (const j of jobs) statusCounts[j.status] = (statusCounts[j.status] ?? 0) + 1;
-      const statusPie = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
-
-      const modCounts: Record<string, number> = {};
-      for (const j of jobs) modCounts[j.module_key] = (modCounts[j.module_key] ?? 0) + 1;
-      const moduleBars = Object.entries(modCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
-
-      return {
-        uploads: uploads.length,
-        projects: 0,
-        modules: 6,
-        jobsTotal: jobs.length,
-        running: statusCounts.running ?? 0,
-        queued: statusCounts.queued ?? 0,
-        failed: statusCounts.failed ?? 0,
-        done: statusCounts.done ?? 0,
-        days,
-        statusPie,
-        moduleBars,
-        recentJobs: jobs.slice(0, 6),
-        recentUploads: uploads.slice(0, 6),
-      };
-    },
-    refetchInterval: 3000,
+    queryFn: loadDashboard,
+    // Poll quickly only while a job is in flight; otherwise the dashboard was
+    // re-downloading every job and upload row every 3 seconds for nothing.
+    refetchInterval: (query) => (query.state.data?.hasActiveJobs ? ACTIVE_POLL_MS : IDLE_POLL_MS),
   });
 
-  const fullName = ((user as any)?.full_name || (user as any)?.user_metadata?.full_name) as string | undefined ?? user?.email;
+  const displayName = user?.full_name || user?.email;
+  const statusSlices = JOB_STATUSES.filter((status) => (stats?.statusCounts[status] ?? 0) > 0).map(
+    (status) => ({
+      key: status,
+      label: t(`jobs.status.${status}`),
+      value: stats?.statusCounts[status] ?? 0,
+      color: JOB_STATUS_COLOR[status],
+    }),
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{ar ? "مرحباً" : "Welcome back"}</p>
-          <h1 className="text-3xl font-bold tracking-tight">{fullName}</h1>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {perms.roles.map((r) => (
-              <Badge key={r} variant="outline" className="capitalize">{r.replace("_", " ")}</Badge>
+      <PageHeader
+        title={displayName}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{t("dash.welcome")}</span>
+            {perms.roles.map((role) => (
+              <Badge key={role} variant="outline" className="capitalize">
+                {role.replace("_", " ")}
+              </Badge>
             ))}
-          </div>
-        </div>
-        <Link to="/jobs" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-          {ar ? "متابعة المهام لحظياً" : "Live job monitor"}
-          <Activity className="size-3.5" />
-        </Link>
+          </span>
+        }
+        actions={
+          <Link
+            to="/jobs"
+            className="inline-flex items-center gap-1.5 text-body text-primary hover:underline"
+          >
+            {t("dash.live_monitor")}
+            <Activity className="size-3.5" aria-hidden="true" />
+          </Link>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Stat
+          icon={FolderKanban}
+          label={t("nav.projects")}
+          value={stats?.projectsTotal}
+          to="/projects"
+        />
+        <Stat icon={FileText} label={t("nav.uploads")} value={stats?.uploadsTotal} to="/uploads" />
+        <Stat icon={ListTodo} label={t("nav.jobs")} value={stats?.jobsTotal} to="/jobs" />
+        <Stat
+          icon={Layers}
+          label={t("nav.modules")}
+          value={perms.loading ? undefined : perms.modules.length}
+          to="/modules"
+        />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat icon={FolderKanban} label={ar ? "المشاريع" : "Projects"} value={stats?.projects} to="/projects" />
-        <Stat icon={FileText} label={ar ? "الملفات" : "Uploads"} value={stats?.uploads} to="/uploads" />
-        <Stat icon={ListTodo} label={ar ? "المهام" : "Jobs"} value={stats?.jobsTotal} to="/jobs" />
-        <Stat icon={Layers} label={ar ? "الموديولات" : "Modules"} value={stats?.modules} />
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 chart-enter">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{ar ? "المهام آخر 14 يوم" : "Jobs · last 14 days"}</CardTitle>
+            <CardTitle className="text-heading-3">
+              {t("dash.jobs_history", { days: HISTORY_DAYS })}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats?.days ?? []}>
-                <defs>
-                  <linearGradient id="g-done" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={STATUS_COLORS.done} stopOpacity={0.55} />
-                    <stop offset="100%" stopColor={STATUS_COLORS.done} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="g-failed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={STATUS_COLORS.failed} stopOpacity={0.5} />
-                    <stop offset="100%" stopColor={STATUS_COLORS.failed} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="day" fontSize={11} stroke="var(--muted-foreground)" />
-                <YAxis fontSize={11} stroke="var(--muted-foreground)" allowDecimals={false} />
-                <Tooltip {...CHART_TOOLTIP} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
-                <Area
-                  type="monotone"
-                  dataKey="done"
-                  stroke={STATUS_COLORS.done}
-                  fill="url(#g-done)"
-                  isAnimationActive
-                  animationBegin={80}
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="failed"
-                  stroke={STATUS_COLORS.failed}
-                  fill="url(#g-failed)"
-                  isAnimationActive
-                  animationBegin={220}
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <CardContent>
+            <StackedAreaChart
+              series={[
+                { key: "done", label: t("jobs.status.done"), color: JOB_STATUS_COLOR.done },
+                { key: "failed", label: t("jobs.status.failed"), color: JOB_STATUS_COLOR.failed },
+              ]}
+              points={stats?.days ?? []}
+            />
           </CardContent>
         </Card>
 
-        <Card className="chart-enter chart-enter--2">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{ar ? "توزيع الحالات" : "Status mix"}</CardTitle>
+            <CardTitle className="text-heading-3">{t("dash.status_mix")}</CardTitle>
           </CardHeader>
-          <CardContent className="h-64">
-            {stats && stats.statusPie.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.statusPie}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={45}
-                    outerRadius={75}
-                    paddingAngle={2}
-                    isAnimationActive
-                    animationBegin={0}
-                    animationDuration={700}
-                    animationEasing="ease-out"
-                  >
-                    {stats.statusPie.map((s) => (
-                      <Cell key={s.name} fill={STATUS_COLORS[s.name] ?? "var(--muted-foreground)"} />
-                    ))}
-                  </Pie>
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Tooltip {...CHART_TOOLTIP} />
-                </PieChart>
-              </ResponsiveContainer>
+          <CardContent className="grid min-h-56 place-items-center">
+            {statusSlices.length > 0 ? (
+              <DonutChart slices={statusSlices} centerLabel={t("dash.total")} />
             ) : (
-              <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                {ar ? "لا توجد مهام بعد." : "No jobs yet."}
-              </div>
+              <p className="text-body text-fg-muted">{t("dash.no_jobs")}</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2 flex flex-row justify-between items-center">
-            <CardTitle className="text-base">{ar ? "أحدث المهام" : "Recent jobs"}</CardTitle>
-            <Link to="/jobs" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-              {ar ? "الكل" : "All"} <ArrowRight className="size-3" />
-            </Link>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-heading-3">{t("dash.recent_jobs")}</CardTitle>
+            <SeeAll to="/jobs" label={t("dash.all")} />
           </CardHeader>
           <CardContent className="p-0">
             {!stats?.recentJobs.length ? (
-              <p className="p-6 text-sm text-muted-foreground text-center">{ar ? "لا توجد مهام بعد." : "No jobs yet."}</p>
+              <p className="p-6 text-center text-body text-fg-muted">{t("dash.no_jobs")}</p>
             ) : (
-              <div className="divide-y divide-border">
-                {stats.recentJobs.map((j: any) => (
-                  <div key={j.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                    <Badge variant="outline" className="capitalize" style={{ color: STATUS_COLORS[j.status] }}>
-                      {j.status}
+              <ul className="divide-y divide-border">
+                {stats.recentJobs.map((job) => (
+                  <li key={job.id} className="flex items-center gap-3 px-4 py-2.5 text-body">
+                    <Badge className={JOB_STATUS_TONE[job.status]}>
+                      {t(`jobs.status.${job.status}`)}
                     </Badge>
-                    <span className="font-mono">{j.module_key}</span>
-                    <span className="text-muted-foreground font-mono text-xs">{j.id.slice(0, 8)}</span>
+                    <span className="font-mono">{job.module_key}</span>
+                    <span className="font-mono text-caption text-fg-muted">
+                      {job.id.slice(0, 8)}
+                    </span>
                     <div className="flex-1" />
-                    <span className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString()}</span>
-                  </div>
+                    <time className="text-caption text-fg-muted" dateTime={job.created_at}>
+                      {new Date(job.created_at).toLocaleString()}
+                    </time>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2 flex flex-row justify-between items-center">
-            <CardTitle className="text-base">{ar ? "أحدث الملفات" : "Recent uploads"}</CardTitle>
-            <Link to="/uploads" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-              {ar ? "الكل" : "All"} <ArrowRight className="size-3" />
-            </Link>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-heading-3">{t("dash.recent_uploads")}</CardTitle>
+            <SeeAll to="/uploads" label={t("dash.all")} />
           </CardHeader>
           <CardContent className="p-0">
             {!stats?.recentUploads.length ? (
-              <p className="p-6 text-sm text-muted-foreground text-center">{ar ? "لا توجد ملفات." : "No uploads."}</p>
+              <p className="p-6 text-center text-body text-fg-muted">{t("dash.no_uploads")}</p>
             ) : (
-              <div className="divide-y divide-border">
-                {stats.recentUploads.map((u: any) => (
-                  <div key={u.id} className="px-4 py-2.5 flex items-center gap-2 text-sm">
-                    <FileText className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="truncate flex-1">{u.original_name}</span>
-                    <Badge variant="outline" className="uppercase text-[10px]">{u.kind}</Badge>
-                  </div>
+              <ul className="divide-y divide-border">
+                {stats.recentUploads.map((upload) => (
+                  <li key={upload.id} className="flex items-center gap-2 px-4 py-2.5 text-body">
+                    <FileText className="size-3.5 shrink-0 text-fg-muted" aria-hidden="true" />
+                    <span className="flex-1 truncate">{upload.original_name}</span>
+                    <Badge variant="outline" className="text-caption uppercase">
+                      {upload.kind}
+                    </Badge>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -274,19 +232,21 @@ function DashboardPage() {
       {stats && stats.moduleBars.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{ar ? "استخدام الموديولات" : "Module usage (last 14d)"}</CardTitle>
+            <CardTitle className="text-heading-3">{t("dash.module_usage")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {stats.moduleBars.map((m) => {
+            {stats.moduleBars.map((bar) => {
               const max = stats.moduleBars[0].value || 1;
-              const pct = (m.value / max) * 100;
               return (
-                <div key={m.name} className="flex items-center gap-3 text-sm">
-                  <span className="w-32 truncate capitalize">{m.name}</span>
-                  <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                <div key={bar.name} className="flex items-center gap-3 text-body">
+                  <span className="w-32 truncate capitalize">{bar.name}</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${(bar.value / max) * 100}%` }}
+                    />
                   </div>
-                  <span className="font-mono text-xs w-8 text-right">{m.value}</span>
+                  <span className="numeric-tabular w-8 text-end">{bar.value}</span>
                 </div>
               );
             })}
@@ -297,18 +257,37 @@ function DashboardPage() {
   );
 }
 
+function SeeAll({ to, label }: { to: string; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1 text-caption text-primary hover:underline"
+    >
+      {label} <ArrowRight className="size-3 rtl:rotate-180" aria-hidden="true" />
+    </Link>
+  );
+}
+
 function Stat({
-  icon: Icon, label, value, to,
-}: { icon: React.ComponentType<{ className?: string }>; label: string; value?: number; to?: string }) {
+  icon: Icon,
+  label,
+  value,
+  to,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value?: number;
+  to?: string;
+}) {
   const inner = (
-    <Card className={to ? "transition-colors hover:bg-muted/40" : ""}>
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className="size-11 rounded-lg bg-primary/10 text-primary grid place-items-center">
+    <Card className={to ? "transition-colors hover:bg-interactive-hover" : ""}>
+      <CardContent className="flex items-center gap-4 p-5">
+        <div className="grid size-11 place-items-center rounded-lg bg-brand-subtle text-primary">
           <Icon className="size-5" />
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-          <p className="text-2xl font-bold leading-none mt-1">{value ?? "—"}</p>
+          <p className="text-caption uppercase tracking-wider text-fg-muted">{label}</p>
+          <p className="numeric-tabular mt-1 text-2xl font-bold leading-none">{value ?? "—"}</p>
         </div>
       </CardContent>
     </Card>

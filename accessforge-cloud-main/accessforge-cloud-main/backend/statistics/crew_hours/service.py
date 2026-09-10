@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import date
 from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
@@ -5,8 +6,17 @@ from typing import Annotated, Any, Dict, List, Mapping, Protocol, Sequence
 from fastapi import Depends
 
 from .augmented import AugmentedIndex
+from .allowance import (
+    NEUTRAL_POSITIONS,
+    RIDE_POSITIONS,
+    AllowanceLeg,
+    DutyCredit,
+    compute_member_credits,
+)
+from .fdp import FdpTables, assess_rotation, tables_for
+from .trace import format_break
 from .crew_context import CREW_CONTEXT_CHUNK_DAYS, CrewContextEntry, CrewContextIndex, FlightContext
-from .domain import buffered_query_dates, is_trn_total, normalize_report_row
+from .domain import buffered_query_dates, is_trn_total, normalize_report_row, utc_today
 from .errors import (
     CrewHoursCapabilityError,
     LeonAuthenticationError,
@@ -19,6 +29,8 @@ from .leon_client import CrewHoursLeonClient, get_crew_hours_leon_client
 from .heavy import (
     decide_heavy,
     derive_heavy_detail,
+    derive_heavy_detail_traced,
+    merge_route_airports,
     is_training_function,
     is_training_position,
 )
@@ -26,13 +38,16 @@ from .mcp_report import OfficialMcpReport, _format_minutes
 from .positions import LEON_POSITION_GROUPS
 from .unknown_resolver import build_rotation_index, resolve_unknown_heavy
 from .schemas import (
+    FdpShadow,
     CrewHoursPeriod,
     CrewHoursReportResponse,
     CrewHoursRequest,
     CrewHoursResponse,
     CrewMemberSummary,
     FlightItem,
+    HeavyTraceStep,
 )
+from .trace import HeavyTraceStep as TraceStep, step as _trace_step
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +80,8 @@ class LiveCrewHoursService:
         crew_member: str | None = None,
     ) -> CrewHoursReportResponse:
         """Build the report from the authoritative MCP Report Wizard rows."""
-        today = date.today()
+        # UTC, never server-local (L-5 ruling 2026-08-18): the data is UTC-keyed.
+        today = utc_today()
         if not from_date:
             from_date = today.replace(day=1).isoformat()
         if not to_date:
@@ -180,6 +196,55 @@ def _crew_context_chunk_count(from_date: str, to_date: str) -> int:
         return 0
 
 
+class _JoinHealthCounters:
+    """Per-report join instrumentation across the three LEON identifier spaces.
+
+    The Report Wizard's ``unique_id`` is joined against the FTL index (keyed
+    by ``trNid``) and the flight-list index (keyed by ``flightNid``) on the
+    UNVERIFIED assumption that they are the same number — the column docs mark
+    it AMBIGUOUS. If they differ, every lookup misses and the whole report
+    silently reads No; these counters make that failure loud instead.
+    """
+
+    __slots__ = (
+        "augmented_hits",
+        "augmented_attempts",
+        "crew_context_hits",
+        "crew_context_attempts",
+    )
+
+    def __init__(self) -> None:
+        self.augmented_hits = 0
+        self.augmented_attempts = 0
+        self.crew_context_hits = 0
+        self.crew_context_attempts = 0
+
+
+# Below this hit rate, against a non-empty index, the join is presumed broken.
+_JOIN_HEALTH_MINIMUM_HIT_RATE = 0.5
+
+
+def _join_health_status(
+    counters: _JoinHealthCounters,
+    augmented_index: AugmentedIndex,
+    crew_context_index: CrewContextIndex,
+) -> str:
+    def degraded(hits: int, attempts: int, index_size: int) -> bool:
+        return (
+            attempts > 0
+            and index_size > 0
+            and hits / attempts < _JOIN_HEALTH_MINIMUM_HIT_RATE
+        )
+
+    augmented_size = len(augmented_index.by_crew_sector) if augmented_index.available else 0
+    context_size = len(crew_context_index.by_flight) if crew_context_index.available else 0
+    if degraded(counters.augmented_hits, counters.augmented_attempts, augmented_size) or degraded(
+        counters.crew_context_hits, counters.crew_context_attempts, context_size
+    ):
+        return "DEGRADED"
+    return "OK"
+
+
 def _build_mcp_report_response(
     report: OfficialMcpReport,
     *,
@@ -192,6 +257,7 @@ def _build_mcp_report_response(
 ) -> CrewHoursReportResponse:
     augmented_index = augmented_index or AugmentedIndex(False, {}, 0, 0)
     crew_context_index = crew_context_index or CrewContextIndex(False, {})
+    join_health_counters = _JoinHealthCounters()
     # Built once per report; STEP 4 needs each crew member's flights in time order.
     rotation_index = build_rotation_index(crew_context_index)
     crew_map: Dict[str, Dict[str, Any]] = {}
@@ -271,6 +337,7 @@ def _build_mcp_report_response(
                 crew_context_index=crew_context_index,
                 rotation_index=rotation_index,
                 is_trn=explicit_trn,
+                join_health=join_health_counters,
             )
             crew_map[key]["flights"].append(flight)
         row_crew_codes.append(row_codes)
@@ -300,9 +367,39 @@ def _build_mcp_report_response(
         elif is_trn_total(official_total):
             crew_map[code]["has_trn"] = True
 
+    # The allowance judges duties over the BUFFERED rows, not the displayed
+    # ones: a rotation departing on the month's last day returns inside the
+    # buffer, and only with both legs visible can the duty chain see it is one
+    # rotation (owner ruling 2026-09-02). Display never reads these — the extra
+    # legs' keys simply never match a displayed flight_nid.
+    allowance_legs_by_code = _allowance_legs_by_code(
+        getattr(report, "buffered_rows", ()) or report.rows, augmented_index
+    )
+    fdp_tables = tables_for(os.environ.get("CREW_HOURS_FDP_TABLES"))
+
     all_crew_summaries: List[CrewMemberSummary] = []
     for code, data in crew_map.items():
         official_total = official_totals.get(code)
+        allowance = compute_member_credits(
+            allowance_legs_by_code.get(code, []),
+            window_start=from_date or None,
+            window_end=to_date or None,
+        )
+        for flight in data["flights"]:
+            credited, source = allowance.by_leg.get(flight.flight_nid, (False, None))
+            flight.duty_credit = credited
+            flight.credit_source = source
+        # SHADOW (2026-09-03): measure each of the member's duties against the
+        # regulatory two-pilot FDP limit and paint the result beside the
+        # verdict. Same duty grouping as the allowance, so the two can be
+        # compared leg for leg. Changes nothing that is displayed as a verdict,
+        # exported, or credited.
+        _paint_fdp_shadow(
+            data["flights"],
+            allowance_legs_by_code.get(code, []),
+            allowance.duties,
+            fdp_tables,
+        )
         all_crew_summaries.append(
             CrewMemberSummary(
                 crew_id=data["crew_id"],
@@ -317,6 +414,7 @@ def _build_mcp_report_response(
                 reference_total=None,
                 variance_minutes=None,
                 flight_count=len(data["flights"]),
+                heavy_credits=allowance.credits,
                 flights=data["flights"],
             )
         )
@@ -368,6 +466,34 @@ def _build_mcp_report_response(
         if isinstance(item.official_total, str) and item.official_total.strip()
     )
     crew_summaries.sort(key=lambda item: (item.display_name.casefold(), item.person_code or ""))
+
+    join_health = _join_health_status(
+        join_health_counters, augmented_index, crew_context_index
+    )
+    # DEBUG when healthy: clean reports stay quiet (a pinned contract); the
+    # counters always travel in the response, and degradation warns loudly.
+    logger.debug(
+        "Crew Hours join health period=%s..%s augmented=%d/%d crew_context=%d/%d status=%s",
+        from_date,
+        to_date,
+        join_health_counters.augmented_hits,
+        join_health_counters.augmented_attempts,
+        join_health_counters.crew_context_hits,
+        join_health_counters.crew_context_attempts,
+        join_health,
+    )
+    if join_health == "DEGRADED":
+        logger.warning(
+            "Crew Hours join health DEGRADED: report unique_id values are not "
+            "matching the FTL trNid / flight-list flightNid indices "
+            "(augmented %d/%d, crew_context %d/%d). Run "
+            "backend.statistics.crew_hours.tools.id_probe to confirm the join key.",
+            join_health_counters.augmented_hits,
+            join_health_counters.augmented_attempts,
+            join_health_counters.crew_context_hits,
+            join_health_counters.crew_context_attempts,
+        )
+
     return CrewHoursReportResponse(
         period=CrewHoursPeriod(from_date=from_date, to_date=to_date),
         source="leon_mcp_report",
@@ -378,8 +504,133 @@ def _build_mcp_report_response(
         official_totals_available=official_totals_available,
         official_totals_unavailable=len(crew_summaries) - official_totals_available,
         official_totals_by_position=official_totals_by_position,
+        join_health=join_health,
+        augmented_lookup_hits=join_health_counters.augmented_hits,
+        augmented_lookup_attempts=join_health_counters.augmented_attempts,
+        crew_context_hits=join_health_counters.crew_context_hits,
+        crew_context_attempts=join_health_counters.crew_context_attempts,
+        cabin_trainee_detection=(
+            "active"
+            if crew_context_index.available and crew_context_index.crew_function_available
+            else "unavailable"
+        ),
         crew_members=crew_summaries,
     )
+
+
+def _paint_fdp_shadow(
+    flights: Sequence[FlightItem],
+    member_legs: Sequence[AllowanceLeg],
+    duties: Sequence[DutyCredit],
+    tables: FdpTables,
+) -> None:
+    """Attach the shadow FDP assessment of each duty to its displayed legs."""
+
+    by_key = {flight.flight_nid: flight for flight in flights}
+    for duty in duties:
+        duty_keys = set(duty.leg_keys)
+        duty_legs = [leg for leg in member_legs if leg.key in duty_keys]
+        # WHO this member is, from his own role slots on this duty. Identity
+        # for the trace only: the service never supplies ``crew_type``, so the
+        # limit stays the base table figure whatever this says. ``len(...) == 1``
+        # and never ``all(...)``: ``all([])`` is True, which would label a duty
+        # with no classified slot at all as Cabin.
+        tokens = [(leg.position or "").strip().upper() for leg in duty_legs]
+        groups = [_position_group(token) for token in tokens]
+        classified = {group for group in groups if group}
+        unclassified = [token for token, group in zip(tokens, groups) if group is None]
+        non_crew = RIDE_POSITIONS | NEUTRAL_POSITIONS | {"PSN"}
+        unexplained = [token for token in unclassified if token not in non_crew]
+
+        if len(classified) == 1:
+            crew_group = next(iter(classified))
+            if unexplained:
+                crew_group += " (incomplete role data)"
+        elif classified:
+            crew_group = "undetermined (mixed: " + "+".join(sorted(classified)) + ")"
+        elif unexplained:
+            crew_group = "undetermined (role data missing)"
+        else:
+            crew_group = "undetermined (positioning/neutral only)"
+
+        assessment = assess_rotation(duty_legs, tables=tables, crew_group=crew_group)
+        if assessment is None:
+            continue
+        for key in duty.leg_keys:
+            flight = by_key.get(key)
+            if flight is None:
+                continue
+            needs = assessment.needs_augmentation
+            flight.fdp_shadow = FdpShadow(
+                tables_version=assessment.tables_version,
+                table=assessment.table,
+                band=assessment.band,
+                sectors=assessment.window.sectors,
+                planned=format_break(assessment.window.planned),
+                limit=None if assessment.limit is None else format_break(assessment.limit),
+                margin=None if assessment.margin is None else format_break(assessment.margin),
+                needs_augmentation=needs,
+                agrees_with_verdict=(
+                    None
+                    if needs is None or flight.effective_heavy is None
+                    else needs == flight.effective_heavy
+                ),
+                crew_group=assessment.crew_group,
+                duty_leg_keys=list(duty.leg_keys),
+            )
+            flight.heavy_trace.extend(
+                HeavyTraceStep(step=item.step, outcome=item.outcome, inputs=dict(item.inputs))
+                for item in assessment.trace
+            )
+
+
+def _allowance_legs_by_code(
+    rows: Sequence[Mapping[str, Any]],
+    augmented_index: AugmentedIndex,
+) -> Dict[str, List[AllowanceLeg]]:
+    """Every member's legs across the buffered window, keyed by crew code.
+
+    Field provenance is identical to the displayed flights — same report
+    columns, same augmented lookup, same misalignment handling — so an
+    in-window leg here shares its ``scope_row_unique_id`` key with its
+    displayed FlightItem, which is what lets ``by_leg`` paint the display.
+    Rows inside the period are re-validated by the display loop before this
+    runs; a malformed row that exists ONLY in the buffer is skipped with a
+    warning rather than failing the whole report over out-of-window data.
+    """
+
+    legs: Dict[str, List[AllowanceLeg]] = {}
+    for row in rows:
+        key = _optional_string(row.get("scope_row_unique_id"))
+        if key is None:
+            continue
+        try:
+            normalized_row = normalize_report_row(row)
+        except LeonContractError:
+            logger.warning(
+                "Skipping malformed buffered report row %s for allowance chaining.",
+                key,
+            )
+            continue
+        for crew_slot in normalized_row.crew:
+            position = (
+                None if normalized_row.positions_misaligned else crew_slot.position
+            )
+            legs.setdefault(crew_slot.code, []).append(
+                AllowanceLeg(
+                    key=key,
+                    flight_date=_optional_string(row.get("date_STD_log_UTC")),
+                    start_time=_optional_string(row.get("JL_STD_UTC")),
+                    end_time=_optional_string(row.get("JL_STA_UTC")),
+                    position=position,
+                    leon_heavy=augmented_index.lookup(
+                        crew_slot.code, row.get("unique_id")
+                    ),
+                    departure_airport=_optional_string(row.get("jl_adep_preferred_code")),
+                    arrival_airport=_optional_string(row.get("jl_ades_preferred_code")),
+                )
+            )
+    return legs
 
 
 def _mcp_flight_item(
@@ -391,6 +642,7 @@ def _mcp_flight_item(
     augmented_index: AugmentedIndex | None = None,
     crew_context_index: CrewContextIndex | None = None,
     rotation_index: Mapping[str, tuple[FlightContext, ...]] | None = None,
+    join_health: _JoinHealthCounters | None = None,
 ) -> FlightItem:
     flight_nid = _optional_string(row.get("scope_row_unique_id"))
     if flight_nid is None:
@@ -406,17 +658,85 @@ def _mcp_flight_item(
         if crew_context_index.available
         else ()
     )
-    derived_heavy, derived_reason = derive_heavy_detail(
+    # EVN/SVX are airport codes in live data. Collect every route code we know
+    # — the report row's [JL] preferred codes plus the flight-list context —
+    # so the absolute rules fire when either source names the airport.
+    flight_context = (
+        crew_context_index.contexts.get(unique_id)
+        if crew_context_index.available and unique_id is not None
+        else None
+    )
+    route_airports = merge_route_airports(
+        (
+            _optional_string(row.get("jl_adep_preferred_code")),
+            _optional_string(row.get("jl_ades_preferred_code")),
+        ),
+        (
+            (flight_context.departure_airport, flight_context.arrival_airport)
+            if flight_context
+            else ()
+        ),
+    )
+    if join_health is not None:
+        # A hit is key-presence, not a non-None value: an ambiguous FTL value
+        # still proves the identifiers joined.
+        if augmented_index.available:
+            join_health.augmented_attempts += 1
+            if augmented_index.has_key(crew_code, row.get("unique_id")):
+                join_health.augmented_hits += 1
+        if crew_context_index.available:
+            join_health.crew_context_attempts += 1
+            if unique_id is not None and unique_id in crew_context_index.by_flight:
+                join_health.crew_context_hits += 1
+    derived_heavy, derived_reason, derive_steps = derive_heavy_detail_traced(
         entries,
         _optional_string(row.get("acftType")),
         crew_context_index.tags_for(unique_id),
+        route_airports=route_airports,
     )
     heavy_decision = decide_heavy(leon_heavy, derived_heavy, derived_reason)
+
+    trace: list[TraceStep] = [
+        _trace_step(
+            "LEON_AUGMENTATION",
+            (
+                "LEON is silent for this leg"
+                if leon_heavy is None
+                else f"LEON says Heavy {'Yes' if leon_heavy else 'No'}"
+            ),
+            leon_augmentation=leon_augmentation,
+            ftl_index_available=augmented_index.available,
+        ),
+        *derive_steps,
+        _trace_step(
+            "DECISION_TABLE",
+            (
+                f"source={heavy_decision.heavy_source}, "
+                f"reason={heavy_decision.heavy_reason}, "
+                f"effective={heavy_decision.effective_heavy}"
+            ),
+            leon_heavy=leon_heavy,
+            derived_heavy=heavy_decision.derived_heavy,
+            conflict=heavy_decision.heavy_conflict,
+        ),
+    ]
 
     effective_heavy = heavy_decision.effective_heavy
     heavy_source = heavy_decision.heavy_source
     unknown_resolved = False
     unknown_resolution_reason: str | None = None
+    # Rule 4 (owner rule set): with LEON silent, an over-threshold operating
+    # count is final and never falls to the resolver — STEP 4 exists only for
+    # the count rule's UNKNOWN outcome (rule 5).
+    if effective_heavy is None and heavy_decision.derived_heavy is True:
+        effective_heavy = True
+        heavy_source = "LOCAL_RULE"
+        trace.append(
+            _trace_step(
+                "COUNT_RULE_IS_FINAL",
+                "LEON silent and the operating count is over threshold -> Heavy Yes",
+            )
+        )
     # STEP 4 only runs where LEON genuinely returned no augmentation value.  When
     # the whole FTL index is unavailable we keep UNKNOWN rather than inventing a No.
     if effective_heavy is None and augmented_index.available:
@@ -427,10 +747,29 @@ def _mcp_flight_item(
             crew_code,
         )
         effective_heavy = resolution.effective_heavy
-        unknown_resolved = resolution.resolved
+        # The badge marks a verdict the resolver ESTABLISHED, and it can only
+        # establish a Yes: a No means "no qualifying rotation was found", which
+        # is an absence of evidence, not a local resolution (owner ruling
+        # 2026-08-19). Deterministic EVN/SVX/count verdicts never reach this
+        # branch at all, so they can never carry it either.
+        unknown_resolved = resolution.effective_heavy
         unknown_resolution_reason = resolution.reason
-        if resolution.resolved:
-            heavy_source = "LOCAL_RULE"
+        heavy_source = "LOCAL_RULE"
+        trace.extend(resolution.trace)
+
+    trace.append(
+        _trace_step(
+            "VERDICT",
+            (
+                "Heavy UNKNOWN"
+                if effective_heavy is None
+                else f"Heavy {'Yes' if effective_heavy else 'No'}"
+            ),
+            heavy_source=heavy_source,
+            heavy_reason=heavy_decision.heavy_reason,
+            badge=unknown_resolved,
+        )
+    )
 
     entry = _crew_entry(entries, crew_code)
     # positioning_crew remains intentionally unused; its alignment and semantics are unverified.
@@ -462,6 +801,10 @@ def _mcp_flight_item(
         is_training_function=is_training_function(entry.function if entry else None),
         unknown_resolved=unknown_resolved,
         unknown_resolution_reason=unknown_resolution_reason,
+        heavy_trace=[
+            HeavyTraceStep(step=item.step, outcome=item.outcome, inputs=dict(item.inputs))
+            for item in trace
+        ],
     )
 
 
@@ -479,10 +822,16 @@ def _crew_entry(
 
 
 def _optional_string(value: Any) -> str | None:
+    # LENIENT by design (L-6 ruling 2026-08-18): report-row cells degrade to
+    # None. Strict counterpart: crew_context._strict_string_or_none (raises on
+    # a broken LEON contract). Same-name twin: local_answers._text. Keep the
+    # semantics distinct; consolidation is Deliverable-3 material.
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _optional_int(value: Any) -> int | None:
+    # Duplicate-by-design of local_answers._optional_int (L-6 ruling
+    # 2026-08-18). Keep in sync until the Deliverable-3 parsing module.
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):

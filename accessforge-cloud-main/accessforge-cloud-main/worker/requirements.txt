@@ -4,6 +4,9 @@ pytesseract>=0.3.10
 Pillow>=10.0
 pandas>=2.2
 openpyxl>=3.1
+# Binary .xlsb workbooks: openpyxl cannot open them, and MPD RSD deliveries are
+# frequently .xlsb. app2.py reads them with engine='pyxlsb'.
+pyxlsb>=1.0.10
 python-docx>=1.1
 docxtpl>=0.16
 docx-mailmerge>=0.5

@@ -12,6 +12,12 @@ from backend.tests.test_rbac_permissions import AppHarness
 
 PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
 
+# A genuine binary workbook saved by Excel 16.0 as xlExcel12. See
+# backend/tests/test_cmp_tcm_parity.py::TestCmpTcmXlsbWorkbooks for how it was
+# produced and what is inside it.
+XLSB_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mpd_rsd_sample.xlsb"
+XLSB_MIME = "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
+
 
 class TestSecureUploads(unittest.TestCase):
     def setUp(self):
@@ -68,6 +74,33 @@ class TestSecureUploads(unittest.TestCase):
 
     def test_pdf_extension_with_non_pdf_bytes_is_rejected(self):
         response = self.upload(contents=b"plain text", mime="application/pdf")
+
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(list(self.upload_dir.iterdir()), [])
+
+    def test_binary_xlsb_workbook_is_accepted_as_an_excel_upload(self):
+        """MPD RSD deliveries are frequently .xlsb; the allowlist rejected them.
+
+        The extension was absent from ``_ARTIFACT_TYPES``, so ``.xlsb`` never
+        reached the worker at all -- a 415 before any parity question could
+        arise. Its magic bytes are ``PK\\x03\\x04``: an .xlsb is the same OPC/ZIP
+        container as an .xlsx, with BIFF12 ``.bin`` parts instead of XML.
+        """
+
+        contents = XLSB_FIXTURE.read_bytes()
+        self.assertEqual(contents[:4], b"PK\x03\x04", "fixture is not an OPC package")
+
+        upload = self.upload_record(self.upload("mpd-rsd.xlsb", contents, XLSB_MIME))
+
+        self.assertEqual(upload.kind.value, "excel")
+        self.assertEqual(upload.mime, XLSB_MIME)
+        self.assertEqual(Path(upload.storage_path).suffix, ".xlsb")
+        self.assertEqual(Path(upload.storage_path).read_bytes(), contents)
+
+    def test_xlsb_extension_with_non_container_bytes_is_rejected(self):
+        """The extension alone must not buy acceptance -- content still decides."""
+
+        response = self.upload("mpd-rsd.xlsb", b"not a zip container at all", XLSB_MIME)
 
         self.assertEqual(response.status_code, 415)
         self.assertEqual(list(self.upload_dir.iterdir()), [])

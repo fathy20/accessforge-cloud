@@ -1,0 +1,42 @@
+# Rendered by the nginx image's entrypoint (envsubst on ${API_UPSTREAM},
+# ${CLIENT_MAX_BODY_SIZE}). Serves the prerendered SPA and proxies the API.
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # Hashed build assets never change under the same name.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # API on the same origin: no CORS, no baked-in host in the client bundle.
+    location /api/ {
+        proxy_pass ${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Large uploads and slow exports; the API caps uploads at 100 MB.
+        client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_request_buffering off;
+    }
+
+    location = /health/live { proxy_pass ${API_UPSTREAM}; }
+    location = /health/ready { proxy_pass ${API_UPSTREAM}; }
+
+    # Prerendered pages first, then the SPA shell for client-side routes.
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/index.html /_shell.html;
+    }
+}

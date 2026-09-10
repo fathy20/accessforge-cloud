@@ -156,20 +156,42 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Not Heavy", answer.text)
         self.assertIn("EVN override", answer.citation.source)
 
-    def test_evn_does_not_override_the_cockpit_rule(self):
-        # The overrides are cabin-only: cockpit stays frozen and still fires.
+    def test_evn_vetoes_even_a_cockpit_count_yes(self):
+        # Owner ruling 2026-08-17 (Q2): EVN/SVX are FLIGHT-LEVEL absolutes.
+        # Five operating cockpit would be Heavy on count; EVN must veto it.
+        # (This inverts the retired "overrides are cabin-only" behavior.)
         answer = self._ask(
             _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], ades="EVN")
         )
 
-        self.assertNotIn("Not Heavy", answer.text)
-        self.assertIn("effective cockpit count = 5 > 2", answer.citation.source)
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("EVN override", answer.citation.source)
 
     def test_svx_route_forces_heavy_on_a_standard_crew(self):
         answer = self._ask(_heavy_report(["CPT", "FO", "FA1", "FA2"], ades="SVX"))
 
         self.assertIn("Heavy", answer.text)
         self.assertIn("SVX override", answer.citation.source)
+
+    def test_icao_coded_svx_leg_agrees_with_the_report(self):
+        # D-1: the airport rule compared against the IATA literal only, so an
+        # ICAO-coded leg read as Not Heavy on this path while the report said
+        # Heavy. Both engines must now give the same answer for USSS.
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FA1", "FA2"], adep="HESH", ades="USSS")
+        )
+
+        self.assertIn("Heavy", answer.text)
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertIn("SVX override", answer.citation.source)
+
+    def test_icao_coded_evn_leg_still_vetoes(self):
+        answer = self._ask(
+            _heavy_report(["CPT", "FO", "FO2", "FO3", "CPT2"], adep="HESH", ades="UDYZ")
+        )
+
+        self.assertIn("Not Heavy", answer.text)
+        self.assertIn("EVN override", answer.citation.source)
 
     def test_ops_and_sp_trainees_do_not_push_a_flight_over_the_line(self):
         # Standard 2 cockpit + 4 cabin, plus two cockpit trainees.
@@ -214,6 +236,64 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIn("Heavy", second.text)
         self.assertIn("SVX override", second.citation.source)
 
+    def test_cross_midnight_rider_rotation_survives_the_single_day_fetch(self):
+        # Bug report M-1: the real fetcher trims rows to the asked day via
+        # select_rows_for_period. A rider difference used to split the duty,
+        # dropping the cross-midnight return leg from a day-N fetch, so the
+        # Copilot's STEP 4 never saw the neighbour and answered Not Heavy
+        # while the report said Heavy. One crew-set identity keeps the pair.
+        from backend.statistics.crew_hours.domain import select_rows_for_period
+
+        rows = [
+            {
+                "scope_row_unique_id": "601",
+                "unique_id": 601,
+                "flightNo": "RSX6081",
+                "date_STD_log_UTC": "22-06-2026",
+                # 5:00 outbound: the rotation minimum (2026-09-02) needs one
+                # sector of the pair over 4:00.
+                "JL_STD_UTC": "18:30",
+                "JL_STA_UTC": "23:30",
+                "jl_adep_preferred_code": "HRG",
+                "jl_ades_preferred_code": "OPO",
+                "crew_codes": ["C1", "C2", "P1"],
+                "crew_names": ["Crew C1", "Crew C2", "Rider P1"],
+                "crew_position_names": ["CPT", "FO", "PAD"],
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "05:00",
+            },
+            {
+                "scope_row_unique_id": "602",
+                "unique_id": 602,
+                "flightNo": "RSX6082",
+                "date_STD_log_UTC": "23-06-2026",
+                "JL_STD_UTC": "00:30",
+                "JL_STA_UTC": "04:00",
+                "jl_adep_preferred_code": "OPO",
+                "jl_ades_preferred_code": "HRG",
+                "crew_codes": ["C1", "C2"],
+                "crew_names": ["Crew C1", "Crew C2"],
+                "crew_position_names": ["CPT", "FO"],
+                "acftType": "B738 - 737-800",
+                "blockTimeJourneyLog": "03:30",
+            },
+        ]
+
+        def fetch(from_date, to_date):
+            selected = select_rows_for_period(rows, from_date, to_date)
+            totals = {code: "10:00" for row in selected for code in row["crew_codes"]}
+            return OfficialMcpReport(totals, selected)
+
+        answer = answer_locally(
+            "Is RSX6081 on 2026-06-22 Augmented (Heavy)?",
+            today=date(2026, 6, 30),
+            fetch_report=fetch,
+        )
+
+        self.assertIsNotNone(answer)
+        self.assertNotIn("Not Heavy", answer.text)
+        self.assertIn("Heavy", answer.text)
+
     def test_unknown_flight_number_says_so(self):
         answer = answer_locally(
             "Is RSX999 on 2026-06-02 Heavy?",
@@ -233,6 +313,20 @@ class TestHeavyFromMcp(unittest.TestCase):
         self.assertIsNone(
             answer_locally("who is on the roster", today=TODAY, fetch_report=_fetch)
         )
+
+
+class TestCopilotTodayDefault(unittest.TestCase):
+    def test_default_today_callable_is_the_utc_clock(self):
+        # L-5 ruling (2026-08-18): all date defaults derive from UTC. The
+        # Copilot's relative periods ("today", "this month") must not follow
+        # the server-local clock, which is a different day around midnight.
+        import inspect
+
+        from backend.copilot.service import CopilotService
+        from backend.statistics.crew_hours.domain import utc_today
+
+        default = inspect.signature(CopilotService.__init__).parameters["today"].default
+        self.assertIs(default, utc_today)
 
 
 if __name__ == "__main__":

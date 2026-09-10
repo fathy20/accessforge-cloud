@@ -25,6 +25,20 @@ export interface FlightItem {
   is_training_function?: boolean;
   unknown_resolved?: boolean;
   unknown_resolution_reason?: string | null;
+  // Every leg explains its own verdict: the rules evaluated, in order, with the
+  // inputs each one saw. Present for deterministic verdicts too, not only
+  // resolver-decided ones.
+  heavy_trace?: HeavyTraceStep[];
+  // Member-duty allowance (owner model 2026-08-20): this leg belongs to a
+  // duty credited for THIS member. Missing/null = allowance not computed.
+  duty_credit?: boolean | null;
+  credit_source?: string | null; // LEON_AUGMENTED | OPERATE_PLUS_RIDE
+}
+
+export interface HeavyTraceStep {
+  step: string;
+  outcome: string;
+  inputs?: Record<string, unknown>;
 }
 
 export interface CrewMemberSummary {
@@ -40,6 +54,8 @@ export interface CrewMemberSummary {
   reference_total: string | null;
   variance_minutes: number | null;
   flight_count: number;
+  // H.C — credited heavy duties in the requested window (the allowance number).
+  heavy_credits?: number;
   flights: FlightItem[];
 }
 
@@ -53,21 +69,36 @@ export interface CrewHoursReport {
   official_totals_available: number;
   official_totals_unavailable: number;
   official_totals_by_position: Partial<Record<OfficialPosition, string>>;
+  // Join health across the three LEON identifier spaces; "DEGRADED" means the
+  // report's unique_id values are not matching the FTL/flight-list indices.
+  join_health?: "OK" | "DEGRADED";
+  augmented_lookup_hits?: number;
+  augmented_lookup_attempts?: number;
+  crew_context_hits?: number;
+  crew_context_attempts?: number;
+  // "unavailable" = LEON withheld Work Schedule Function this run, so the
+  // SFA cabin-trainee exclusion did not fire (known gap, ruling 2026-08-17).
+  cabin_trainee_detection?: "active" | "unavailable";
   crew_members: CrewMemberSummary[];
 }
 
 export const OFFICIAL_MCP_SOURCE = "official_mcp_report";
-export const POSITIONING_TOKENS = ["PAD", "PSN", "FDP", "FDPI", "RMP", "INSP"] as const;
+// UI position-filter vocabulary ONLY (I-2 ruling 2026-08-18): the tokens the
+// dropdown offers and the display filter matches. Deliberately DIFFERENT from
+// the backend operating-count/rotation rule (positions.POSITIONING_POSITIONS,
+// PSN/PAD only) — "fixing" the mismatch would silently change the Heavy count
+// rule. Do not align these lists.
+export const UI_POSITION_FILTER_TOKENS = ["PAD", "PSN", "FDP", "FDPI", "RMP", "INSP"] as const;
 export const ALL_AIRCRAFT = "__all_aircraft__";
 export const ALL_POSITION_TOKENS = "All";
 export const ACTIVE_POSITION_TOKEN = "Active";
 
 export type OfficialPosition = "Cockpit" | "Cabin" | "Maintenance" | "Unclassified";
-export type PositioningToken = (typeof POSITIONING_TOKENS)[number];
+export type UiPositionFilterToken = (typeof UI_POSITION_FILTER_TOKENS)[number];
 export type PositionTokenFilter =
   | typeof ALL_POSITION_TOKENS
   | typeof ACTIVE_POSITION_TOKEN
-  | PositioningToken;
+  | UiPositionFilterToken;
 export type ReportTab = "cockpit" | "cockpit-summary" | "cabin" | "cabin-summary";
 export type ReportTabPosition = Extract<OfficialPosition, "Cockpit" | "Cabin">;
 

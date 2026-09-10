@@ -6,17 +6,22 @@ SYSTEM_AUDIT.md for those.
 
 ## P1
 
-### 1. In-process job execution (durability, isolation, timeouts)
-- **Problem**: jobs run via FastAPI `BackgroundTasks` — lost on restart, no
-  cancellation, no timeout, heavy OCR can starve the API process.
-- **Impact**: reliability and DoS exposure; `queued` jobs orphan on crash.
-- **Solution (already decided, adversarially reviewed)**: SQL-backed queue on
-  the `jobs` table, separate `python -m worker.runner` process, atomic claim
-  with lease/fencing generation, heartbeat + stale reclaim, killable child
-  process per job (Windows process-tree kill), per-attempt staging + manifest
-  publish, at-least-once semantics stated honestly. Test claim/locking against
-  real SQL Server, not SQLite.
-- **Complexity**: L (its own slice; design is settled).
+### 1. In-process job execution (durability, isolation, timeouts) — LANDED 2026-09-03, one item open
+- **Was**: jobs ran via FastAPI `BackgroundTasks` — lost on restart, no
+  cancellation, no timeout, heavy OCR could starve the API process.
+- **Now**: `JOB_EXECUTION_MODE=worker` + `python -m worker.runner`
+  (migration `d1e2f3a4b5c6`). SQL-backed queue on `jobs`, atomic claim with a
+  per-claim `lease_token`, every worker write fenced on it, heartbeat + stale
+  reclaim (`JOB_MAX_ATTEMPTS` cap), killable child process per job with
+  process-tree kill on both platforms, cancel and retry endpoints, graceful
+  release on shutdown, at-least-once stated in the docs. Tests:
+  `backend/tests/test_job_queue.py`. Inline mode remains the local default.
+- **Still open**: claim/locking has only been exercised on SQLite. Run the
+  suite's queue tests and a two-worker soak against a real SQL Server before
+  relying on it in production; add `READPAST` hints only if contention shows.
+  Outputs are published after the files are persisted, so a crash in between
+  leaves orphan files (closes with #2).
+- **Complexity**: S (verification on SQL Server).
 
 ### 2. Job outputs have no relational home
 - **Problem**: outputs live inside `jobs.output_refs` JSON; download
@@ -29,9 +34,33 @@ SYSTEM_AUDIT.md for those.
 ### 3. Secrets in git history
 - **Problem**: `.env` (JWT secret, `WORKER_HMAC_SECRET`, SQL and Supabase
   credentials) and `redsea.db` are reachable in history before `5be7448`.
+  A live `.env` value was additionally treated as compromised on 2026-08-18.
+- **`redsea.db` blob contents (inspected 2026-08-18, both historical
+  versions):** dev-era data only — NO crew names, person codes, or flight
+  records (no such tables exist in it). It holds 4 user accounts (bcrypt
+  password hashes; dev/admin-style emails, one personal address), 2 PDF
+  upload records, 5 completed task_extractor/task_stamping job rows, 8 module
+  definitions; audit_log/projects/notifications empty. Exposure = those
+  account credentials (hashes) + one personal email, all covered by rotation
+  and dev-account password resets. Rewrite priority therefore stays
+  *hygiene*, not data-breach response.
 - **Impact**: anyone with repo access holds every historical credential.
-- **Solution**: rotate all of them; rewrite history with `git filter-repo`
-  before widening repo access.
+- **Solution — sequence agreed 2026-08-18, in this order; do NOT reorder:**
+  1. **Rotate** all of the above (in progress, owner). Once rotated, the
+     history blobs are worthless and the rewrite is hygiene, not an emergency.
+  2. **Close PR #5 and PR #6 first.** Never run the rewrite while PRs are
+     open — it force-rebases every branch and orphans their heads.
+  3. **Notify the frontend teammate BEFORE the rewrite** and agree the window:
+     a force-pushed rewrite silently corrupts an existing clone (pulls appear
+     to work while history has diverged). They must stop pushing until step 4
+     is done.
+  4. **Rewrite history** with `git filter-repo` (drop historical `.env` and
+     `redsea.db`), then force-push and re-protect branches.
+  5. **After the rewrite, the teammate deletes their clone entirely and
+     re-clones fresh** — no pull/rebase of the old clone is acceptable; it
+     would resurrect the pre-rewrite objects.
+- This item stays OPEN until step 5 completes — ".env is gitignored/untracked
+  today" is not grounds to close it; the exposure is historical.
 - **Complexity**: S (coordination, not code).
 
 ## P2

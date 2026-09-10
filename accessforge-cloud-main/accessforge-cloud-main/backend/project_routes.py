@@ -45,8 +45,23 @@ def list_projects(db: Session = Depends(get_db), current_user: User = Depends(ge
     )
     return [_project_payload(p) for p in projects]
 
+_PROJECT_CREATOR_ROLES = (AppRole.engineer, AppRole.admin, AppRole.super_admin)
+
+
+def _require_project_creator(current_user: User = Depends(get_current_user)) -> User:
+    # M-7 ruling (2026-08-18): creation is engineer+, mirroring the UI's
+    # canCreate gate. The list path stays open to every authenticated user —
+    # shared visibility is settled; do not gate reads here.
+    if not any(role.role in _PROJECT_CREATOR_ROLES for role in current_user.roles):
+        raise HTTPException(
+            status_code=403,
+            detail="Project creation requires the engineer role or higher.",
+        )
+    return current_user
+
+
 @router.post("")
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_project(payload: ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(_require_project_creator)):
     proj = Project(
         owner_id=current_user.id,
         name=payload.name,

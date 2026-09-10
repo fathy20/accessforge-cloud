@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClient } from "@/lib/apiClient";
 import type { ModuleRegistryItem } from "@/lib/modules/registry";
@@ -19,52 +20,58 @@ export interface PermissionSet {
   loading: boolean;
 }
 
+const NO_ROLES: AppRole[] = [];
+
 export function usePermissions(): PermissionSet {
   const { user, loading: authLoading } = useAuth();
 
   const { data: modulesData, isLoading } = useQuery({
     queryKey: ["permissions", user?.id],
     enabled: !!user?.id,
-    queryFn: async () => {
-      return (await ApiClient.fetch<ModuleRegistryItem[]>("/modules")) ?? [];
-    },
+    queryFn: async () => (await ApiClient.fetch<ModuleRegistryItem[]>("/modules")) ?? [],
   });
 
-  const roles = (user?.roles ?? []) as AppRole[];
-  const isAdmin = roles.includes("admin") || roles.includes("super_admin");
-  const isSuperAdmin = roles.includes("super_admin");
+  const roles = (user?.roles as AppRole[] | undefined) ?? NO_ROLES;
+  const loading = authLoading || isLoading;
 
-  // `action_permissions` is declared; `granted_action_permissions` is user-filtered.
-  const modules = (modulesData ?? []).map((mod) => ({
-    ...mod,
-    granted_action_permissions: mod.granted_action_permissions ?? [],
-  }));
-  const view = modules.map((mod) => mod.key);
-  const run = modules
-    .filter((mod) => mod.granted_action_permissions.length > 0)
-    .map((mod) => mod.key);
-  const viewSet = new Set(view);
-  const modulesByKey = new Map(modules.map((mod) => [mod.key, mod]));
+  // The shell (sidebar, topbar, layout) calls this hook several times per
+  // render; memoising keeps the derived sets and callbacks referentially
+  // stable so consumers can depend on them without re-running effects.
+  return useMemo(() => {
+    const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+    const isSuperAdmin = roles.includes("super_admin");
 
-  const canRunModule = (key: string) => {
-    const module = modulesByKey.get(key);
-    if (!module || !viewSet.has(key)) return false;
+    // `action_permissions` is declared; `granted_action_permissions` is user-filtered.
+    const modules = (modulesData ?? []).map((mod) => ({
+      ...mod,
+      granted_action_permissions: mod.granted_action_permissions ?? [],
+    }));
+    const view = modules.map((mod) => mod.key);
+    const run = modules
+      .filter((mod) => mod.granted_action_permissions.length > 0)
+      .map((mod) => mod.key);
+    const viewSet = new Set(view);
+    const modulesByKey = new Map(modules.map((mod) => [mod.key, mod]));
 
-    return module.action_permissions.length === 0 || module.granted_action_permissions.length > 0;
-  };
+    const canRunModule = (key: string) => {
+      const module = modulesByKey.get(key);
+      if (!module || !viewSet.has(key)) return false;
+      return module.action_permissions.length === 0 || module.granted_action_permissions.length > 0;
+    };
 
-  return {
-    roles,
-    moduleKeys: { view, run },
-    modules,
-    isAdmin,
-    isSuperAdmin,
-    hasRole: (r) => roles.includes(r),
-    hasAnyRole: (rs) => rs.some((r) => roles.includes(r)),
-    canViewModule: (key) => viewSet.has(key),
-    canRunModule,
-    canRunModuleAction: (moduleKey, actionKey) =>
-      modulesByKey.get(moduleKey)?.granted_action_permissions.includes(actionKey) ?? false,
-    loading: authLoading || isLoading,
-  };
+    return {
+      roles,
+      moduleKeys: { view, run },
+      modules,
+      isAdmin,
+      isSuperAdmin,
+      hasRole: (r) => roles.includes(r),
+      hasAnyRole: (rs) => rs.some((r) => roles.includes(r)),
+      canViewModule: (key) => viewSet.has(key),
+      canRunModule,
+      canRunModuleAction: (moduleKey, actionKey) =>
+        modulesByKey.get(moduleKey)?.granted_action_permissions.includes(actionKey) ?? false,
+      loading,
+    } satisfies PermissionSet;
+  }, [roles, modulesData, loading]);
 }

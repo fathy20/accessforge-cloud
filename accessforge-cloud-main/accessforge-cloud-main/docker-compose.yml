@@ -7,6 +7,11 @@
 # For production point DATABASE_URL at SQL Server and set APP_ENV=production;
 # the API refuses SQLite in production and Alembic then owns the schema.
 
+# Pin the default project name so it stops following this file's directory:
+# without it, relocating the file renames the `data` volume and the database
+# looks empty. Still overridable by `-p` and COMPOSE_PROJECT_NAME.
+name: accessforge-cloud-main
+
 services:
   api:
     build:

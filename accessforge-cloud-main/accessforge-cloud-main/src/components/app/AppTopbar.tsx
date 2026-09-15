@@ -11,6 +11,7 @@ import { ApiClient } from "@/lib/apiClient";
 import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { useI18n } from "@/lib/i18n";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { getModuleLabel, sortModules } from "@/lib/modules/registry";
 import {
   getActiveShellNavigationItem,
@@ -125,6 +126,7 @@ export function AppTopbar({ onOpenNavigation }: AppTopbarProps = {}) {
       </form>
 
       <div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+        <ThemeToggle className="hidden sm:inline-flex" />
         <Button
           type="button"
           variant="ghost"

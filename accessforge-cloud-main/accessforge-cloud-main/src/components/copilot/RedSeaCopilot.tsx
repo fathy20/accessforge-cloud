@@ -14,8 +14,22 @@ const nextMessageId = () => `copilot-${(messageCounter += 1)}`;
  * Mount once inside the app shell.  All data comes from `transport`; the panel
  * itself knows nothing about LEON.
  */
-export function RedSeaCopilot({ transport }: { transport: CopilotTransport }) {
+export function RedSeaCopilot({
+  transport,
+  firstName = "",
+}: {
+  transport: CopilotTransport;
+  /** Greeting name. Supplied by the shell; the panel stays presentation-only. */
+  firstName?: string;
+}) {
   const { t } = useI18n();
+  // Resets the server thread as well as the rendered list: the transport keeps
+  // a thread id, so clearing messages alone would carry the old context over.
+  const newChat = useCallback(() => {
+    setMessages([]);
+    transport.reset?.();
+  }, [transport]);
+
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
@@ -115,8 +129,10 @@ export function RedSeaCopilot({ transport }: { transport: CopilotTransport }) {
           messages={messages}
           busy={busy}
           quickTopics={quickTopics}
+          firstName={firstName}
           onClose={close}
           onAsk={ask}
+          onNewChat={newChat}
         />
       )}
     </>

@@ -227,10 +227,10 @@ function CrewHoursPage() {
             <Card className="rounded-xl border-border/80 bg-card shadow-sm">
               <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
                 <CardTitle className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("crew.kpi.unclassified_roles")}</CardTitle>
-                <Users className="h-4 w-4 shrink-0 text-warning-foreground" aria-hidden="true" />
+                <Users className="h-4 w-4 shrink-0 text-status-warning-foreground" aria-hidden="true" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-semibold tracking-tight text-warning-foreground">{unclassifiedRoles}</div>
+                <div className="text-3xl font-semibold tracking-tight text-status-warning-foreground">{unclassifiedRoles}</div>
                 <p className="mt-1 text-xs text-muted-foreground">{t("crew.kpi.unclassified_roles_description")}</p>
               </CardContent>
             </Card>
@@ -288,7 +288,7 @@ function CrewHoursPage() {
       )}
       {!loading && !error && report && hasPartialOfficialTotals && (
         <Alert className="border-warning/40 bg-warning/5 text-foreground" role="status" aria-live="polite">
-          <AlertCircle className="h-4 w-4 text-warning-foreground" aria-hidden="true" />
+          <AlertCircle className="h-4 w-4 text-status-warning-foreground" aria-hidden="true" />
           <AlertTitle>{t("crew.partial.title")}</AlertTitle>
           <AlertDescription>{t("crew.partial.description")}</AlertDescription>
         </Alert>

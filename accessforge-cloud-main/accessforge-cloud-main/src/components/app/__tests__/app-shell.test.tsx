@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "@/lib/apiClient";
 import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 import { getShellNavigationItems } from "@/lib/navigation/shell-nav";
 import type { ModuleRegistryItem } from "@/lib/modules/registry";
 import { AppLayout } from "@/components/app/AppLayout";
@@ -79,7 +80,9 @@ function renderWithProviders(ui: ReactNode) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <I18nProvider>{ui}</I18nProvider>
+      <I18nProvider>
+        <ThemeProvider>{ui}</ThemeProvider>
+      </I18nProvider>
     </QueryClientProvider>,
   );
 }

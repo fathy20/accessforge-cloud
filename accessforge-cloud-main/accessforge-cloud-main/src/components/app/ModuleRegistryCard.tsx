@@ -1,43 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Lock } from "lucide-react";
-import type { BadgeProps } from "@/components/ui/badge";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
-import { DEFAULT_MODULE_ICON, MODULE_ICONS } from "@/lib/modules/icons";
 import {
   getModuleLabel,
   getReadinessLabel,
-  type ModuleReadiness,
   type ModuleRegistryItem,
 } from "@/lib/modules/registry";
-import { cn } from "@/lib/utils";
-
-const WARNING_READINESS = new Set<ModuleReadiness>([
-  "discovery_required",
-  "not_migrated",
-  "under_development",
-]);
-
-export function getReadinessBadgeProps(
-  readiness: ModuleReadiness,
-): Pick<BadgeProps, "variant" | "className"> {
-  if (readiness === "available") {
-    return {
-      variant: "default",
-      className: "bg-success text-success-foreground hover:bg-success/80",
-    };
-  }
-
-  if (WARNING_READINESS.has(readiness)) {
-    return {
-      variant: "outline",
-      className: "border-warning/50 bg-warning/10 text-warning-foreground",
-    };
-  }
-
-  return { variant: "secondary", className: "text-muted-foreground" };
-}
+import {
+  moduleMonogram,
+  readinessColor,
+  readinessProgress,
+} from "@/lib/modules/readiness";
 
 interface ModuleRegistryCardProps {
   module: ModuleRegistryItem;
@@ -45,69 +17,122 @@ interface ModuleRegistryCardProps {
   canRun: boolean;
 }
 
+/**
+ * A module launcher card.
+ *
+ * Colour comes from the readiness ramp as a single CSS custom property set on
+ * the card, so the badge, the progress fill and the tint all derive from one
+ * value and cannot drift apart. Hover behaviour is expressed in styles.css
+ * against `.module-card` rather than inline, because it drives several
+ * descendants at once.
+ */
 export function ModuleRegistryCard({ module, canView, canRun }: ModuleRegistryCardProps) {
   const { t } = useI18n();
-  const Icon = MODULE_ICONS[module.key] ?? DEFAULT_MODULE_ICON;
   const label = getModuleLabel(module, t);
-  const readinessLabel = getReadinessLabel(module, t);
-  const readinessBadge = getReadinessBadgeProps(module.readiness);
-  const clickable = canView && module.route !== null;
+  const readiness = getReadinessLabel(module, t);
+  const colour = readinessColor(module.readiness);
+  const progress = readinessProgress(module.readiness);
+  const locked = !canView;
+  const href = module.route;
 
-  const card = (
-    <Card
+  return (
+    <article
       data-testid={`module-card-${module.key}`}
-      className={cn(
-        "h-full transition-all group",
-        clickable
-          ? "hover:border-primary/50 hover:shadow-md cursor-pointer"
-          : "opacity-70 cursor-not-allowed",
-      )}
+      className={
+        "module-card group flex flex-col gap-3.5 rounded-2xl border border-border bg-card p-5 " +
+        (locked ? "opacity-[0.72]" : "")
+      }
+      style={{ ["--ready" as string]: colour }}
     >
-      <CardContent className="p-5 flex flex-col gap-3 h-full">
-        <div className="flex items-start justify-between gap-2">
-          <div className="size-10 rounded-lg bg-primary/10 grid place-items-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-            <Icon className="size-5" />
-          </div>
-          <Badge
-            variant={readinessBadge.variant}
-            className={cn("text-[10px]", readinessBadge.className)}
-            data-testid={`readiness-badge-${module.key}`}
-          >
-            {readinessLabel}
-          </Badge>
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-base leading-tight">{label}</h3>
-          {module.description && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-              {module.description}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-          <div className="flex gap-1">
-            <Badge variant={canView ? "secondary" : "outline"} className="text-[10px]">
-              {t("mod.access.view")}
-            </Badge>
-            <Badge variant={canRun ? "default" : "outline"} className="text-[10px]">
-              {t("mod.access.run")}
-            </Badge>
-          </div>
-          {clickable ? (
-            <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all rtl:rotate-180" />
-          ) : (
-            <Lock className="size-4 text-muted-foreground" />
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+      <div className="flex items-start justify-between gap-3">
+        <span
+          aria-hidden="true"
+          className="module-tile grid size-11 shrink-0 place-items-center rounded-xl text-[18px] font-semibold"
+          style={{
+            fontFamily: "var(--font-display)",
+            background: "var(--ready-tile)",
+            color: "var(--primary)",
+          }}
+        >
+          {moduleMonogram(module.key)}
+        </span>
 
-  return clickable ? (
-    <Link to={module.route as any} className="block">
-      {card}
-    </Link>
-  ) : (
-    <div>{card}</div>
+        <span
+          data-testid={`readiness-badge-${module.key}`}
+          data-readiness={module.readiness}
+          /* the readiness class makes the treatment inspectable per family,
+             rather than the distinction living only in an inline style */
+          className={
+            `readiness-${module.readiness} ` +
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold whitespace-nowrap"
+          }
+          style={{
+            color: "var(--ready)",
+            backgroundColor: "color-mix(in oklab, var(--ready) 12%, transparent)",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="size-1.5 rounded-full"
+            style={{ background: "var(--ready)" }}
+          />
+          {readiness}
+        </span>
+      </div>
+
+      <div className="min-w-0">
+        <h3
+          className="truncate text-[17.5px] font-semibold"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {label}
+        </h3>
+        {module.description && (
+          <p className="mt-1 line-clamp-2 text-[12.5px] leading-[1.45] text-muted-foreground">
+            {module.description}
+          </p>
+        )}
+      </div>
+
+      <div
+        className="h-[3px] w-full overflow-hidden rounded-full"
+        style={{ background: "var(--ready-track)" }}
+        role="img"
+        aria-label={`${readiness} — ${progress}%`}
+      >
+        <div
+          className="module-progress h-full rounded-full"
+          style={{ width: `${progress}%`, background: "var(--ready)" }}
+        />
+      </div>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+        {href && canView ? (
+          <Link
+            to={href}
+            className="module-ghost inline-flex h-8 items-center rounded-[9px] border border-border px-3 text-[12.5px] font-semibold whitespace-nowrap duration-[var(--motion-duration-fast)] transition-colors"
+          >
+            {t("mod.view")}
+          </Link>
+        ) : (
+          <span className="text-[12.5px] text-muted-foreground">{t("mod.view")}</span>
+        )}
+
+        {locked ? (
+          <span className="ms-auto text-[12px] text-muted-foreground">{t("mod.locked")}</span>
+        ) : canRun && href ? (
+          <Link
+            to={href}
+            className="module-run inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-primary px-3 text-[12.5px] font-semibold text-primary-foreground whitespace-nowrap duration-[var(--motion-duration-fast)] transition-[filter]"
+          >
+            {t("mod.run")}
+            {/* separate span so only the arrow travels on hover */}
+            <span aria-hidden="true" className="module-arrow inline-block rtl:rotate-180">
+              →
+            </span>
+          </Link>
+        ) : null}
+      </div>
+    </article>
   );
 }

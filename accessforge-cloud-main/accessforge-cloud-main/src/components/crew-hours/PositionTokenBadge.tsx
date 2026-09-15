@@ -17,7 +17,7 @@ export function PositionTokenBadge({ position }: { position: string | null }) {
       variant={isPositioning ? "outline" : "secondary"}
       className={`px-1.5 py-0 text-[10px] font-mono ${
         isPositioning
-          ? "border-warning/40 bg-warning/15 text-warning-foreground"
+          ? "border-status-warning-border bg-status-warning-background text-status-warning-foreground"
           : "bg-muted text-muted-foreground"
       }`}
     >
@@ -41,7 +41,7 @@ export function PositionTokenBadge({ position }: { position: string | null }) {
           aria-label={positioningDescription}
         >
           {badge}
-          <span className="text-[10px] font-medium text-warning-foreground">{positioningCue}</span>
+          <span className="text-[10px] font-medium text-status-warning-foreground">{positioningCue}</span>
         </div>
       </TooltipTrigger>
       <TooltipContent>

@@ -277,6 +277,23 @@ def seed(db) -> dict[str, int]:
 
     for email, full_name, role in _seed_accounts():
         user = db.query(User).filter(User.email == email).first()
+        if user is not None:
+            # An address can already exist in a state the seeder did not create
+            # — a self-signup leaves it pending_approval with no role. Skipping
+            # it outright leaves an account that cannot sign in, so repair the
+            # fields this seeder owns and make sure the role is attached.
+            changed = False
+            if user.status != UserStatus.active:
+                user.status = UserStatus.active
+                changed = True
+            if user.hashed_password != hashed:
+                user.hashed_password = hashed
+                changed = True
+            if db.query(UserRole).filter(UserRole.user_id == user.id).first() is None:
+                db.add(UserRole(user_id=user.id, role=AppRole(role)))
+                changed = True
+            if changed:
+                created["users"] += 1
         if user is None:
             user = User(
                 email=email,

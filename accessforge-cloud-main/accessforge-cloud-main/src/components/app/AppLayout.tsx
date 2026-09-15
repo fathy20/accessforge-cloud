@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth/use-auth";
 import { usePermissions } from "@/lib/auth/use-permissions";
 import { RedSeaCopilot, createWingmanTransport } from "@/components/copilot";
 import { AppSidebar } from "./AppSidebar";
@@ -10,6 +11,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { dir, t } = useI18n();
   const isMobile = useIsMobile();
   const perms = usePermissions();
+  const { user } = useAuth();
+  // full_name is often absent, so fall back to the email's local part rather
+  // than greeting an empty string.
+  const copilotFirstName = useMemo(() => {
+    const full = (user?.full_name ?? "").trim();
+    if (full) return full.split(/\s+/)[0];
+    return (user?.email ?? "").split("@")[0] ?? "";
+  }, [user]);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   // Backed by LEON's own Wingman chat via POST /api/copilot/ask.
   const copilotTransport = useMemo(
@@ -60,7 +69,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {/* Copilot only surfaces LEON crew data, so it follows the same grant
           the backend enforces on /api/copilot — hiding it here just keeps the
           UI honest; the server is the gate. */}
-      {perms.canViewModule("crew_hours") && <RedSeaCopilot transport={copilotTransport} />}
+      {perms.canViewModule("crew_hours") && (
+        <RedSeaCopilot transport={copilotTransport} firstName={copilotFirstName} />
+      )}
     </div>
   );
 }

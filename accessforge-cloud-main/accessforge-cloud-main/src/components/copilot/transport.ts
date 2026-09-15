@@ -46,7 +46,7 @@ export function createWingmanTransport(options?: {
 }): CopilotTransport {
   let threadId: string | null = null;
 
-  return async (question, signal) => {
+  const transport: CopilotTransport = async (question, signal) => {
     let response: CopilotAskResponse;
     try {
       response = (await ApiClient.fetch("/copilot/ask", {
@@ -75,4 +75,13 @@ export function createWingmanTransport(options?: {
 
     return { text: response.text, citation: response.citation };
   };
+
+  // Clearing the rendered messages is not enough: the thread id lives here, so
+  // a reset must drop it or the "new chat" keeps the old server-side context.
+  transport.reset = () => {
+    threadId = null;
+    options?.onThreadChange?.(null);
+  };
+
+  return transport;
 }

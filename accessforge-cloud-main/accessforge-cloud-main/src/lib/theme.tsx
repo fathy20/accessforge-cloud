@@ -66,11 +66,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setPreferenceState(readStored());
 
-    const media = window.matchMedia(DARK_QUERY);
+    // matchMedia is absent in jsdom and in some embedded webviews. Without this
+    // guard the whole shell throws on mount there, so feature-detect rather
+    // than assume: "system" simply falls back to the default in that case.
+    const media = typeof window.matchMedia === "function" ? window.matchMedia(DARK_QUERY) : null;
+    if (!media) return;
+
     setSystemDark(media.matches);
     const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
+
+    // Safari < 14 exposes only the deprecated addListener/removeListener pair.
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
   }, []);
 
   const resolved: ResolvedTheme =

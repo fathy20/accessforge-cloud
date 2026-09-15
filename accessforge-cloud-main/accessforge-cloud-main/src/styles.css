@@ -20,7 +20,8 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
 
-  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --text-display: var(--type-display-size);
@@ -218,6 +219,44 @@
   --hero-blade-3: #b08d55;
   --hero-blade-ink: var(--foreground);
 
+  /* ---- Copilot panel ----------------------------------------------------
+   * The brief specifies one dark-only palette. Hardcoding it would make the
+   * panel unreadable the moment the theme is switched, so each value is a pair.
+   * Light values are derived to hold the same hierarchy, and every text token
+   * is contrast-checked against the surface it actually sits on.
+   * -------------------------------------------------------------------- */
+  --copilot-panel: #ffffff;
+  --copilot-surface: #f4f8f8;
+  --copilot-surface-hover: #eef4f4;
+  --copilot-border: #dde5e5;
+  /* Only boundaries that identify a control need 3:1 (WCAG 1.4.11); the
+   * decorative divider above does not. */
+  --copilot-control: #6c878f;
+  --copilot-ink: #0b2434;
+  --copilot-secondary: #33555f;
+  --copilot-muted: #566e74;
+  --copilot-faint: #536d73;
+  --copilot-answer: #1b3238;
+  --copilot-bubble: #dff0ee;
+  --copilot-accent-1: #06665a;
+  --copilot-accent-2: #2565b3;
+  --copilot-accent-3: #8547ce;
+  --copilot-on-accent: #ffffff;
+  --copilot-success: #157f4e;
+
+  /* ---- Module readiness ramp -------------------------------------------
+   * One ink per readiness state; the tinted chip background is derived from
+   * the same hue at low alpha. Light-theme inks are darkened so the badge text
+   * clears 4.5:1 on the card rather than only looking right on dark.
+   * -------------------------------------------------------------------- */
+  --ready-available: #1d8655;
+  --ready-validation: #0e857c;
+  --ready-development: #3a6fbe;
+  --ready-discovery: #9f6a1d;
+  --ready-none: #64797e;
+  --ready-track: #eaf0f0;
+  --ready-tile: rgb(14 138 128 / 0.10);
+
   /* ---- Hero stage: its own warm ground and the logo's full four-colour
    * wave stack. Scoped to the hero so the app's cool Reef Command surfaces are
    * untouched, and so coral can be brand here while staying alert-only inside
@@ -339,6 +378,31 @@
   --hero-blade-3: #eed2a8;
   --hero-blade-ink: var(--foreground);
 
+  --copilot-panel: #0a1519;
+  --copilot-surface: #0c181d;
+  --copilot-surface-hover: #0e1c21;
+  --copilot-border: #142228;
+  --copilot-control: #4a727e;
+  --copilot-ink: #dce8ea;
+  --copilot-secondary: #a8bfc3;
+  --copilot-muted: #7d979c;
+  --copilot-faint: #6d888e;
+  --copilot-answer: #c6d6d9;
+  --copilot-bubble: #14343a;
+  --copilot-accent-1: #2dd4bf;
+  --copilot-accent-2: #6aa6f0;
+  --copilot-accent-3: #b78aec;
+  --copilot-on-accent: #04211f;
+  --copilot-success: #4fd39c;
+
+  --ready-available: #4fd39c;
+  --ready-validation: #4fd0c5;
+  --ready-development: #8ab2ec;
+  --ready-discovery: #d99a3d;
+  --ready-none: #93a8ac;
+  --ready-track: #16272c;
+  --ready-tile: rgb(20 184 171 / 0.12);
+
   --hero-ground: #061c22;
   --hero-ink: #eaf4f2;
   --hero-eyebrow: #d3a163;
@@ -454,6 +518,122 @@
  * animation elapses before the chart has dimensions. This gives the cards a
  * dependable entrance that does not rely on library internals.
  * ------------------------------------------------------------------------ */
+/* ---- Copilot panel motion & gradient -------------------------------------
+ * The greeting is gradient-clipped text. background-clip:text with a
+ * transparent colour leaves NO readable fallback where it is unsupported, so
+ * the colour is set first and only overridden inside @supports.
+ * ------------------------------------------------------------------------ */
+.copilot-greet {
+  color: var(--copilot-accent-1);
+  background-image: linear-gradient(
+    100deg,
+    var(--copilot-accent-1) 0%,
+    var(--copilot-accent-2) 45%,
+    var(--copilot-accent-3) 80%,
+    var(--copilot-accent-1) 100%
+  );
+  /* the gradient must be wider than the box or there is nothing to slide */
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+}
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .copilot-greet {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: copilot-shimmer 6s var(--motion-ease-inout) infinite;
+  }
+}
+@keyframes copilot-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes copilot-rise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.copilot-rise { opacity: 0; animation: copilot-rise 400ms var(--motion-ease-out) forwards; }
+
+@keyframes copilot-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40%           { opacity: 1;    transform: scale(1); }
+}
+.copilot-dot { animation: copilot-dot 1.2s var(--motion-ease-inout) infinite; }
+
+.copilot-suggest { transition: border-color var(--motion-duration-fast), background-color var(--motion-duration-fast), transform var(--motion-duration-fast); }
+.copilot-suggest:hover { border-color: var(--copilot-accent-1); background: var(--copilot-surface-hover); transform: translateX(3px); }
+.copilot-suggest:hover:dir(rtl) { transform: translateX(-3px); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* forced-colors also drops the gradient; keep the text readable either way */
+  .copilot-greet { animation: none !important; }
+  .copilot-rise { opacity: 1; animation: none !important; }
+  .copilot-dot { animation: none !important; opacity: 0.6; }
+  .copilot-suggest:hover { transform: none; }
+}
+@media (forced-colors: active) {
+  .copilot-greet { color: CanvasText; background-image: none; }
+}
+
+/* ---- Module launcher cards -----------------------------------------------
+ * The hover is choreographed across several descendants at once (tile, glow,
+ * progress fill, arrow), so it lives here rather than inline on each element.
+ * ------------------------------------------------------------------------ */
+@keyframes module-enter {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.module-enter {
+  opacity: 0;
+  animation: module-enter 250ms var(--motion-ease-out) forwards;
+}
+
+.module-card {
+  transition:
+    transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    border-color 300ms var(--motion-ease-standard),
+    box-shadow 300ms var(--motion-ease-standard);
+}
+.module-card:hover {
+  transform: translateY(-5px) scale(1.015);
+  border-color: var(--primary);
+  box-shadow:
+    0 14px 34px rgb(0 0 0 / 0.28),
+    0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 0 24px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+.module-tile {
+  transition:
+    transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.4),
+    background-color 300ms var(--motion-ease-standard),
+    color 300ms var(--motion-ease-standard);
+}
+.module-card:hover .module-tile {
+  transform: scale(1.1) rotate(-4deg);
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+.module-progress { transition: filter 300ms var(--motion-ease-standard); }
+.module-card:hover .module-progress { filter: brightness(1.25); }
+
+.module-ghost:hover { border-color: var(--primary); color: var(--primary); }
+.module-run:hover { filter: brightness(1.1); }
+.module-arrow { transition: transform 250ms var(--motion-ease-out); }
+.module-run:hover .module-arrow { transform: translateX(4px); }
+.module-run:hover .module-arrow:dir(rtl) { transform: translateX(-4px) rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* keep the colour changes, drop every displacement */
+  .module-enter { opacity: 1; animation: none !important; }
+  .module-card:hover { transform: none; }
+  .module-card:hover .module-tile { transform: none; }
+  .module-run:hover .module-arrow { transform: none; }
+}
+
 @keyframes chart-enter {
   from { opacity: 0; transform: translate3d(0, var(--motion-travel-md), 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0); }

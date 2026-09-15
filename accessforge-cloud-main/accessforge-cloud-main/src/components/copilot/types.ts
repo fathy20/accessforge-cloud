@@ -47,10 +47,20 @@ export interface CopilotAnswer {
  * what is missing — the panel surfaces it verbatim, in the product's own plain
  * error voice.
  */
-export type CopilotTransport = (
+export type CopilotTransport = ((
   question: string,
   signal: AbortSignal,
-) => Promise<CopilotAnswer>;
+) => Promise<CopilotAnswer>) & {
+  /**
+   * Drop any server-side conversation state so the next question starts clean.
+   *
+   * Optional, so a bare function still satisfies this type. It exists because
+   * the live transport keeps a thread id in a closure: clearing the rendered
+   * messages alone would leave that thread in place, and a "new chat" would
+   * silently carry the previous conversation's context.
+   */
+  reset?: () => void;
+};
 
 export type CopilotMessage =
   | { id: string; role: "user"; text: string }
